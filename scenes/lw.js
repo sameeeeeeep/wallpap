@@ -25,6 +25,11 @@
 // Music mode (host reads Apple Music / Spotify "now playing"):
 //   LW.nowPlaying  {title, artist, album, artwork (data/https URL or ''), playing, app} | null
 //   LW.on('nowplaying', np => ...)    fires on track/play-state change
+// Beat sync (opt-in host feature: passive system-audio analysis while music plays):
+//   LW.music      {level, bass, mid, high} 0..1, smoothed — live when LW.music.live
+//   LW.on('beat', strength => ...)   fires on detected beats (strength 0..1)
+//   When beat sync is off but a track is playing, lw.js synthesizes a gentle
+//   ~96 bpm pulse (LW.music.live = false) so scenes can still breathe with it.
 // Background soundscape (independent of the scene's interactive sounds, set
 // globally from the menu): white | pink | brown | rain | ocean | fire | stream | off.
 //   LW.soundscape  {kind, volume}     — lw.js plays it; scenes don't need to do anything.
@@ -136,6 +141,26 @@
       (prev.title !== np.title || prev.artist !== np.artist || prev.playing !== np.playing || prev.artwork !== np.artwork));
     if (changed) LW.emit('nowplaying', LW.nowPlaying);
   }
+
+  // ─── Music levels + beats ─────────────────────────────────────────────────
+  LW.music = { level: 0, bass: 0, mid: 0, high: 0, live: false, lastLive: 0 };
+  function onBeatFrame(m) {
+    const M = LW.music;
+    M.level = m.l; M.bass = m.b; M.mid = m.m; M.high = m.h; M.live = true; M.lastLive = performance.now();
+    if (m.k) LW.emit('beat', Math.min(1, m.k));
+  }
+  // Fallback pulse when there's music but no live analysis.
+  let fakeT = 0;
+  setInterval(() => {
+    const M = LW.music;
+    if (M.live && performance.now() - M.lastLive > 3000) M.live = false;
+    if (M.live) return;
+    const playing = LW.nowPlaying && LW.nowPlaying.playing;
+    fakeT += 0.1;
+    const target = playing ? 0.35 + 0.1 * Math.sin(fakeT * 0.3) : 0;
+    M.level += (target - M.level) * 0.2; M.bass = M.level; M.mid = M.level * 0.8; M.high = M.level * 0.5;
+    if (playing && Math.round(fakeT * 10) % 6 === 0) LW.emit('beat', 0.4);   // ~100 bpm, soft
+  }, 100);
 
   // ─── Background soundscapes (procedural, looped, very light on CPU) ──────
   LW.soundscape = { kind: 'off', volume: 0.35 };
@@ -353,6 +378,7 @@
   // Native host entry point.
   window.__lw = function (type, x, y, flag) {
     if (type === 'agents') { setAgents(x); return; }
+    if (type === 'beat') { onBeatFrame(x); return; }
     if (type === 'focus') { setFocused(!!x); return; }
     if (type === 'perf') { if (x && x.fps) LW.fps = x.fps; LW._resumeFrames(); return; }
     if (type === 'nowplaying') { setNowPlaying(x); return; }

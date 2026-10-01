@@ -675,6 +675,9 @@ function makePattern(v) {
     case 'orenji': return { base: C.orange, fin: 'rgba(225,140,70,0.42)', metal: '#f0a45a', patches: [] };
     case 'platinum': return { base: C.plat, fin: 'rgba(235,235,230,0.5)', metal: '#ffffff', patches: [] };
     case 'chagoi': return { base: C.bronze, fin: 'rgba(140,110,80,0.45)', metal: '#a5835c', patches: [] };
+    // AI companions: Claude = terracotta with cream, Codex = white with teal.
+    case 'claude': return { base: '#d97757', fin: 'rgba(240,168,138,0.5)', metal: '#f0a07f', patches: [...blobs(2, 0.25, 0.7, '#f2e3cf', 0.035, 0.06, 0.25)] };
+    case 'codex': return { base: '#eef2f2', fin: 'rgba(205,236,232,0.5)', patches: [...blobs(3, 0.08, 0.75, '#3a9c91', 0.06, 0.1, 0.35), ...blobs(2, 0.2, 0.7, '#22282c', 0.015, 0.03, 0.6)] };
     case 'asagi': return { base: C.asagi, fin: 'rgba(200,120,90,0.45)', patches: [...blobs(3, 0.15, 0.7, C.red2, 0.05, 0.08, 0.2).map((p) => ({ ...p, s: Math.sign(rand(-1, 1)) * rand(0.95, 1.15) }))], net: true };
   }
 }
@@ -708,8 +711,34 @@ let fish = [];
 const pellets = [];
 function spawnFish() {
   const n = clamp(Math.round((W * H) / 160000), 6, 13);
-  fish = Array.from({ length: n }, (_, i) => new Koi(i)).sort((a, b) => b.z - a.z);
+  const companions = fish.filter((f) => f.agent);
+  fish = Array.from({ length: n }, (_, i) => new Koi(i)).sort((a, b) => b.z - a.z).concat(companions);
 }
+
+// ─── AI companions as koi (Claude Code / Codex at work) ─────────────────────
+function companionKoi(a) {
+  const k = new Koi(0);
+  k.variety = a.kind; k.pat = makePattern(a.kind === 'codex' ? 'codex' : 'claude');
+  k.butterfly = true; k.z = 0.12; k.curious = 0.9; k.agent = a;
+  // Swim in from the left edge.
+  const y = rand(H * 0.35, H * 0.8);
+  k.ang = rand(-0.3, 0.3);
+  k.p = [];
+  for (let j = 0; j < SEG; j++) k.p.push([-k.L * 0.2 - Math.cos(k.ang) * j * k.L / (SEG - 1), y - Math.sin(k.ang) * j * k.L / (SEG - 1)]);
+  return k;
+}
+LW.on('agents', (A) => {
+  LW.nativeAgents = A.style === 'native';
+  const list = A.style === 'native' ? A.list : [];
+  const ids = new Set(list.map((a) => a.id));
+  let added = false;
+  for (const f of fish) if (f.agent && !ids.has(f.agent.id)) f.leaving = true;
+  for (const a of list) {
+    const f = fish.find((g) => g.agent && g.agent.id === a.id);
+    if (f) { f.agent = a; f.leaving = false; } else { fish.push(companionKoi(a)); added = true; }
+  }
+  if (added) buildPatterns();
+});
 
 // Cursor state.
 const cur = { x: -1e4, y: -1e4, vx: 0, vy: 0, speed: 0, inside: false, still: 0, lastMove: 0, lastT: 0 };
@@ -894,6 +923,11 @@ function updateFish(dt, t) {
       if (d > f.L * 1.1) { dx += ((reminder.x - f.x) / d) * 1.4; dy += ((reminder.y - f.y) / d) * 1.4; }
     }
 
+    // Companions: busy while their agent works, lazy when idle, and swim off when done.
+    if (f.agent) {
+      targetSpeed *= f.agent.state === 'working' ? 1.45 : 0.55;
+      if (f.leaving) { dx = -4; dy = Math.sin(t * 0.3 + f.seed) * 0.5; targetSpeed = f.L * 0.8; turn = 2; }
+    }
     const want = Math.atan2(dy, dx);
     f.ang += clamp(angDiff(f.ang, want), -turn * dt, turn * dt);
     f.speed = lerp(f.speed, targetSpeed, 1 - Math.exp(-dt * (f.flee > 0 ? 6 : 1.2)));
@@ -921,6 +955,9 @@ function updateFish(dt, t) {
     // Depth drifts slowly.
     f.z = clamp(f.z + noise1(f.seed * 7 + t * 0.05) * dt * 0.03, 0, 1);
   }
+  // Companions that finished have swum off-screen: let them go.
+  const gone = fish.filter((f) => f.leaving && f.x < -f.L * 1.2);
+  if (gone.length) { fish = fish.filter((f) => !gone.includes(f)); buildPatterns(); }
   // Occasionally a koi rises to gulp air.
   if (Math.random() < dt / 14) {
     const f = fish[Math.floor(rand(fish.length))];
@@ -1464,6 +1501,21 @@ function drawOverlay(dt, t) {
     c.font = `300 ${Math.round(Math.min(W, H) * 0.02)}px ui-serif, "New York", Georgia, serif`;
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(phase, cx, cy);
+    c.globalAlpha = 1;
+  }
+
+  // Companion name chips riding on the water above their koi.
+  for (const f of fish) {
+    if (!f.agent || f.x < -20 || f.x > W + 20) continue;
+    const working = f.agent.state === 'working';
+    const label = f.agent.kind + (f.agent.project ? ' · ' + f.agent.project : '') + (working ? '' : ' · resting');
+    c.font = '500 11px -apple-system, system-ui, sans-serif';
+    const w = c.measureText(label).width + 18, x = f.x - w / 2, y = f.y - f.L * 0.32 - 22;
+    c.globalAlpha = (f.leaving ? 0.35 : working ? 0.9 : 0.6);
+    c.fillStyle = 'rgba(10,22,24,0.55)'; c.beginPath(); c.roundRect(x, y, w, 20, 10); c.fill();
+    c.fillStyle = f.agent.kind === 'codex' ? '#7fe0d0' : '#f0a07f';
+    c.beginPath(); c.arc(x + 10, y + 10, working ? 2.8 + Math.sin(t * 6) * 0.6 : 2.4, 0, TAU); c.fill();
+    c.fillStyle = '#eef3f2'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(label, x + 17, y + 10.5);
     c.globalAlpha = 1;
   }
 

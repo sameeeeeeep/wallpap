@@ -1002,6 +1002,11 @@ class Panda {
     this.lookX = 0; this.lookY = 0; this.blinkT = rand(2, 5); this.blink = 0;
     this.lookAt = null; this.bundle = null; this.hit = null; this.headTop = [x, this.y]; this.moving = 0; this.rubbed = 0;
     this.pose = poseStand(this, 0, 0, false);
+    // illustrated sprite state (own canvases + own texture; see "Illustrated panda sprites")
+    this.gait = 0; this.edt = 0; this.lookUpK = 0; this.hopT = 9;
+    this.spo = { pose: 'walk1', rot: 0, sx: 1, sy: 1, dy: 0, ball: false, pvx: 0 };
+    this.sv = { pose: '', k: 1, cur: new Float32Array(10), prev: new Float32Array(10) };
+    this.spr = sprInit(this);
   }
   get S() { return PS * this.s * this.ap.size; }
   get len() { return 80 * this.ap.bodyX * this.S; }
@@ -1140,8 +1145,9 @@ function poseYawn(p, t, k) {
   return o;
 }
 
-// Emit an SDF primitive list for one panda.
+// Emit an SDF primitive list for one panda (procedural fallback until its sprites load).
 function emitPanda(p, t) {
+  if (p.spr && p.spr.ready && !dbg.proc) return emitPandaSprite(p, t);
   const L = p.prims; L.reset();
   const P = p.pose, A = p.ap, S = p.S;
   L.footY = p.y; L.haze = hazeAt(p.s); L.paper = 0;
@@ -1240,30 +1246,279 @@ function emitHead(L, p, P, A, t) {
   }
 }
 
+// ─── Illustrated panda sprites ──────────────────────────────────────────────
+// AI-painted poses (art/sprites/pandas/<set>/<pose>.png, all facing RIGHT) drawn as
+// textured quads in the same depth slot as the SDF actors, so nearer grass blades
+// still overlap paws and bellies. Every panda owns its base atlas canvas, its tinted
+// canvas and its GL texture — nothing is shared between characters. The tinted
+// canvas is re-graded only when the (quantised) light changes; until a set has
+// loaded, the procedural panda above is drawn instead.
+const SPR_DIR = 'art/sprites/pandas/';
+const SPR_SETS = {   // abstract pose → image
+  Bao: { dir: 'bao', k: 1.0, roll: true, poses: { walk1: 'walk1', walk2: 'walk2', sit: 'sit-leaf', back: 'roll', ball: 'roll', play: 'sit-leaf' } },
+  Dou: { dir: 'cub', k: 1.06, roll: true, poses: { walk1: 'walk1', walk2: 'walk2', sit: 'tumble', back: 'back-sleep', ball: 'tumble', play: 'tumble' } },
+  Mei: { dir: 'mei', k: 1.0, roll: false, poses: { walk1: 'walk1', walk2: 'walk2', sit: 'sit-eat', back: 'back-sleep', ball: 'back-sleep', play: 'sit-eat' } },
+};
+// head centre (fractions of the image) + head radius (fraction of width)
+const SPR_HEAD = {
+  'bao/walk1': [0.83, 0.33, 0.12], 'bao/walk2': [0.83, 0.37, 0.12], 'bao/sit-leaf': [0.5, 0.27, 0.34], 'bao/roll': [0.27, 0.5, 0.17],
+  'cub/walk1': [0.82, 0.38, 0.15], 'cub/walk2': [0.82, 0.38, 0.15], 'cub/tumble': [0.28, 0.5, 0.16], 'cub/back-sleep': [0.22, 0.45, 0.17],
+  'mei/walk1': [0.83, 0.38, 0.13], 'mei/walk2': [0.84, 0.35, 0.13], 'mei/sit-eat': [0.5, 0.3, 0.33], 'mei/back-sleep': [0.25, 0.48, 0.17],
+};
+// the painted poses aren't drawn to one scale: per-image size correction (matched by head size)
+const SPR_K = { 'bao/sit-leaf': 0.86, 'bao/roll': 0.85, 'mei/sit-eat': 0.88 };
+const SPR_LEN = 118;     // walk1 width in actor units (≈ the procedural panda, nose to tail)
+const SPR_FADE = 0.15;   // pose crossfade (s)
+const sprImgs = {};      // decoded source images (read-only; each set belongs to one panda)
+function sprImg(src) { let im = sprImgs[src]; if (!im) { im = sprImgs[src] = new Image(); im.decoding = 'async'; im.src = src; } return im; }
+function sprInit(p) {
+  const set = SPR_SETS[p.ap.name]; if (!set) return null;
+  const names = [...new Set(Object.values(set.poses))];
+  const S = { set, names, imgs: {}, rects: {}, base: null, cv: null, ctx: null, tex: null, unit: 1, key: '', ready: false, failed: false, tints: 0 };
+  let left = names.length;
+  const done = () => { if (--left === 0 && !S.failed) sprBuild(p, S); };
+  for (const n of names) {
+    const im = S.imgs[n] = sprImg(SPR_DIR + set.dir + '/' + n + '.png');
+    if (im.complete && im.naturalWidth) done();
+    else if (im.__err) S.failed = true;
+    else { im.addEventListener('load', done, { once: true }); im.addEventListener('error', () => { im.__err = true; S.failed = true; }, { once: true }); }
+  }
+  return S;
+}
+function sprBuild(p, S) {
+  if (p.dead || S.base) return;
+  const PAD = 6, ims = S.names.map((n) => S.imgs[n]);
+  const colW = Math.max(...ims.map((im) => im.naturalWidth)) + PAD * 2, rowH = [];
+  ims.forEach((im, i) => { rowH[i >> 1] = Math.max(rowH[i >> 1] || 0, im.naturalHeight + PAD * 2); });
+  const cw = colW * 2, ch = rowH.reduce((a, b) => a + b, 0);
+  const base = document.createElement('canvas'); base.width = cw; base.height = ch;
+  const bx = base.getContext('2d', { willReadFrequently: true });
+  let y = 0;
+  ims.forEach((im, i) => {
+    if (i && !(i & 1)) y += rowH[(i >> 1) - 1];
+    const x = (i & 1) * colW + PAD, yy = y + PAD, w = im.naturalWidth, h = im.naturalHeight;
+    bx.drawImage(im, x, yy);
+    const hd = SPR_HEAD[S.set.dir + '/' + S.names[i]] || [0.5, 0.3, 0.15];
+    S.rects[S.names[i]] = { w, h, u0: x / cw, v0: yy / ch, u1: (x + w) / cw, v1: (yy + h) / ch, hx: hd[0], hy: hd[1], hr: hd[2], k: SPR_K[S.set.dir + '/' + S.names[i]] || 1 };
+  });
+  // De-fringe: the cut-outs carry a pale halo; fade it out and pull edge pixels
+  // toward the ink outline so they sit cleanly on the grass.
+  const id = bx.getImageData(0, 0, cw, ch), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const a = d[i + 3]; if (a === 0 || a === 255) continue;
+    let k = clamp((a - 60) / 140, 0, 1); const na = k * k * (3 - 2 * k) * 255;
+    k = clamp((a - 150) / 90, 0, 1); k = k * k * (3 - 2 * k);
+    d[i] = 52 + (d[i] - 52) * k; d[i + 1] = 40 + (d[i + 1] - 40) * k; d[i + 2] = 38 + (d[i + 2] - 38) * k; d[i + 3] = na;
+  }
+  bx.putImageData(id, 0, 0);
+  S.base = base;
+  S.cv = document.createElement('canvas'); S.cv.width = cw; S.cv.height = ch; S.ctx = S.cv.getContext('2d');
+  S.unit = SPR_LEN * S.set.k / S.rects.walk1.w;
+  S.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex); texParams(gl.LINEAR_MIPMAP_LINEAR);
+}
+// Light grade for the sprites: the same ambient + sun mix the procedural pandas used,
+// relative to clear noon (so noon = the art as painted). The canvas carries the hue
+// (warmth / moonlit silver); a uniform gain carries brightness, so re-tints are rare.
+function sprLt(sun, ac) { const l = [0, 1, 2].map((i) => ac[i] * 0.86 + sun[i] * 0.5), g = l[0] * 0.3 + l[1] * 0.55 + l[2] * 0.15; return l.map((v) => lerp(v, g, 0.5)); }
+const SPR_NOON = sprLt([1.05, 1.0, 0.94], [0.58, 0.72, 0.94].map((v) => v * 0.62));
+const SL = { gain: 1, mul: [1, 1, 1], desat: 0, gold: 0, lift: 0, key: '' };
+function sprLight() {
+  const l = sprLt(Lt.sun, Lt.ambC), m = l.map((v, i) => v / SPR_NOON[i]), mx = Math.max(m[0], m[1], m[2], 1e-3);
+  const q = (v, n) => Math.round(v * n) / n;
+  const w = WEATHER[LW.env.weather] || WEATHER.clear;
+  SL.gain = mx * (1 + 0.55 * Lt.night);   // moonlit fur still reads (like the old SDF rim)
+  SL.mul = m.map((v) => q(v / mx, 40));
+  SL.desat = q(clamp(Lt.night * 0.5 + w.gray * 0.3, 0, 0.75), 20);
+  SL.gold = q(clamp(Lt.gold * (1 - Lt.night) * 0.2, 0, 0.3), 20);
+  SL.lift = q(clamp(Lt.night * 0.7, 0, 0.7), 20);
+  SL.key = SL.mul.join() + '|' + SL.desat + '|' + SL.gold + '|' + SL.lift;
+}
+function sprTint(p) {
+  const S = p.spr, c = S.ctx, w = S.cv.width, h = S.cv.height;
+  c.save();
+  c.globalAlpha = 1; c.globalCompositeOperation = 'copy'; c.drawImage(S.base, 0, 0);
+  if (SL.desat > 0) { c.globalCompositeOperation = 'saturation'; c.globalAlpha = SL.desat; c.fillStyle = '#808080'; c.fillRect(0, 0, w, h); }
+  c.globalAlpha = 1; c.globalCompositeOperation = 'multiply';
+  c.fillStyle = `rgb(${Math.round(SL.mul[0] * 255)},${Math.round(SL.mul[1] * 255)},${Math.round(SL.mul[2] * 255)})`; c.fillRect(0, 0, w, h);
+  if (SL.gold > 0) { c.globalCompositeOperation = 'soft-light'; c.globalAlpha = SL.gold; c.fillStyle = '#ffa24c'; c.fillRect(0, 0, w, h); }
+  if (SL.lift > 0) { c.globalCompositeOperation = 'soft-light'; c.globalAlpha = SL.lift; c.fillStyle = '#cdd8f2'; c.fillRect(0, 0, w, h); }
+  c.globalAlpha = 1; c.globalCompositeOperation = 'destination-in'; c.drawImage(S.base, 0, 0);
+  c.restore();
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, S.cv);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  S.key = SL.key; S.ready = true; S.tints++;
+}
+// First tint immediately; later re-grades are staggered (≤ 1 panda per frame).
+let sprRR = 0;
+function sprTintPass() {
+  let budget = 1;
+  const n = pandas.length; sprRR = (sprRR + 1) % Math.max(1, n);
+  for (let j = 0; j < n; j++) {   // round-robin so no panda starves while the light keeps moving
+    const p = pandas[(sprRR + j) % n], S = p.spr; if (!S || !S.base || S.key === SL.key) continue;
+    if (!S.ready) sprTint(p); else if (budget > 0) { sprTint(p); budget--; }
+  }
+}
+function sprBreathe(o, p, t) {
+  const br = p.state === 'calm' ? breath(calmT) : 0.5 + 0.5 * Math.sin(t * 1.25 + p.ph0);
+  o.sy = 1 + 0.03 * br; o.sx = 1 + 0.01 * br;
+}
+// Behaviour state → abstract pose + a little motion (rotation, squash, bob).
+// rot > 0 tips the nose down (sprites face right); pvx = pivot offset (fraction of width).
+function sprPose(p, t) {
+  const o = p.spo, st = p.st, cub = p.ap.cub;
+  o.pose = 'walk1'; o.rot = 0; o.sx = 1; o.sy = 1; o.dy = 0; o.ball = false; o.pvx = 0;
+  let canLook = true;
+  switch (p.state) {
+    case 'walk': case 'chase': {
+      const run = p.state === 'chase' || st.run, g = p.gait / ((run ? 15 : 9.5) * p.S);
+      o.pose = Math.floor(g) & 1 ? 'walk2' : 'walk1';
+      o.dy = -Math.sin((g % 1) * Math.PI) * (run ? 0.02 : 0.013) * (p.state === 'chase' ? 1 : st.amt || 0);
+      break;
+    }
+    case 'sit': o.pose = 'sit'; if (cub) o.rot = 0.05 * Math.sin(t * 1.6 + p.ph0); else o.sy = 1 + 0.008 * Math.sin(t * 1.5 + p.ph0); break;
+    case 'shelter': if (cub) { o.pose = 'back'; sprBreathe(o, p, t); canLook = false; } else { o.pose = 'sit'; o.sy = 0.97; o.sx = 1.02; } break;
+    case 'yawn': { const e = Math.sin(Math.PI * clamp(st.t / st.dur, 0, 1)); o.pose = 'sit'; o.sy = 1 + 0.04 * e; o.sx = 1 - 0.015 * e; o.rot = -0.04 * e; break; }
+    case 'munch': {
+      const c = Math.max(0, Math.sin(t * 8));
+      if (cub) { o.rot = 0.07 + 0.025 * c; o.pvx = 0.1; }                    // nibbling the bundle, nose down
+      else { o.pose = 'sit'; o.sy = 1 + 0.014 * c; o.sx = 1 - 0.004 * c; }   // chew bob
+      break;
+    }
+    case 'nap': case 'sleep': case 'calm': o.pose = 'back'; sprBreathe(o, p, t); canLook = false; break;
+    case 'belly': { o.pose = cub ? 'play' : 'back'; sprBreathe(o, p, t); o.rot = 0.045 * (0.25 + Math.min(1, p.rubbed) * 0.6) * Math.sin(t * 9); canLook = false; break; }
+    case 'dizzy': { o.pose = cub ? 'play' : 'back'; o.rot = 0.08 * (1 - clamp(st.t / st.dur, 0, 1)) * Math.sin(t * 6); canLook = false; break; }
+    case 'roll': o.pose = 'ball'; o.ball = true; o.rot = (st.back ? -1 : 1) * st.ang; o.dy = -Math.abs(Math.sin(st.ang)) * 0.03; canLook = false; break;
+    case 'wiggle': {
+      const k = clamp(st.t / 1.9, 0, 1), s = Math.sin(st.t * 14) * (1 - k);
+      o.pose = 'play'; o.dy = -Math.abs(Math.sin(st.t * 7)) * 0.05 * (1 - k); o.sx = 1 + 0.03 * s; o.sy = 1 - 0.03 * s;
+      if (cub) o.rot = 0.1 * Math.sin(t * 9) * (1 - k);
+      break;
+    }
+    case 'scratch': o.pose = 'sit'; o.rot = 0.05 * Math.sin(t * 5.2); o.dy = -Math.abs(Math.sin(t * 5.2)) * 0.012; break;
+    case 'stretch': { const e = Math.sin(Math.PI * clamp(st.t / st.dur, 0, 1)); o.sx = 1 + 0.07 * e; o.sy = 1 - 0.045 * e; o.rot = -0.035 * e; o.pvx = -0.3; break; }
+    case 'drink': o.rot = 0.09 + 0.015 * Math.sin(t * 9); o.pvx = 0.1; canLook = false; break;
+    default: break;   // idle, bumpHit: standing
+  }
+  // a kite gliding low: chin up (tip back on the rear paws) + a startled little hop
+  p.lookUpK = approach(p.lookUpK, canLook && p.lookY < -0.4 ? 1 : 0, p.edt * 3);
+  if (p.lookUpK > 0) { o.rot -= 0.075 * easeIO(p.lookUpK); if (!o.pvx && !o.ball && (o.pose === 'walk1' || o.pose === 'walk2')) o.pvx = -0.28; }
+  if (p.hopT < 0.42) o.dy -= Math.sin(Math.PI * p.hopT / 0.42) * 0.07;
+  return o;
+}
+function emitPandaSprite(p, t) {
+  const S = p.spr, L = p.prims; L.reset();
+  L.footY = p.y; L.haze = hazeAt(p.s); L.paper = 0;
+  p.hopT += p.edt;
+  const o = sprPose(p, t), r = S.rects[S.set.poses[o.pose]];
+  // facing flips are crossfaded (a painted sprite squashed to a sliver reads as a flat card)
+  const sc = S.unit * p.S * r.k, sg = p.dir < 0 ? -1 : 1;
+  const ang = o.rot * sg, ca = Math.cos(ang), sa = Math.sin(ang);
+  const kx = sc * o.sx * sg, ky = sc * o.sy;
+  // anchor: bottom-centre, paws a touch into the grass — or the centre of a rolling ball
+  const ballR = 0.21 * (r.w + r.h) * sc;
+  const ax = r.w * 0.5, ay = o.ball ? r.h * 0.5 : r.h * 0.985;
+  const ox = p.x, oy = (o.ball ? p.y - ballR * 0.92 : p.y + r.h * sc * 0.02) + o.dy * r.h * sc;
+  const PX = o.pvx * r.w * kx;
+  const M = (u, v) => { const lx = (u - ax) * kx - PX, ly = (v - ay) * ky; return [ox + PX + lx * ca - ly * sa, oy + lx * sa + ly * ca]; };
+  const p0 = M(0, 0), p1 = M(r.w, 0), p2 = M(0, r.h);
+  // crossfade between poses (walk1 ↔ walk2 is a hard gait swap)
+  const sv = p.sv;
+  if (sv.pose !== o.pose || sv.sg !== sg) {
+    const gait = (n) => n === 'walk1' || n === 'walk2';
+    if (sv.pose && (sv.sg !== sg || !(gait(sv.pose) && gait(o.pose)))) { sv.prev.set(sv.cur); sv.k = 0; }
+    sv.pose = o.pose; sv.sg = sg;
+  }
+  sv.k = Math.min(1, sv.k + p.edt / SPR_FADE);
+  const c = sv.cur;
+  c[0] = p0[0]; c[1] = p0[1]; c[2] = p1[0] - p0[0]; c[3] = p1[1] - p0[1]; c[4] = p2[0] - p0[0]; c[5] = p2[1] - p0[1];
+  c[6] = r.u0; c[7] = r.v0; c[8] = r.u1; c[9] = r.v1;
+  // soft ground + contact shadow, stretched away from a low sun
+  const sunDx = clamp((Lt.sunP[0] - p.x) / W, -1, 1), sl = Lt.back * (1 - Lt.night) * 0.9, night = 0.45 + 0.55 * (1 - Lt.night);
+  const half = o.ball ? ballR : r.w * 0.5 * sc * o.sx, shR = half * 0.86 * (1 + sl * 0.6);
+  pSoft(L, p.x - sunDx * shR * sl * 0.6, p.y - 1, shR, shR * 0.2, shR * 0.3, COL.SHADOW, 0.3 * night);
+  pSoft(L, p.x, p.y, shR * 0.55, shR * 0.08, shR * 0.12, COL.SHADOW, 0.26 * night);
+  // bookkeeping for hit tests, bubbles, hearts, birds on heads
+  const hd = M(r.hx * r.w, r.hy * r.h), bc = M(r.w * 0.5, r.h * 0.5);
+  p.hit = { bx: bc[0], by: bc[1], br: Math.max(r.w, r.h) * 0.4 * sc, hx: hd[0], hy: hd[1], hr: r.hr * r.w * sc };
+  p.headPos = hd; p.headTop = [hd[0], hd[1] - r.hr * r.w * sc * 0.85];
+}
+const SPR_VS = `#version 300 es
+uniform vec2 uView, uO, uAx, uAy;
+uniform vec4 uUV;
+out vec2 vUV;
+void main(){
+  vec2 cr = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
+  vec2 p = uO + uAx*cr.x + uAy*cr.y;
+  vUV = mix(uUV.xy, uUV.zw, cr);
+  gl_Position = vec4(p.x/uView.x*2.0 - 1.0, 1.0 - p.y/uView.y*2.0, 0.0, 1.0);
+}`;
+const SPR_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform vec3 uHaze;
+uniform float uHazeAmt, uGain, uAlpha;
+in vec2 vUV;
+out vec4 o;
+void main(){
+  vec4 t = texture(uTex, vUV);
+  if (t.a < 0.004) discard;
+  vec3 c = mix(t.rgb/t.a*uGain, uHaze, uHazeAmt);
+  o = vec4(c*t.a, t.a)*uAlpha;
+}`;
+const sprP = program(SPR_VS, SPR_FS);
+function sprQuad(u, q, a) {
+  if (a <= 0.003) return;
+  gl.uniform2f(u.uO, q[0], q[1]); gl.uniform2f(u.uAx, q[2], q[3]); gl.uniform2f(u.uAy, q[4], q[5]);
+  gl.uniform4f(u.uUV, q[6], q[7], q[8], q[9]); gl.uniform1f(u.uAlpha, Math.min(1, a));
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+function drawPandaSprite(p) {
+  const S = p.spr; if (!S || !S.ready || dbg.proc || !dbg.actors) return;
+  gl.useProgram(sprP.p); gl.bindVertexArray(emptyVao);
+  const u = sprP.u, sv = p.sv;
+  gl.uniform2f(u.uView, W, H);
+  gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex); gl.uniform1i(u.uTex, 3);
+  gl.uniform3fv(u.uHaze, Lt.haze); gl.uniform1f(u.uHazeAmt, p.prims.haze); gl.uniform1f(u.uGain, SL.gain);
+  if (sv.k < 1) { sprQuad(u, sv.prev, 2 * (1 - sv.k)); sprQuad(u, sv.cur, 2 * sv.k); }
+  else sprQuad(u, sv.cur, 1);
+}
+
 // ─── Panda behaviour ────────────────────────────────────────────────────────
 let calmOn = LW.calm, calmT = 0, calmFade = calmOn ? 1 : 0, calmLean = 0, breathTemp = 0;
 function breath(t) { const c = t % 10; return c < 4 ? 0.5 - 0.5 * Math.cos((c / 4) * Math.PI) : 0.5 + 0.5 * Math.cos(((c - 4) / 6) * Math.PI); }
-const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * 0.94;
+// pandas stay out of the right ~28% of the screen (macOS widgets live there)
+const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * 0.72 - PS * 36;   // centre limit ≈ right edge at 72%
 function setState(p, name, data) {
   p.from = Object.assign({}, p.pose); p.from.roll = wrapA(p.from.roll);
   p.blend = 0; p.blendDur = (data && data.blend) || 0.5;
   p.state = name; p.st = Object.assign({ t: 0 }, data || {});
 }
+// Pandas walk ACROSS the meadow in profile. Depth changes ride along the horizontal
+// travel as a gentle S-arc (mean slope ≤ WALK_SLOPE); a target too steep to reach
+// directly gets a sideways amble first (zig-zag) — never a diagonal slide.
+const WALK_SLOPE = 0.12;
 function walkTo(p, tx, ts, then, thenData, run) {
   tx = clamp(tx, XMIN(), XMAX()); ts = clamp(ts, 0.28, 0.92);
-  // Keep the path mostly horizontal: if the depth change is too steep, detour.
-  const span = H - yH, need = Math.abs(ts - p.s) * span / 0.35, dx = Math.abs(tx - p.x);
-  const queue = [];
-  if (need > dx + 4) {
-    const extra = (need - dx) / 2, away = tx >= p.x ? -1 : 1;
-    let wx = p.x + away * extra;
-    if (wx < XMIN() || wx > XMAX()) wx = tx + (tx >= p.x ? 1 : -1) * extra;
+  const span = H - yH, queue = [];
+  let x = p.x, s = p.s;
+  for (let leg = 0; leg < 3; leg++) {
+    const dx = Math.abs(tx - x), dy = Math.abs(ts - s) * span;
+    if (dy <= dx * WALK_SLOPE + 4) break;
+    const extra = (dy / WALK_SLOPE - dx) / 2, away = tx >= x ? -1 : 1;
+    let wx = x + away * extra;
+    if (wx < XMIN() || wx > XMAX()) wx = tx - away * extra;   // no room behind: overshoot, then come back
     wx = clamp(wx, XMIN(), XMAX());
-    queue.push([wx, lerp(p.s, ts, 0.5)]);
+    if (Math.abs(wx - x) < 8) break;
+    const ws = s + (ts - s) * Math.abs(wx - x) / (Math.abs(wx - x) + Math.abs(tx - wx) || 1);
+    queue.push([wx, ws]); x = wx; s = ws;
   }
   queue.push([tx, ts]);
   const [fx, fs] = queue.shift();
-  setState(p, 'walk', { tx: fx, ts: fs, queue, then, thenData, run, amt: p.state === 'walk' ? p.st.amt || 0 : 0, blend: 0.4 });
+  setState(p, 'walk', { tx: fx, ts: fs, x0: p.x, s0: p.s, queue, then, thenData, run, amt: p.state === 'walk' ? p.st.amt || 0 : 0, blend: 0.4 });
 }
 function freeSpot(p, s) {
   for (let k = 0; k < 12; k++) {
@@ -1304,7 +1559,7 @@ function think(p) {
     return doAct(p, a);
   }
   const a = night ? wsel([['sleep', 55], ['nap', 18], ['munch', 14], ['sit', 10]])
-    : wsel([['wander', 26], ['munch', 16], ['sit', 10], ['nap', 9], ['roll', snow ? 16 : 6], ['scratch', 7], ['yawn', 5], ['stretch', 5], ['idle', 8]]);
+    : wsel([['wander', 26], ['munch', 16], ['sit', 10], ['nap', 9], ['roll', (snow ? 16 : 6) * (p.spr && !p.spr.set.roll ? 0 : 1)], ['scratch', 7], ['yawn', 5], ['stretch', 5], ['idle', 8]]);
   return doAct(p, a);
 }
 function doAct(p, a) {
@@ -1326,6 +1581,7 @@ function startRoll(p, dir, dist, ds, back) {
   let d = dir;
   if (p.x + d * dist > XMAX() || p.x + d * dist < XMIN()) d = -d;
   if (!back) p.dir = d;
+  const dsMax = dist * 0.15 / (H - yH); ds = clamp(ds, -dsMax, dsMax);   // a ground arc, not a diagonal
   setState(p, 'roll', { dir: d, dist, ds, ang: 0, gone: 0, s0: p.s, back: !!back, blend: 0.35 });
 }
 function goBundle(p, b) {
@@ -1347,12 +1603,14 @@ ST.walk = (p, dt, t) => {
     if (Math.abs(dx) > 1.5) {
       const spd = (st.run ? 100 : 34) * S * (p.ap.cub ? 1.25 : 1) * (snowSlow());
       const step = Math.min(Math.abs(dx), spd * dt);
-      const maxDs = 0.35 * step / (H - yH);
-      p.s += clamp((st.ts - p.s) * step / Math.abs(dx), -maxDs, maxDs);
       p.x += Math.sign(dx) * step; moving = 1;
+      // depth follows horizontal progress along a smooth arc
+      const tot = Math.abs(st.tx - st.x0);
+      if (tot > 2) p.s = lerp(st.s0, st.ts, easeIO(clamp(1 - Math.abs(st.tx - p.x) / tot, 0, 1)));
       p.walkPh += (step / (S * (st.run ? 34 : 28))) * TAU;
-    } else if (Math.abs(st.ts - p.s) > 0.002) { p.s = approach(p.s, st.ts, dt * 0.03); moving = 0.6; p.walkPh += dt * 5; }
-    else if (st.queue && st.queue.length) { const [nx, ns] = st.queue.shift(); st.tx = nx; st.ts = ns; }
+      p.gait += step;
+    } else if (Math.abs(st.ts - p.s) > 0.002) { p.s = approach(p.s, st.ts, dt * 0.03); }   // tiny remainder only (planner keeps it small)
+    else if (st.queue && st.queue.length) { const [nx, ns] = st.queue.shift(); st.tx = nx; st.ts = ns; st.x0 = p.x; st.s0 = p.s; }
     else {
       if (st.then) { const d = st.thenData || {}; setState(p, st.then, d); if (d.face) p.dir = d.face; }
       else think(p);
@@ -1449,16 +1707,16 @@ ST.chase = (p, dt, t) => {
   if (Math.abs(dx) > 2 && Math.sign(dx) !== p.dir) p.dir = Math.sign(dx);
   const turning = Math.abs(p.fx - p.dir) > 0.25;
   if (!turning) {
-    const spd = 120 * p.S, step = Math.min(Math.abs(dx), spd * dt), maxDs = 0.45 * step / (H - yH);
+    const spd = 120 * p.S, step = Math.min(Math.abs(dx), spd * dt), maxDs = 0.18 * step / (H - yH);
     p.x += Math.sign(dx) * step; p.s += clamp(st.ts - p.s, -maxDs, maxDs);
-    p.walkPh += (step / (p.S * 34)) * TAU;
+    p.walkPh += (step / (p.S * 34)) * TAU; p.gait += step;
   }
   if (Math.abs(dx) < 26 * p.S || st.t > 3.2) { squeak(p, 1.3); startRoll(p, p.dir, W * rand(0.05, 0.09), 0.02); }
   return poseStand(p, t, 1, true);
 };
 
 function updatePanda(p, dt, t) {
-  p.st.t += dt; p.moving = 0;
+  p.st.t += dt; p.moving = 0; p.edt = dt;
   const target = (ST[p.state] || ST.idle)(p, dt, t);
   p.blend = Math.min(1, p.blend + dt / p.blendDur);
   const e = easeIO(p.blend);
@@ -1471,7 +1729,7 @@ function updatePanda(p, dt, t) {
   let lx = noise1(p.ph0 * 9 + t * 0.25) * 0.5, ly = 0;
   const busy = ['roll', 'calm', 'sleep', 'nap', 'dizzy', 'drink'].includes(p.state);
   if (p.lookAt && p.lookAt.until > t) { lx = clamp((p.lookAt.who.x - p.x) * p.dir / 120, -1, 1); }
-  else if (kiteLow && !busy && p.hit) { lx = clamp((kiteLow.x - p.hit.hx) * p.dir / 300, -1, 1); ly = -1; if (!p.sawKite) { p.sawKite = 1; if (Math.random() < 0.4) squeak(p, 1.3); } }
+  else if (kiteLow && !busy && p.hit) { lx = clamp((kiteLow.x - p.hit.hx) * p.dir / 300, -1, 1); ly = -1; if (!p.sawKite) { p.sawKite = 1; p.hopT = 0; if (Math.random() < 0.4) squeak(p, 1.3); } }
   else if (!busy && cur.inside && p.hit && Math.hypot(cur.x - p.hit.hx, cur.y - p.hit.hy) < Math.max(260, p.hit.br * 6)) {
     lx = clamp((cur.x - p.hit.hx) * p.dir / 160, -1, 1); ly = clamp((cur.y - p.hit.hy) / 160, -1, 1);
   }
@@ -2259,7 +2517,7 @@ LW.on('reminder', (r) => {
     basin.flow = 1.5; basin.flowT = 16;
     if (p) {
       stopEating(p);
-      const side = p.x < basin.x ? -1 : 1;
+      const side = -1;   // drink from the left side (the right of the screen stays clear)
       walkTo(p, basin.x + side * (basin.r * 0.9 + p.len * 0.62), basin.s + 0.01, 'drink', { dur: 7, face: -side });
       showBubble(r.text || 'a sip of water?', () => [p.hit ? p.hit.hx : p.x, p.hit ? p.hit.hy - p.hit.hr : p.y - 100], 12);
     } else showBubble(r.text || 'a sip of water?', () => [basin.x, sToY(basin.s) - basin.r * 1.6], 12);
@@ -2289,7 +2547,7 @@ LW.on('env', () => {
 function syncPandaCount() {
   const want = clamp(Math.round(+LW.settings.pandas || 3), 1, 3);
   while (pandas.length < want) { const id = pandas.length; pandas.push(new Panda(id, clamp(W * (0.42 + id * 0.14), XMIN(), XMAX()), [0.56, 0.64, 0.5][id])); }
-  while (pandas.length > want) { const p = pandas.pop(); stopEating(p); }
+  while (pandas.length > want) { const p = pandas.pop(); stopEating(p); p.dead = true; if (p.spr && p.spr.tex) gl.deleteTexture(p.spr.tex); }
 }
 
 // ─── Resize / build ─────────────────────────────────────────────────────────
@@ -2304,7 +2562,7 @@ function resize() {
   yH = H * 0.4; GH = H * 0.12; GW = H * 0.0078; PS = H * 0.0041;
   groveX1 = Math.min(W * 0.19, H * 0.34);
   buildWorld(); buildField();
-  basin.x = Math.max(W * 0.7, groveX1 + W * 0.5); basin.s = 0.36;
+  basin.x = clamp(groveX1 + W * 0.42, W * 0.45, W * 0.62); basin.s = 0.36;   // left of the widget column
   for (const p of pandas) { p.x = clamp((p.x / oW) * W, XMIN(), XMAX()); p.y = sToY(p.s); }
   syncPandaCount();
   drawOverlay.dirty = true;
@@ -2424,7 +2682,7 @@ function render(t) {
   for (const a of drawList) {
     const k = lowerBound(a.L.footY);
     drawGrass(start, k); start = Math.max(start, k);
-    if (!dbg.only || (dbg.only === 'panda') === !!a.panda) drawActor(a.L);
+    if (!dbg.only || (dbg.only === 'panda') === !!a.panda) { drawActor(a.L); if (a.panda) drawPandaSprite(a.panda); }
   }
   drawGrass(start, NI);
 
@@ -2458,6 +2716,7 @@ function frame() {
   PAL.set(kb.map((v, i) => v * 1.5 + Lt.skyHor[i] * 0.1 + Lt.sun[i] * 0.04 * Lt.back), COL.KITEPALE * 3);
 
   stepLight(dt);
+  sprLight(); sprTintPass();
   stepGusts(dt);
   calmFade = approach(calmFade, calmOn || breathTemp > 0 ? 1 : 0, dt / 2.5);
   if (breathTemp > 0) breathTemp -= dt;
@@ -2545,6 +2804,7 @@ function selfTest(secs = 60, act) {
     LW.advance(1 / 30); frames++;
     pandas.forEach((p, i) => {
       if (p !== ref[i] || p.ap !== aps[i] || p.id !== ids[i] || p.ap.name !== names[i] || !Object.isFrozen(p.ap) || p.prims === (pandas[(i + 1) % pandas.length] || {}).prims) idErrors++;
+      if (p.spr && pandas.some((q) => q !== p && q.spr && (q.spr === p.spr || q.sv === p.sv || (p.spr.cv && q.spr.cv === p.spr.cv) || (p.spr.base && q.spr.base === p.spr.base) || (p.spr.tex && q.spr.tex === p.spr.tex)))) idErrors++;
       const d = Math.hypot(p.x - prevP[i][0], p.y - prevP[i][1]);
       maxStep = Math.max(maxStep, d);
       if (d > 25) teleports.push(`${p.ap.name} ${p.state} ${d.toFixed(1)} f${f}`);
@@ -2585,7 +2845,8 @@ function perfTest(frames = 120) {
 }
 window.__grass = {
   pandas, birds, kiteBirds, bundles, butterflies, basin, Lt, F, get drawList() { return drawList; },
-  selfTest, perfTest, gpuTest, perf, dbg, setState, think, dropBundle, startRoll, pokePanda,
+  selfTest, perfTest, gpuTest, perf, dbg, setState, think, dropBundle, startRoll, pokePanda, walkTo, SL,
+  sprites() { return pandas.map((p) => ({ name: p.ap.name, ready: !!(p.spr && p.spr.ready), tints: p.spr ? p.spr.tints : 0, pose: p.sv.pose, state: p.state, x: Math.round(p.x), s: +p.s.toFixed(3) })); },
   clockHeads() { const t = performance.now() / 1000; return clocks.map((f) => [...flowerHead(f, t).map(Math.round), f.ready, +f.s.toFixed(2)]); },
   snap() { snapLight = true; stepLight(0); },
   swoop(i = 0) { kbSwoop(kiteBirds[i]); },

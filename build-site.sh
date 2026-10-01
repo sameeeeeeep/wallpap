@@ -15,6 +15,7 @@ for f in $SRC/*.html $SRC/lw.js; do
   cp "$f" "$DST/"
   echo "  + ${f:t}"
 done
+[[ -d $SRC/art ]] && cp -R $SRC/art "$DST/art" && echo "  + art/ ($(find $DST/art -type f | wc -l | tr -d ' ') files)"
 # Manifest the page reads to know which scenes are live and which have stills
 # (site/img/<id>.jpg + <id>-sm.jpg). Avoids probing for files that don't exist.
 python3 - "$DST" site/img > "$DST/manifest.json" <<'PY'

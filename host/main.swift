@@ -12,14 +12,20 @@ import CoreLocation
 import IOKit.ps
 import CoreServices
 
-struct Scene { let id: String; let title: String; let key: String; var pro = false }
+struct Scene { let id: String; let title: String; let key: String; var pro = false; var music = false }
 
 let scenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1"),
     Scene(id: "bowls", title: "Singing Bowls", key: "2", pro: true),
     Scene(id: "cats", title: "Cats", key: "3"),
     Scene(id: "grass", title: "Touch Grass", key: "4"),
-    Scene(id: "cafe", title: "Night Café", key: "5", pro: true),
+    Scene(id: "cafe", title: "Night Café", key: "5", pro: true, music: true),
+    Scene(id: "records", title: "Record Store", key: "", pro: true, music: true),
+    Scene(id: "train", title: "Night Train", key: "", pro: true, music: true),
+    Scene(id: "speakeasy", title: "Speakeasy", key: "", pro: true, music: true),
+    Scene(id: "rooftop", title: "Rooftop", key: "", pro: true, music: true),
+    Scene(id: "ramen", title: "Ramen Alley", key: "", pro: true, music: true),
+    Scene(id: "cabin", title: "Snowy Cabin", key: "", pro: true, music: true),
 ]
 
 final class WallWindow: NSWindow {
@@ -179,6 +185,28 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         set { defaults.set(newValue, forKey: "musicMode") }
     }
     var musicTimer: Timer?
+    var beatSyncOn: Bool {
+        get { defaults.bool(forKey: "beatSync") }
+        set { defaults.set(newValue, forKey: "beatSync") }
+    }
+    lazy var beat: BeatSync = {
+        let b = BeatSync()
+        b.onFrame = { [weak self] l, bs, m, h, k in
+            guard let self, self.engaged else { return }   // nobody looking → don't bother the scene
+            let js = String(format: "__lw('beat',{l:%.3f,b:%.3f,m:%.3f,h:%.3f,k:%.2f})", l, bs, m, h, k)
+            self.windows.forEach { $0.js(js) }
+        }
+        b.onError = { [weak self] err in
+            NSLog("wallpap beat sync: \(err)")
+            self?.beatSyncOn = false; self?.rebuildMenu()
+        }
+        return b
+    }()
+    /// Listen only while it matters: beat sync on, Pro, and music actually playing.
+    func updateBeatSync() {
+        let playing = lastNowPlayingJSON.contains("\"playing\":true")
+        if isPro && beatSyncOn && musicMode && playing { beat.start() } else if beat.running { beat.stop() }
+    }
     var lastTrackKey = ""
     var lastNowPlayingJSON = "null"
     var artworkCache: [String: String] = [:]
@@ -227,6 +255,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
               let json = String(data: data, encoding: .utf8), json != lastNowPlayingJSON else { return }
         lastNowPlayingJSON = json
         windows.forEach { $0.js("__lw('nowplaying',\(json))") }
+        updateBeatSync()
     }
 
     /// Artwork → small JPEG data URL, so scenes can sample its colors without CORS issues.
@@ -775,13 +804,25 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             menu.addItem(up)
             menu.addItem(.separator())
         }
-        for s in scenes {
+        // Only offer scenes whose file is actually present.
+        let available = scenes.filter { FileManager.default.fileExists(atPath: scenesDir.appendingPathComponent("\($0.id).html").path) }
+        func sceneItem(_ s: Scene) -> NSMenuItem {
             let item = NSMenuItem(title: s.title, action: #selector(pickScene(_:)), keyEquivalent: s.key)
             item.representedObject = s.id
             item.state = s.id == sceneID ? .on : .off
             item.target = self
             if s.pro { lock(item) }
-            menu.addItem(item)
+            return item
+        }
+        available.filter { !$0.music }.forEach { menu.addItem(sceneItem($0)) }
+        let musicScenes = available.filter { $0.music }
+        if !musicScenes.isEmpty {
+            let mItem = NSMenuItem(title: "Music Scenes", action: nil, keyEquivalent: "")
+            let mMenu = NSMenu()
+            musicScenes.forEach { mMenu.addItem(sceneItem($0)) }
+            mItem.submenu = mMenu
+            if musicScenes.contains(where: { $0.id == sceneID }) { mItem.state = .mixed }
+            menu.addItem(mItem)
         }
         addSceneItems(to: menu)
         menu.addItem(.separator())
@@ -875,6 +916,14 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         music.target = self
         lock(music)
         menu.addItem(music)
+        if isPro && musicMode {
+            let bs = NSMenuItem(title: "Beat Sync — react to the music", action: #selector(toggleBeatSync), keyEquivalent: "")
+            bs.state = beatSyncOn ? .on : .off
+            bs.indentationLevel = 1
+            bs.toolTip = "Listens to system audio (on-device, nothing recorded) so scenes move with the beat. Needs Screen & System Audio Recording permission."
+            bs.target = self
+            menu.addItem(bs)
+        }
 
         menu.addItem(.separator())
         let mute = NSMenuItem(title: "Sound", action: #selector(toggleMute), keyEquivalent: "s")
@@ -952,6 +1001,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             action("Fill the Water Bowl", "water")
         case "grass":
             action("Give Bamboo", "bamboo")
+        case "cafe", "speakeasy":
+            choice("Music Player", key: "player", options: [("Record Player", "record"), ("Jukebox", "jukebox")], defaultValue: sceneID == "speakeasy" ? "jukebox" : "record")
         default: break
         }
     }
@@ -996,7 +1047,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         companionStyle = item.representedObject as? String ?? "native"
         startCompanions(); rebuildMenu()
     }
-    @objc func toggleMusicMode() { musicMode.toggle(); startMusicMode(); rebuildMenu() }
+    @objc func toggleMusicMode() { musicMode.toggle(); startMusicMode(); updateBeatSync(); rebuildMenu() }
+    @objc func toggleBeatSync() { beatSyncOn.toggle(); updateBeatSync(); rebuildMenu() }
     @objc func togglePauseWhenIdle() { pauseWhenIdle.toggle(); checkEngagement(); rebuildMenu() }
     @objc func pickFps(_ item: NSMenuItem) {
         fps = item.tag

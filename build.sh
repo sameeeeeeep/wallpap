@@ -8,20 +8,21 @@ cd "$(dirname "$0")"
 APP=wallpap.app
 rm -rf $APP LiveWall.app
 mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
-FW=(-framework AppKit -framework WebKit -framework ServiceManagement -framework CoreLocation -framework IOKit -framework CoreServices)
+FW=(-framework AppKit -framework WebKit -framework ServiceManagement -framework CoreLocation -framework IOKit -framework CoreServices -framework ScreenCaptureKit -framework Accelerate -framework CoreMedia)
 if [[ "$1" == "--zip" || "$1" == "--dmg" ]]; then
   # Release: universal binary (Apple Silicon + Intel), macOS 13+
   mkdir -p .build
-  swiftc -O -target arm64-apple-macos13 -o .build/wallpap-arm64 host/main.swift $FW
-  swiftc -O -target x86_64-apple-macos13 -o .build/wallpap-x86_64 host/main.swift $FW
+  swiftc -O -target arm64-apple-macos13 -o .build/wallpap-arm64 host/main.swift host/BeatSync.swift $FW
+  swiftc -O -target x86_64-apple-macos13 -o .build/wallpap-x86_64 host/main.swift host/BeatSync.swift $FW
   lipo -create .build/wallpap-arm64 .build/wallpap-x86_64 -output $APP/Contents/MacOS/wallpap
 else
-  swiftc -O -o $APP/Contents/MacOS/wallpap host/main.swift $FW
+  swiftc -O -o $APP/Contents/MacOS/wallpap host/main.swift host/BeatSync.swift $FW
 fi
 cp host/Info.plist $APP/Contents/Info.plist
 [[ -f host/AppIcon.icns ]] && cp host/AppIcon.icns $APP/Contents/Resources/AppIcon.icns
 mkdir -p $APP/Contents/Resources/scenes
 cp scenes/*.html scenes/lw.js $APP/Contents/Resources/scenes/
+[[ -d scenes/art ]] && cp -R scenes/art $APP/Contents/Resources/scenes/art
 codesign --force --sign - $APP >/dev/null 2>&1 || true
 echo "built $PWD/$APP"
 if [[ "$1" == "--zip" || "$1" == "--dmg" ]]; then

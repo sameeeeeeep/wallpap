@@ -27,6 +27,21 @@
 //  aspect ratio. Everything is drawn with Canvas2D paths at device pixel
 //  resolution (DPR ≤ 2). Static scenery is pre-rendered once per light /
 //  weather change; cats are drawn every frame from their own data only.
+//
+//  Art slots — illustrated cat sprites (transparent PNG, all facing RIGHT,
+//  ~130–450 px; flipped in code for left). Loaded with new Image(); until a
+//  coat's walk1.png has loaded (or if it is missing) that cat is drawn with
+//  the procedural vector cat below. Missing single poses fall back
+//  (loaf→sit, stretch→walk1 squashed, sleep→loaf→sit, walk2→walk1).
+//    art/sprites/cats/orange/  walk1 walk2 sit loaf sleep stretch   (mango)
+//    art/sprites/cats/black/   walk1 walk2 sit loaf sleep stretch   (onyx)
+//    art/sprites/cats/grey/    walk1 walk2 sit sleep                (smoke)
+//    art/sprites/cats/calico/  walk1 walk2 sit sleep                (pepper)
+//    art/sprites/cats/siamese/ walk1 walk2 sit sleep                (mochi)
+//  Each cat owns its own tint canvases (never shared between cats); they are
+//  re-tinted only when the light on that cat changes noticeably.
+//  The right ~28% of the screen (L.R…W) is kept calm for macOS widgets: no
+//  resting cats, bubbles or text there.
 // =====================================================================
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d', { alpha: false });
@@ -174,15 +189,19 @@ function computeLayout() {
   const sn = 4, sw = Math.min(54, bx1 * 0.17), sh = 34;
   Lr.stairs = { x1: bx1 + 26, n: sn, w: sw, h: sh, base: 912 };
   Lr.door = { x0: bx1 + 26 - sw * sn - 92, w: 78, base: 912 - sh * sn };
-  Lr.bench = { x0: Math.max(bx1 + 360, W * 0.69), x1: Math.max(bx1 + 640, W * 0.9), seat: 694, base: 792 };
-  if (Lr.bench.x1 > W - 30) { Lr.bench.x1 = W - 30; Lr.bench.x0 = Math.min(Lr.bench.x0, Lr.bench.x1 - 220); }
+  // the right ~28% is reserved for macOS widgets: the bench (a favourite resting
+  // spot) ends where that zone begins
+  Lr.R = W * 0.72;
+  const benchX1 = Math.min(W - 30, Math.max(Lr.R - 10, bx1 + 640));
+  Lr.bench = { x0: benchX1 - clamp(W * 0.18, 220, 300), x1: benchX1, seat: 668, base: 792 };
   Lr.hasBench = Lr.bench.x1 - Lr.bench.x0 > 180 && Lr.bench.x0 > bx1 + 120;
-  Lr.mat = { cx: lerp(bx1 + 60, Lr.hasBench ? Lr.bench.x0 : W, 0.5), cy: 858, rx: clamp(W * 0.1, 120, 190), ry: 44 };
-  Lr.water = { x: Lr.hasBench ? Lr.bench.x0 - 64 : W * 0.8, y: 812, kind: 'water' };
-  Lr.food = { x: Lr.hasBench ? Math.max(Lr.stairs.x1 + 150, Lr.bench.x0 - 330) : W * 0.62, y: 826, kind: 'food' };
+  Lr.mat = { cx: lerp(bx1 + 60, Lr.hasBench ? Lr.bench.x0 : Lr.R, 0.5), cy: 858, rx: clamp(W * 0.1, 120, 190), ry: 44 };
+  Lr.water = { x: Lr.hasBench ? Lr.bench.x0 - 64 : Lr.R - 80, y: 812, kind: 'water' };
+  Lr.food = { x: Math.min(Lr.water.x - 170, Math.max(Lr.stairs.x1 + 120, Lr.mat.cx - Lr.mat.rx - 10)), y: 826, kind: 'food' };
   Lr.bowl = Lr.water;
   Lr.lanterns = [];
-  for (const fx of [0.4, 0.62]) { const x = lerp(bx1, W, fx); if (x > bx1 + 120 && x < W - 60) Lr.lanterns.push({ x, y: Lr.parTop }); }
+  // one lantern over the open terrace, one past the bench canopy (clear of its posts)
+  for (const x of [lerp(bx1, Lr.hasBench ? Lr.bench.x0 : Lr.R, 0.55), (Lr.hasBench ? Lr.bench.x1 : Lr.R) + 110]) if (x > bx1 + 120 && x < W - 60) Lr.lanterns.push({ x, y: Lr.parTop });
   Lr.pots = [{ x: W - 52, y: 930, big: 1 }];
   if (!Lr.hasBench) Lr.pots = [];
   // jumpable surfaces. base = the floor depth they stand over (for draw order / scale)
@@ -216,12 +235,14 @@ function computeLayout() {
   Lr.lanterns.forEach((ln) => {
     for (const s2 of [-1, 1]) { const x = ln.x + s2 * 72; const pi = li('parapet', (l) => x > l.x0 + 20 && x < l.x1 - 20); if (pi >= 0) Lr.shelters.push({ x, ledge: pi, warm: 1 }); }
   });
+  Lr.shelters = Lr.shelters.filter((s) => s.x < Lr.R - 40);
   const dTop0 = Lr.door.base - 150;
   Lr.dry = [
     [Lr.door.x0 - 30, Lr.door.x0 + Lr.door.w + 30, dTop0 - 8, Lr.stairs.base],
     [Lr.win.x0 - 40, Lr.win.x1 + 40, Lr.win.y0 - 8, Lr.win.y1 + 22],
   ];
-  if (Lr.hasBench) Lr.dry.push([Lr.bench.x0 - 26, Lr.bench.x1 + 26, 548, Lr.bench.base]);
+  Lr.canopyY = 474;
+  if (Lr.hasBench) Lr.dry.push([Lr.bench.x0 - 26, Lr.bench.x1 + 26, Lr.canopyY + 16, Lr.bench.base]);
   const rr = mulberry(99);
   Lr.stars = [];
   for (let i = 0; i < Math.round(W / 9); i++) Lr.stars.push({ x: rr() * W, y: rr() * 360, p: rr() * 6.28, s: 0.5 + rr() * 1.5, r: 0.8 + rr() * 1.3 });
@@ -236,6 +257,9 @@ function floorClamp(x, y) {
   if (L.pots.length && x > W - 130) y = Math.min(y, 880);
   return [x, y];
 }
+// x for anywhere a cat will settle (keeps the widget zone on the right calm)
+const restX = (x) => Math.min(x, L.R - 60);
+const underBench = (c) => c.surf === -1 && L.hasBench && c.x > L.bench.x0 - 30 && c.x < L.bench.x1 + 30 && c.y < L.bench.base + 6;
 const depthK = (y) => lerp(1.1, 1.38, clamp((y - L.floorTop) / (L.floorBot - L.floorTop), 0, 1));
 
 // =====================================================================
@@ -476,21 +500,8 @@ function paintFG() {
   };
   awning(L.door.x0 - 28, L.door.x0 + L.door.w + 28, L.door.base - 186, 30);
   awning(L.win.x0 - 38, L.win.x1 + 38, L.win.y0 - 34, 24);
-  // a light canopy over the bench
-  if (L.hasBench) {
-    const bn = L.bench, ct = 532;
-    g.fillStyle = litS('#8a6a4e'); g.fillRect(bn.x0 - 22, ct - 6, 6, bn.base - ct + 6); g.fillRect(bn.x1 + 16, ct - 6, 6, bn.base - ct + 6);
-    g.fillStyle = litS('#a3825f'); g.fillRect(bn.x0 - 22, ct - 6, 2, bn.base - ct + 6);
-    g.fillStyle = 'rgba(40,30,40,0.12)'; g.fillRect(bn.x0 - 10, bn.seat - 30, bn.x1 - bn.x0 + 20, 26);
-    g.beginPath(); g.moveTo(bn.x0 - 30, ct); g.lineTo(bn.x1 + 30, ct); g.lineTo(bn.x1 + 30, ct + 10);
-    const n = 9, w = bn.x1 - bn.x0 + 60;
-    for (let i = n; i > 0; i--) { const xa = bn.x0 - 30 + (w * (i - 1)) / n, xb = bn.x0 - 30 + (w * i) / n; g.quadraticCurveTo((xa + xb) / 2, ct + 22, xa, ct + 10); }
-    g.closePath();
-    const cg = g.createLinearGradient(0, ct, 0, ct + 22); cg.addColorStop(0, litS('#fbf8f2')); cg.addColorStop(1, litS('#e6dfd4'));
-    g.fillStyle = cg; g.fill();
-    g.strokeStyle = litS('#3d6a9c', 1, 0.8); g.lineWidth = 2; g.beginPath(); g.moveTo(bn.x0 - 30, ct + 4); g.lineTo(bn.x1 + 30, ct + 4); g.stroke();
-  }
-
+  // the bench canopy's soft shade on the wall behind the seat (the canopy itself is a depth-sorted prop)
+  if (L.hasBench) { const bn = L.bench; g.fillStyle = 'rgba(40,30,40,0.12)'; g.fillRect(bn.x0 - 10, bn.seat - 30, bn.x1 - bn.x0 + 20, 26); }
   // lighting overlays (only where something is painted)
   g.globalCompositeOperation = 'source-atop';
   if (E.warm > 0.05) {
@@ -567,6 +578,22 @@ function paintSprites() {
       g.restore();
       g.fillStyle = litS('#ffffff', 1, 0.35); rrect(g, bn.x0 + 14, bn.seat - 18, w - 28, 5, 3); g.fill();
     }, bn.base);
+  }
+  // a light canopy over the bench — depth-sorted so cats on the parapet stay behind it
+  if (L.hasBench) {
+    const bn = L.bench, ct = L.canopyY;
+    makeSprite('canopy', bn.x0 - 40, ct - 10, bn.x1 - bn.x0 + 80, bn.base - ct + 14, (g) => {
+      g.fillStyle = litS('#8a6a4e'); g.fillRect(bn.x0 - 22, ct - 6, 6, bn.base - ct + 6); g.fillRect(bn.x1 + 16, ct - 6, 6, bn.base - ct + 6);
+      g.fillStyle = litS('#a3825f'); g.fillRect(bn.x0 - 22, ct - 6, 2, bn.base - ct + 6);
+      g.beginPath(); g.moveTo(bn.x0 - 30, ct); g.lineTo(bn.x1 + 30, ct); g.lineTo(bn.x1 + 30, ct + 10);
+      const n = 9, w = bn.x1 - bn.x0 + 60;
+      for (let i = n; i > 0; i--) { const xa = bn.x0 - 30 + (w * (i - 1)) / n, xb = bn.x0 - 30 + (w * i) / n; g.quadraticCurveTo((xa + xb) / 2, ct + 22, xa, ct + 10); }
+      g.closePath();
+      const cg = g.createLinearGradient(0, ct, 0, ct + 22); cg.addColorStop(0, litS('#fbf8f2')); cg.addColorStop(1, litS('#e6dfd4'));
+      g.fillStyle = cg; g.fill();
+      g.strokeStyle = litS('#3d6a9c', 1, 0.8); g.lineWidth = 2; g.beginPath(); g.moveTo(bn.x0 - 30, ct + 4); g.lineTo(bn.x1 + 30, ct + 4); g.stroke();
+      if (E.lamp > 0.1) { g.globalCompositeOperation = 'source-atop'; L.lanterns.forEach((ln) => glow(g, ln.x, ln.y - 22, 260, [255, 178, 96], 0.42 * E.lamp)); g.globalCompositeOperation = 'source-over'; }
+    }, bn.base + 0.6);
   }
   // water bowl (blue glaze) and food bowl (terracotta); contents are drawn live
   const bowlSprite = (bw, body, bodyHi, rim, inner) => {
@@ -1002,6 +1029,202 @@ function stepTail(c, P, F, dt) {
 }
 
 // =====================================================================
+//  illustrated sprite cats (see the art-slot notes at the top)
+// =====================================================================
+const SPR_DIR = 'art/sprites/cats/';
+const SPR_COAT = ['orange', 'black', 'grey', 'calico', 'siamese'];   // COATS[i] → folder
+const SPR_POSES = ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch'];
+const SPR_HAS = { orange: SPR_POSES, black: SPR_POSES };   // others: walk1 walk2 sit sleep (see art/sprites/README.md)
+const SPR_H = 140;                                                     // walking height (local units, before depth scale)
+const POSE_K = { walk1: 1, walk2: 1, sit: 0.9, loaf: 0.8, sleep: 0.72, stretch: 0.86 };
+const POSE_HEAD = { walk1: [0.86, 0.26], walk2: [0.86, 0.26], sit: [0.48, 0.24], loaf: [0.63, 0.32], sleep: [0.24, 0.5], stretch: [0.9, 0.55] };
+const POSE_FOOT = { walk1: 0.5, walk2: 0.5, sit: 0.72, loaf: 0.92, sleep: 0.9, stretch: 0.66 };
+const SPR = SPR_COAT.map((folder) => {
+  const s = { folder, img: {}, ok: {}, px: 0, d: 0, head: {} };
+  (SPR_HAS[folder] || ['walk1', 'walk2', 'sit', 'sleep']).forEach((p) => {
+    const im = new Image();
+    im.onload = () => {
+      if (!(im.naturalWidth > 0)) { s.ok[p] = false; return; }
+      s.img[p] = defringe(im);
+      s.ok[p] = true;
+      if (p === 'walk1') { s.px = SPR_H / im.naturalHeight; s.d = im.naturalWidth * 0.445; }
+    };
+    im.onerror = () => { s.ok[p] = false; };
+    im.src = SPR_DIR + folder + '/' + p + '.png';
+    s.img[p] = im;
+  });
+  if (folder === 'siamese') s.head.sleep = [0.68, 0.6];
+  return s;
+});
+const SPR_OFF = new URLSearchParams(location.search).get('procedural') === '1';   // dev: compare with the vector cats
+// The cut-outs carry a ~6 px pale fringe that glows like a sticker edge at night:
+// fade it out and darken it toward the ink line (once per image, at load).
+function defringe(im) {
+  try {
+    const w = im.naturalWidth, h = im.naturalHeight, cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0);
+    const id = g.getImageData(0, 0, w, h), a = id.data;
+    for (let i = 0; i < a.length; i += 4) {
+      const al = a[i + 3];
+      if (al === 255 || al === 0) continue;
+      const t = al / 255, k = 0.3 + 0.7 * t * t;
+      a[i] *= k; a[i + 1] *= k; a[i + 2] *= k;
+      a[i + 3] = al < 36 ? 0 : (al - 36) * (255 / 219);
+    }
+    g.putImageData(id, 0, 0);
+    return cv;
+  } catch (e) { return im; }   // e.g. a file:// origin that taints the canvas: use the raw art
+}
+const sprOf = (c) => { const s = SPR[c.id]; return !SPR_OFF && s && s.px > 0 && s.ok.walk1 ? s : null; };
+// pose → an image this coat actually has (plus the extra squash a fallback needs)
+function sprPick(s, p, d) {
+  if (s.ok[p]) return p;
+  if (p === 'walk2') return 'walk1';
+  if (p === 'stretch') { d.sx *= 1.08; d.sy *= 0.88; return 'walk1'; }
+  if (p === 'loaf') return s.ok.sit ? 'sit' : 'walk1';
+  if (p === 'sleep') return s.ok.loaf ? 'loaf' : s.ok.sit ? 'sit' : 'walk1';
+  if (p === 'sit') return s.ok.loaf ? 'loaf' : 'walk1';
+  return 'walk1';
+}
+const sprAnchor = (s, p, w) => (p === 'walk1' || p === 'walk2' ? w - s.d : p === 'stretch' ? w * 0.6 : w * 0.5);
+// what the sprite shows for the cat's state: image + squash/rotation/offsets (local units)
+function spriteDesc(c, s, T) {
+  const st = c.state;
+  const d = { p: 'sit', sx: 1, sy: 1, rot: 0, piv: 0, ox: 0, oy: 0, nod: 0, bob: 0, br: 0 };
+  const walkP = () => (Math.floor(c.wf || 0) & 1 ? 'walk2' : 'walk1');
+  const sitP = () => { d.p = 'sit'; d.br = 1; };
+  const crouch = (k) => { d.p = 'walk1'; d.sy = k; d.sx = 1 + (1 - k) * 0.45; };
+  switch (st) {
+    case 'move': case 'hunt': case 'follow': {
+      d.p = walkP();
+      const f = (c.wf || 0) % 1;
+      d.bob = -Math.sin(f * Math.PI) * (c.gait === 'run' ? 3.2 : 2.2);
+      if (c.gait === 'run') { d.sx = 1.04; d.sy = 0.97; }
+      break;
+    }
+    case 'sit': case 'watch': case 'look': case 'purrSit': case 'askWater': case 'waitFood': case 'waitTurn': sitP(); break;
+    case 'meow': { sitP(); const p = clamp(c.t / 0.34, 0, 1), q = Math.sin(p * Math.PI); d.oy = -8 * q; d.sy = 1 + 0.035 * q; d.sx = 1 - 0.02 * q; break; }
+    case 'yawn': { sitP(); const p = Math.sin(clamp(c.t / c.dur, 0, 1) * Math.PI); d.sy = 1 + 0.045 * p; d.sx = 1 - 0.02 * p; d.rot = -0.035 * p; break; }
+    case 'groom': { sitP(); const p = c.t % 3.2; d.rot = p < 2.4 ? 0.03 * Math.sin(c.t * 10.5) : 0.07 * Math.sin(((p - 2.4) / 0.8) * Math.PI); break; }
+    case 'loaf': case 'hide': d.p = 'loaf'; d.br = 1; if (st === 'hide') d.sy = 0.94; break;
+    case 'knead': { sitP(); const k = Math.sin(c.t * 6); d.oy = -1.6 * Math.abs(k); d.rot = 0.022 * k; break; }
+    case 'sleep': d.p = 'sleep'; d.br = 1; break;
+    case 'stretch': { d.p = 'stretch'; const p = smooth(Math.min(1, c.t / 0.6)); d.sx = 0.93 + 0.09 * p; d.sy = 1.04 - 0.06 * p; break; }
+    case 'stretch2': { d.p = 'walk2'; const p = smooth(Math.min(1, c.t / 0.5)); d.sx = 1 + 0.08 * p; d.sy = 1 - 0.05 * p; d.rot = -0.035 * p; break; }
+    case 'jumpPrep': crouch(lerp(0.97, 0.82, smooth(c.t / Math.max(0.01, c.dur)))); break;
+    case 'land': { d.p = 'walk2'; const p = smooth(clamp(c.t / c.dur, 0, 1)); d.sy = 0.86 + 0.14 * p; d.sx = 1.07 - 0.07 * p; break; }
+    case 'crouchWatch': case 'batWait': crouch(0.86); break;
+    case 'stalk': crouch(0.82); if (c.t > c.dur * 0.35) d.ox = Math.sin(c.t * 22) * 2.4; break;
+    case 'jump': d.p = 'walk2'; d.piv = 1; d.rot = clamp((c.vyAir || 0) / 900, -0.36, 0.36); d.sx = 1.05; d.sy = 0.97; break;
+    case 'bat': { d.p = 'walk2'; const p = Math.sin(clamp(c.t / 0.32, 0, 1) * Math.PI); d.rot = -0.13 * p; d.piv = 0.4; d.oy = -4 * p; break; }
+    case 'sniff': d.p = 'walk1'; d.nod = 0.45 + 0.12 * Math.sin(T * 9); break;
+    case 'eat': d.p = 'walk1'; d.nod = 0.85 + 0.15 * Math.abs(Math.sin(c.t * 7)); break;
+    case 'drink': d.p = 'walk1'; d.nod = 0.95; d.sy = 0.98; break;
+    case 'startle': { d.p = 'walk1'; const p = clamp(c.t / 0.3, 0, 1); d.oy = -12 * Math.sin(p * Math.PI); d.sy = 1.08; d.sx = 0.97; break; }
+    case 'stand': d.p = 'walk1'; break;
+    case 'shelter':
+      if (c.shPose === 'sleep') { d.p = 'sleep'; d.br = 1; }
+      else if (c.shPose === 'sit') sitP();
+      else if (c.shPose === 'groom') { sitP(); d.rot = 0.03 * Math.sin(c.t * 10.5); }
+      else { d.p = 'loaf'; d.br = 1; }
+      break;
+    default: sitP();
+  }
+  // idle breathing: ±1.5% anchored at the feet (deeper and slower in calm mode)
+  if (d.br) {
+    const b = calm.fade > 0 && (d.p === 'sleep' || d.p === 'loaf') ? (breath() * 2 - 1) * calm.fade * 1.6 : Math.sin(T * 1.7 + c.id * 1.3);
+    d.sy *= 1 + 0.015 * b; d.sx *= 1 - 0.004 * b;
+  }
+  d.p = sprPick(s, d.p, d);
+  // under the bench there's only room to curl up
+  if (d.p === 'sit' && underBench(c)) d.p = s.ok.loaf && st !== 'sleep' ? 'loaf' : sprPick(s, 'sleep', d);
+  return d;
+}
+// each cat owns its tint canvases (one per pose image) — never shared between cats
+function sprTinted(c, p, img) {
+  const tc = c.tint;
+  let t = tc[p];
+  if (!t) t = tc[p] = { cv: document.createElement('canvas'), m: null };
+  const m = c.tintM;
+  if (t.m && Math.abs(t.m[0] - m[0]) < 0.035 && Math.abs(t.m[1] - m[1]) < 0.035 && Math.abs(t.m[2] - m[2]) < 0.035) return t.cv;
+  const cv = t.cv, w = img.width, h = img.height;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d');
+  g.globalCompositeOperation = 'copy'; g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'multiply';
+  g.fillStyle = rgba([Math.min(1, m[0]) * 255, Math.min(1, m[1]) * 255, Math.min(1, m[2]) * 255]); g.fillRect(0, 0, w, h);
+  const ex = [Math.max(0, m[0] - 1), Math.max(0, m[1] - 1), Math.max(0, m[2] - 1)];
+  if (ex[0] + ex[1] + ex[2] > 0.01) { g.globalCompositeOperation = 'lighter'; g.fillStyle = rgba(ex.map((v) => v * 140)); g.fillRect(0, 0, w, h); }
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'source-over';
+  t.m = m.slice(); sprStats.tints++;
+  return cv;
+}
+const sprStats = { tints: 0 };
+const SPR_SV = ['sx', 'sy', 'rot', 'piv', 'ox', 'oy', 'nod'];
+// per-frame: pick the pose, ease its transform, start a 150 ms crossfade on a pose change
+function sprStep(c, s, dt, T) {
+  const walking = c.state === 'move' || c.state === 'hunt' || c.state === 'follow';
+  if (walking) {
+    const v = Math.hypot(c.vxS || 0, c.vyS || 0) / Math.max(0.5, c.k);   // local units / s
+    c.wf = (c.wf || 0) + (v > 5 ? dt * clamp(3.2 + v / 40, 4, 7) : 0);
+  }
+  const d = spriteDesc(c, s, T);
+  // crouch under the bench seat instead of poking through it
+  let uf = 1;
+  if (underBench(c)) {
+    const img = s.img[d.p], fullH = img.height * c.k * s.px * POSE_K[d.p] * d.sy;
+    uf = clamp((c.y - L.bench.seat - 6) / Math.max(1, fullH), 0.7, 1);
+  }
+  d.sx *= uf; d.sy *= uf;
+  const sv = c.sv || (c.sv = { sx: d.sx, sy: d.sy, rot: d.rot, piv: d.piv, ox: d.ox, oy: d.oy, nod: d.nod });
+  const fam = d.p === 'walk2' ? 'walk1' : d.p;
+  if (c.spFam && fam !== c.spFam && c.spP) { c.spPrev = { p: c.spP, bob: c.spBob || 0 }; for (const q of SPR_SV) c.spPrev[q] = sv[q]; c.spFadeT = 0; }
+  c.spFam = fam; c.spP = d.p; c.spBob = d.bob;
+  c.spFadeT = (c.spFadeT || 0) + dt;
+  const kf = Math.min(1, dt * 16);
+  for (const q of SPR_SV) sv[q] += (d[q] - sv[q]) * kf;
+  // geometry for hit-testing, bubbles, personal space and particles
+  const img = s.img[d.p], w = img.width, h = img.height;
+  const sc = c.k * s.px * POSE_K[d.p], ax = sprAnchor(s, d.p, w), sx = Math.abs(sv.sx) * (1 - 0.14 * ((c.flipT || 0) / 0.16));
+  c.spr = { l: ax * sc * sx, r: (w - ax) * sc * sx, h: h * sc * sv.sy, foot: POSE_FOOT[d.p] * w * sc * sx * 0.5 };
+  const hd = s.head[d.p] || POSE_HEAD[d.p];
+  c.head = [c.x + c.dir * (hd[0] * w - ax) * sc * sx, c.y - c.z + (sv.oy + d.bob) * c.k - (h - hd[1] * h) * sc * sv.sy];
+}
+function sprLayer(g, c, s, p, v, bob, a) {
+  const img = s.img[p], w = img.width, h = img.height;
+  const sc = c.k * s.px * POSE_K[p], ax = sprAnchor(s, p, w);
+  const cv = sprTinted(c, p, img);
+  g.save();
+  if (a < 1) g.globalAlpha = a;
+  g.translate(c.x + v.ox * c.k * c.dir, c.y - c.z + (v.oy + bob) * c.k);
+  g.scale(c.sx * sc * v.sx, sc * v.sy);
+  if (Math.abs(v.rot) > 0.002) { const py = -h * 0.45 * v.piv; g.translate(0, py); g.rotate(v.rot); g.translate(0, -py); }
+  const ox = -ax, oy = -(h - 1);
+  if (v.nod > 0.03 && (p === 'walk1' || p === 'walk2')) {
+    // lower the head toward the bowl: shear only the head/neck block, so the
+    // outline stays continuous at the shoulders and the paws stay planted
+    const xn = Math.round(w * 0.64), yc = Math.round(h * 0.58);
+    g.drawImage(cv, 0, 0, xn + 1, h, ox, oy, xn + 1, h);
+    g.drawImage(cv, xn, yc, w - xn, h - yc, ox + xn, oy + yc, w - xn, h - yc);
+    const b = (v.nod * h * 0.24) / (w - xn);
+    g.transform(1, b, 0, 1, 0, -b * (ox + xn));
+    g.drawImage(cv, xn, 0, w - xn, yc + 1, ox + xn, oy, w - xn, yc + 1);
+  } else g.drawImage(cv, ox, oy);
+  g.restore();
+}
+function drawSpriteCat(g, c, s) {
+  const v = c.sv;
+  const fp = c.spPrev && c.spFadeT < 0.15 ? c.spFadeT / 0.15 : 1;
+  if (fp < 1 && s.ok[c.spPrev.p]) sprLayer(g, c, s, c.spPrev.p, c.spPrev, c.spPrev.bob, Math.min(1, 2 * (1 - fp)));
+  sprLayer(g, c, s, c.spP, v, c.spBob || 0, fp < 1 ? Math.min(1, 2 * fp) : 1);
+}
+// soft contact shadow, stamped from one pre-rendered blob
+const SHADOW = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(40,28,40,1)'); gr.addColorStop(0.5, 'rgba(40,28,40,0.55)'); gr.addColorStop(1, 'rgba(40,28,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })();
+
+// =====================================================================
 //  behaviour
 // =====================================================================
 const cats = [];   // fixed order; never re-sorted (draw order uses a separate list)
@@ -1028,10 +1251,11 @@ function makeCats() {
       awake: rand(0, 120), lazy: [0.2, 0.7, 0.4, 0.1, 0.5][i], play: [0.8, 0.5, 0.4, 1.0, 0.6][i],
       purrT: 0, heartT: 0, zT: rand(0, 2), prey: null, interest: 0, claim: null, mission: null, behindT: 0,
       speedMul: 1, twitch: 0, spook: 0, sbT: 0, earTw: 0, earTwV: 0, earT: rand(2, 8), dil: 0.3, hunger: rand(0, 0.35), thirst: rand(0, 0.4), atBowl: null,
+      tint: {}, tintM: [1, 1, 1], wf: rand(0, 2), sv: null, spr: null,
     };
     Object.defineProperty(c, 'coat', { value: coat, writable: false, configurable: false });
     Object.defineProperty(c, 'id', { value: i, writable: false, configurable: false });
-    const sp = floorClamp(rand(W * 0.3, W - 120), rand(L.floorTop + 20, L.floorBot - 10));
+    const sp = floorClamp(rand(W * 0.3, L.R - 80), rand(L.floorTop + 20, L.floorBot - 10));
     c.x = sp[0]; c.y = sp[1];
     cats.push(c);
   }
@@ -1060,14 +1284,56 @@ function setState(c, st, dur, blendDur = 0.25) {
   if (!['move', 'eat', 'drink', 'jump', 'jumpPrep', 'land'].includes(st)) c.atBowl = null;
   c.snap = clonePose(c.dispPose || c.pose || P0());
   c.state = st; c.t = 0; c.dur = dur; c.blend = 0; c.blendDur = blendDur;
+  c.path = null;
 }
 function releaseClaim(c) { if (c.claim) { if (c.claim.by === c) c.claim.by = null; c.claim = null; } }
 function goTo(c, x, y, gait, next) {
-  c.tx = clamp(x, 40, W - 40); c.ty = y; c.gait = gait; c.next = next || null; c.atBowl = null;
-  // walk mostly along the terrace and ease into the new depth on a gentle curve
-  const dx = c.tx - c.x, dy = c.ty - c.y;
-  c.path = { x0: c.x, y0: c.y, cx: c.x + dx * 0.6, cy: c.y + dy * 0.12, x1: c.tx, y1: c.ty, t: 0 };
   setState(c, 'move', 999, 0.2);
+  c.tx = clamp(x, 40, W - 40); c.ty = y; c.gait = gait; c.next = next || null; c.atBowl = null;
+  c.path = planPath(c, c.tx, c.ty);
+}
+// Side-view cats walk MOSTLY sideways: depth (y) changes ride along the walk as a
+// gentle eased arc (≤ ~20°). A big depth change with little sideways room becomes
+// a meander — overshoot (or step back), turn around, and come back at the new depth.
+const SLOPE = 0.24;
+function planPath(c, x1, y1) {
+  const x0 = c.x, y0 = c.y, dx = x1 - x0, adx = Math.abs(dx), need = Math.abs(y1 - y0) / SLOPE;
+  let pts = [x0, x1];
+  if (c.surf === -1 && need > adx + 2) {
+    const e = (need - adx) / 2, sg = Math.sign(dx) || (x0 < L.R * 0.6 ? 1 : -1), lo = 60, hi = W - 60;
+    const a = x1 + sg * e, b = x0 - sg * e;
+    const okA = a >= lo && a <= hi, okB = b >= lo && b <= hi;
+    if (okA && (a < L.R || !okB || b > L.R)) pts = [x0, a, x1];
+    else if (okB) pts = [x0, b, x1];
+    else { const ac = clamp(a, lo, hi), bc = clamp(b, lo, hi); pts = Math.abs(ac - x1) >= Math.abs(bc - x0) ? [x0, ac, x1] : [x0, bc, x1]; }
+  }
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.abs(pts[i] - pts[i - 1]);
+  return { pts, len: Math.max(len, 1e-3), y0, y1, x1, d: 0, edge: 0 };
+}
+function pathAt(pa, d) {
+  let acc = 0;
+  const n = pa.pts.length;
+  for (let i = 1; i < n; i++) {
+    const a = pa.pts[i - 1], b = pa.pts[i], l = Math.abs(b - a);
+    if (d <= acc + l || i === n - 1) {
+      const u = l > 0 ? clamp((d - acc) / l, 0, 1) : 1;
+      pa.edge = Math.max(0, Math.min(d - acc, acc + l - d));   // distance to the nearest turn / start / end
+      return [lerp(a, b, u), lerp(pa.y0, pa.y1, smooth(d / pa.len))];
+    }
+    acc += l;
+  }
+  return [pa.x1, pa.y1];
+}
+// advance along a path; returns true on arrival
+function followPath(c, pa, spd, dt) {
+  const ease = 0.55 + 0.45 * smooth(pa.edge / 34);   // settle into turns and stops
+  pa.d = Math.min(pa.len, pa.d + spd * ease * dt);
+  const [nx, ny] = pathAt(pa, pa.d);
+  const dx = nx - c.x;
+  c.x = nx; c.y = ny;
+  if (Math.abs(dx) > 0.01) turn(c, dx / Math.max(dt, 1e-3), 8, 0.1);
+  return pa.d >= pa.len;
 }
 function interruptible(c) {
   if (c.mission) return false;
@@ -1090,12 +1356,13 @@ function ledgeCount(i, except) { return cats.filter((o) => o !== except && (o.su
 const IDLE = new Set(['sit', 'stand', 'loaf', 'sleep', 'groom', 'hide', 'watch', 'purrSit', 'crouchWatch', 'look', 'yawn', 'meow', 'drink', 'knead', 'eat', 'waitFood', 'waitTurn', 'askWater', 'shelter']);
 const LANE = 115;
 function extent(c) {
+  if (c.spr && sprOf(c)) { const r = c.spr; return c.dir > 0 ? [c.x - r.l, c.x + r.r] : [c.x - r.r, c.x + r.l]; }
   const P = c.dispPose || c.pose; if (!P) return [c.x - 40, c.x + 40];
   const a = Math.min(P.bx - P.brx, P.hau > 0.05 ? P.hauX - 25 : 1e9, P.hx - P.hrx), b = Math.max(P.hx + P.hrx, P.bx + P.brx);
   const k = c.k;
   return c.dir > 0 ? [c.x + a * k, c.x + b * k] : [c.x - b * k, c.x - a * k];
 }
-function catHeight(c) { const P = c.dispPose || c.pose; return P ? -(P.hy - P.hry - 18) * c.k : 100; }
+function catHeight(c) { if (c.spr && sprOf(c)) return c.spr.h + 8; const P = c.dispPose || c.pose; return P ? -(P.hy - P.hry - 18) * c.k : 100; }
 function bodiesOverlap(a, b) {
   if (a.surf !== b.surf || a.surf === -2) return false;
   const front = a.y >= b.y ? a : b;
@@ -1115,6 +1382,7 @@ function claimedPts(c) {
   return pts;
 }
 function spotClear(x, y, c, pts) {
+  if (x > L.R - 50) return false;
   pts = pts || claimedPts(c);
   for (const [px, py] of pts) if (Math.abs(py - y) < LANE && Math.abs(px - x) < 165) return false;
   for (const bw of [L.water, L.food]) if (Math.abs(y - bw.y) < 46 && Math.abs(x - bw.x) < 120) return false;
@@ -1136,7 +1404,7 @@ function scoot(c) {
   if (c.surf >= 0) {
     const lg = L.ledges[c.surf];
     const other = cats.find((o) => o !== c && o.surf === c.surf);
-    const tx = other && other.x > (lg.x0 + lg.x1) / 2 ? lg.x0 + 30 : lg.x1 - 30;
+    const tx = other && other.x > (lg.x0 + lg.x1) / 2 ? lg.x0 + 30 : Math.min(lg.x1, L.R - 50) - 30;
     if (!other || Math.abs(tx - other.x) < 110) return jumpDown(c);
     const st = c.state, rest = Math.max(3, c.dur - c.t);
     goTo(c, tx, lg.y, 'walk', (c2) => setState(c2, st === 'sleep' ? 'sleep' : 'sit', st === 'sleep' ? rest : rand(3, 6)));
@@ -1171,9 +1439,9 @@ function resolveOverlaps(dt) {
 
 function wander(c, gait = 'walk') {
   if (c.surf >= 0) {
-    const lg = L.ledges[c.surf];
-    let tx = rand(lg.x0 + 20, lg.x1 - 20);
-    for (let k = 0; k < 5 && cats.some((o) => o !== c && o.surf === c.surf && Math.abs(o.x - tx) < 110); k++) tx = rand(lg.x0 + 20, lg.x1 - 20);
+    const lg = L.ledges[c.surf], lx1 = Math.max(lg.x0 + 40, Math.min(lg.x1, L.R - 50));
+    let tx = rand(lg.x0 + 20, lx1 - 20);
+    for (let k = 0; k < 5 && cats.some((o) => o !== c && o.surf === c.surf && Math.abs(o.x - tx) < 110); k++) tx = rand(lg.x0 + 20, lx1 - 20);
     if (cats.some((o) => o !== c && o.surf === c.surf && Math.abs(o.x - tx) < 110)) return setState(c, 'sit', rand(3, 6));
     goTo(c, tx, lg.y, 'walk');
     return;
@@ -1182,7 +1450,7 @@ function wander(c, gait = 'walk') {
   const pts = claimedPts(c);
   for (let k = 0; k < 10 && !ok; k++) {
     const ddx = (Math.random() < 0.5 ? -1 : 1) * rand(120, Math.max(180, W * 0.35));
-    [tx, ty] = floorClamp(c.x + ddx, c.y + rand(-0.3, 0.3) * Math.min(Math.abs(ddx), 260));
+    [tx, ty] = floorClamp(restX(c.x + ddx), c.y + rand(-0.22, 0.22) * Math.min(Math.abs(ddx), 260));
     ok = spotClear(tx, ty, c, pts);
   }
   if (!ok) { const sp = findClear(tx, ty, c); if (!sp) return setState(c, 'sit', rand(3, 6)); [tx, ty] = sp; }
@@ -1218,7 +1486,7 @@ function goLedge(c, i) {
   let lx = rand(lg.x0 + 20, lg.x1 - 20);
   const occ = cats.filter((o) => o !== c && o.surf === i);
   if (occ.length) { const ox = occ[0].x; lx = ox - lg.x0 > lg.x1 - ox ? lg.x0 + 30 : lg.x1 - 30; }
-  lx = clamp(lx, lg.x0 + 15, lg.x1 - 15);
+  lx = clamp(lx, lg.x0 + 15, Math.min(lg.x1, L.R - 50) - 15);
   const to = ledgeTakeoff(lg);
   goTo(c, clamp(lx + (c.x < lx ? -1 : 1) * rand(30, 60), 60, W - 60), to[1], 'trot', (c2) => jumpTo(c2, lx, lg.y, i, (c3) => { setState(c3, pick(['sit', 'sit', 'loaf', 'groom']), rand(5, 14)); }));
 }
@@ -1286,6 +1554,8 @@ function think(c) {
   c.next = null;
   if (calm.on) return calmThink(c);
   if (sheltering() && !c.mission) return seekShelter(c);
+  // never settle in the widget zone on the right: stroll back out of it first
+  if (c.x > L.R - 40 && !c.mission) return c.surf >= 0 ? jumpDown(c, (c2) => wander(c2)) : wander(c, 'walk');
   if (c.hunger > 0.6) {
     if (bowls.food > 0.05) return c.surf >= 0 ? jumpDown(c, (c2) => goBowl(c2, 'food')) : goBowl(c, 'food');
     if (c.surf === -1 && Math.random() < 0.7) return waitForFood(c);
@@ -1299,7 +1569,7 @@ function think(c) {
     add(3 * (1 - sl), () => wander(c, 'walk'));
     add(0.8 * (1 - sl) * c.play, () => wander(c, 'trot'));
     L.ledges.forEach((lg, i) => {
-      if (lg.hi || lg.name === 'step' || ledgeCount(i, c) >= lg.cap) return;
+      if (lg.hi || lg.name === 'step' || ledgeCount(i, c) >= lg.cap || lg.x0 > L.R - 120) return;
       add((lg.name === 'parapet' ? 0.9 : 0.8) * (1 - sl * 0.4) * (wet && lg.name === 'parapet' ? 0.3 : 1), () => goLedge(c, i));
     });
     add(0.6 * (1 - sl), () => goSteps(c) || wander(c));
@@ -1555,7 +1825,7 @@ function setCalm(on, auto = 0) {
   calm.on = on; calm.t = 0; calm.auto = auto;
   if (on) {
     const m = L.mat;
-    const offs = [[0, -40], [-124, -40], [124, -40], [-62, 46], [62, 46]];
+    const offs = [[0, -38], [-168, -32], [168, -32], [-86, 50], [86, 50]];   // spaced for the illustrated cats
     const order = cats.slice().sort((a, b) => Math.abs(a.x - m.cx) - Math.abs(b.x - m.cx));
     order.forEach((c, i) => {
       const o = offs[i % offs.length];
@@ -1628,7 +1898,7 @@ function seekShelter(c) {
   free.sort((a, b) => { const pa = posOf(a), pb = posOf(b); return Math.hypot(pa[0] - c.x, pa[1] - c.y) - (snow && a.warm ? 300 : 0) - Math.hypot(pb[0] - c.x, pb[1] - c.y) + (snow && b.warm ? 300 : 0); });
   const sp = free[0];
   c.shelter = sp; releaseClaim(c);
-  const arrive = (c2) => { c2.dir = c2.x < W / 2 ? 1 : -1; c2.shPose = pick(['loaf', 'sit', 'groom']); setState(c2, 'shelter', rand(8, 20), 0.4); };
+  const arrive = (c2) => { c2.dir = c2.x < W / 2 ? 1 : -1; c2.shPose = underBench(c2) ? pick(['loaf', 'sleep']) : pick(['loaf', 'sit', 'groom']); setState(c2, 'shelter', rand(8, 20), 0.4); };
   const toFloorSpot = (c2) => goTo(c2, sp.x, sp.y, 'trot', arrive);
   if (sp.ledge < 0) return c.surf >= 0 ? jumpDown(c, toFloorSpot) : toFloorSpot(c);
   if (c.surf === sp.ledge) return goTo(c, sp.x, L.ledges[sp.ledge].y, 'walk', arrive);
@@ -1682,23 +1952,12 @@ function update(c, dt, T) {
   switch (c.state) {
     case 'move': {
       const spd = { walk: 64, trot: 128, run: 240 }[c.gait] * c.speedMul * c.k;
-      const pa = c.path || (c.path = { x0: c.x, y0: c.y, cx: (c.x + c.tx) / 2, cy: c.y, x1: c.tx, y1: c.ty, t: 0 });
-      // depth changes are slower than sideways steps (a cat turning toward/away from us)
-      const bt = pa.t;
-      const ddx = 2 * (1 - bt) * (pa.cx - pa.x0) + 2 * bt * (pa.x1 - pa.cx), ddy = 2 * (1 - bt) * (pa.cy - pa.y0) + 2 * bt * (pa.y1 - pa.cy);
-      const dl = Math.hypot(ddx, ddy) || 1, slow = 1 - 0.45 * Math.abs(ddy) / dl;
-      pa.t = Math.min(1, pa.t + (spd * slow * dt) / dl);
-      const u = pa.t, nxp = (1 - u) * (1 - u) * pa.x0 + 2 * (1 - u) * u * pa.cx + u * u * pa.x1, nyp = (1 - u) * (1 - u) * pa.y0 + 2 * (1 - u) * u * pa.cy + u * u * pa.y1;
-      const dx = nxp - c.x;
-      if (pa.t >= 1) {
+      const pa = c.path || (c.path = planPath(c, c.tx, c.ty));
+      if (followPath(c, pa, spd, dt)) {
         c.x = c.tx; c.y = c.ty; c.speedMul = 1; c.path = null;
         const nx = c.next; c.next = null;
         if (nx) nx(c); else think(c);
-      } else {
-        c.x = nxp; c.y = nyp;
-        turn(c, dx / Math.max(dt, 1e-3), 12, 0.3);
-        c.phase += (dt * spd) / (GAIT[c.gait].stride * c.k) * TAU;
-      }
+      } else c.phase += (dt * spd) / (GAIT[c.gait].stride * c.k) * TAU;
       break;
     }
     case 'jumpPrep': if (c.t >= c.dur) startJump(c); break;
@@ -1720,7 +1979,7 @@ function update(c, dt, T) {
       if (c.prey && c.prey.kind === 'ptr') c.interest -= dt;
       if (!pp || c.interest <= 0 || c.huntT > 16 || calm.on || sheltering()) { endHunt(c); break; }
       const dx = pp.x - c.x, dy = pp.y - c.y, d = Math.hypot(dx, dy);
-      turn(c, dx, 28, 0.9);
+      if (!c.path) turn(c, dx, 28, 0.9);
       const reach = 58 * c.k;
       if (Math.abs(dx) < reach + 16 && Math.abs(dx) > 20 && Math.sign(dx) === c.dir && Math.abs(dy) < 22 && pp.z < 30) {
         if (c.prey.kind === 'toy') setState(c, 'bat', 0.42, 0.08);
@@ -1728,12 +1987,15 @@ function update(c, dt, T) {
         break;
       }
       if (d < 190 && d > 90 && pp.sp < 110 && Math.random() < dt * 1.5) { setState(c, 'stalk', rand(0.6, 1.4), 0.12); break; }
-      const [tx, ty] = floorClamp(pp.x - c.dir * reach, pp.y);
-      const ex = tx - c.x, ey = ty - c.y, ed = Math.hypot(ex, ey) || 1;
+      // approach from the side we're on, along a mostly-sideways path (re-planned as the prey moves)
+      const side = Math.sign(c.x - pp.x) || -c.dir;
+      const [tx, ty] = floorClamp(pp.x + side * reach, pp.y);
+      c.replanT = (c.replanT || 0) - dt;
+      if (!c.path || (c.replanT <= 0 && Math.hypot(c.path.x1 - tx, c.path.y1 - ty) > 36)) { c.path = planPath(c, tx, ty); c.replanT = 0.6; }
+      const pa = c.path, ed = pa.len - pa.d;
       const spd = (ed > 220 ? 240 : 140) * c.k;
       c.gait = ed > 220 ? 'run' : 'trot';
-      const st = Math.min(ed, spd * dt);
-      c.x += (ex / ed) * st; c.y += (ey / ed) * st;
+      if (ed > 0.5) followPath(c, pa, spd, dt); else { c.path = null; turn(c, dx, 6, 0.3); }
       c.phase += (dt * spd) / (GAIT[c.gait].stride * c.k) * TAU;
       break;
     }
@@ -1781,10 +2043,11 @@ function update(c, dt, T) {
       const a = c.follow;
       if (!a || a.state !== 'move' || c.t > c.dur) { c.follow = null; setState(c, 'sit', rand(2, 5)); break; }
       const [tx, ty] = floorClamp(a.x - Math.sign(a.x - c.x || 1) * 80, a.y);
-      const dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy) || 1;
-      if (d > 8) {
-        const st = Math.min(d, 220 * dt);
-        c.x += (dx / d) * st; c.y += (dy / d) * st;
+      const dx = tx - c.x, dy = ty - c.y;
+      if (Math.abs(dx) > 8) {
+        // chase sideways; drift in depth only as much as a side-view stride allows
+        const sx = Math.sign(dx) * Math.min(Math.abs(dx), 220 * c.k * dt);
+        c.x += sx; c.y += clamp(dy, -SLOPE * Math.abs(sx), SLOPE * Math.abs(sx));
         turn(c, dx, 11, 0.5);
         c.phase += (dt * 220) / (GAIT.run.stride * c.k) * TAU;
       }
@@ -1826,7 +2089,7 @@ function update(c, dt, T) {
       break;
     case 'shelter':
       if (!sheltering()) { c.shelter = null; releaseClaim(c); if (Math.random() < 0.6) setState(c, 'stretch', 2.0); else think(c); break; }
-      if (c.t >= c.dur) { c.dur = c.t + rand(8, 20); c.shPose = pick(['loaf', 'loaf', 'sit', 'groom', 'sleep']); c.snap = clonePose(c.dispPose); c.blend = 0; }
+      if (c.t >= c.dur) { c.dur = c.t + rand(8, 20); c.shPose = underBench(c) ? pick(['loaf', 'sleep']) : pick(['loaf', 'loaf', 'sit', 'groom', 'sleep']); c.snap = clonePose(c.dispPose); c.blend = 0; }
       break;
     case 'meow': case 'purrSit':
       if (c.t >= c.dur) { if (c.afterMission) { const f = c.afterMission; c.afterMission = null; f(c); } else think(c); }
@@ -1856,7 +2119,7 @@ function update(c, dt, T) {
       }
   }
 
-  if (!calm.on && !c.mission && (c.state === 'sit' || c.state === 'loaf' || c.state === 'groom') && nowS() - lastMove > 75 && Math.random() < dt * 0.04) setState(c, 'sleep', rand(40, 90));
+  if (!calm.on && !c.mission && c.x < L.R - 40 && (c.state === 'sit' || c.state === 'loaf' || c.state === 'groom') && nowS() - lastMove > 75 && Math.random() < dt * 0.04) setState(c, 'sleep', rand(40, 90));
 
   c.blinkT -= dt;
   if (c.blinkT <= 0) { c.blink = 0.14; c.blinkT = Math.random() < 0.2 ? 0.28 : rand(2.2, 6); }
@@ -2550,7 +2813,7 @@ function drawBubble(g, p) {
   const tw = Math.max(...lines.map((l) => g.measureText(l).width)) + iconW;
   const w = tw + 30, lh = 26, h = lines.length * lh + 18;
   const hx = c.head[0], top = c.y - c.z - catHeight(c);
-  let x0 = clamp(hx - w / 2, 12, W - w - 12);
+  let x0 = clamp(hx - w / 2, 12, Math.max(12, L.R - w - 12));
   let y0 = Math.max(12, top - h - 18) + (1 - a) * 6;
   g.globalAlpha = a;
   g.fillStyle = 'rgba(30,24,40,0.16)'; rrect(g, x0 + 2, y0 + 4, w, h, 16); g.fill();
@@ -2570,7 +2833,7 @@ function drawBubble(g, p) {
 // =====================================================================
 //  light for the cats
 // =====================================================================
-function lightAt(x, y) {
+function lightAt(x, y, noFlash) {
   const m = [E.amb[0] * 0.82 + 0.18, E.amb[1] * 0.82 + 0.18, E.amb[2] * 0.82 + 0.18];
   if (E.lamp > 0.05) {
     L.lanterns.forEach((ln) => {
@@ -2579,6 +2842,7 @@ function lightAt(x, y) {
     });
   }
   if (E.warm > 0) { m[0] += 0.08 * E.warm; m[1] += 0.02 * E.warm; }
+  if (noFlash) return m;
   const fl = flashA() * 0.45; m[0] += fl; m[1] += fl; m[2] += fl * 1.1;
   return m;
 }
@@ -2603,9 +2867,18 @@ function frame() {
   lastFrame = now;
   const T = now / 1000;
   const dt = Math.min(0.1, T - tPrev); tPrev = T;
+  if (!LW.virtual) { step(dt, T); render(T); return; }
+  // dev (?virtual=1): real-clock JS cost per frame → __cats.prof
+  const r0 = realNow();
   step(dt, T);
+  const r1 = realNow();
   render(T);
+  const r2 = realNow();
+  prof.step += r1 - r0; prof.render += r2 - r1; prof.n++; prof.max = Math.max(prof.max, r2 - r0);
+  if (prof.times.length < 3000) prof.times.push(r2 - r0);
 }
+const realNow = Performance.prototype.now.bind(performance);   // real clock even under ?virtual=1
+const prof = { step: 0, render: 0, n: 0, max: 0, times: [] };
 function step(dt, T) {
   runTimers();
   activity = Math.max(0, activity - dt / 150);
@@ -2618,7 +2891,7 @@ function step(dt, T) {
   const still = T - lastMove;
   if (!calm.on && !sheltering() && greetCool <= 0 && LW.pointer.inside && still > 1.2 && still < 1.6) {
     const a = ptrW();
-    if (a.y > L.floorTop - 10 && a.y < H) {
+    if (a.y > L.floorTop - 10 && a.y < H && a.x < L.R - 40) {
       const cand = cats.filter((c) => c.surf === -1 && interruptible(c) && c.state !== 'sleep' && !c.prey && Math.abs(c.x - a.x) < 760)
         .sort((p, q) => Math.abs(p.x - a.x) - Math.abs(q.x - a.x))[0];
       if (cand && Math.random() < 0.6) {
@@ -2654,14 +2927,15 @@ function step(dt, T) {
     if (a.surf !== -1 || b.surf !== -1) continue;
     const aa = ACT.includes(a.state), ba = ACT.includes(b.state);
     if (!aa || !ba) continue; // only two playing cats nudge each other (never a cat walking to its spot)
+    if (a.path || b.path) continue; // a cat running along its path isn't shoved sideways/in depth
     const A = extent(a), B = extent(b), ox = Math.min(A[1], B[1]) - Math.max(A[0], B[0]);
     if (ox <= 0 || Math.abs(a.y - b.y) > 46) continue;
-    // busy cats slide apart in depth (and a little sideways) instead of piling up
-    const s = Math.sign(a.y - b.y) || (i % 2 ? 1 : -1), sxd = Math.sign(a.x - b.x) || 1;
-    const push = 110 * dt;
+    // busy cats nudge apart sideways only (a side-view cat never slides in depth);
     // soft bounds only: never snap a cat across a forbidden zone in one frame
-    a.x = clamp(a.x + sxd * push * 0.5, 50, W - 50); a.y = clamp(a.y + s * push, L.floorTop, L.floorBot);
-    b.x = clamp(b.x - sxd * push * 0.5, 50, W - 50); b.y = clamp(b.y - s * push, L.floorTop, L.floorBot);
+    const sxd = Math.sign(a.x - b.x) || 1;
+    const push = 110 * dt;
+    a.x = clamp(a.x + sxd * push * 0.5, 50, W - 50);
+    b.x = clamp(b.x - sxd * push * 0.5, 50, W - 50);
   }
   cats.forEach((c) => {
     // perspective scale from depth
@@ -2683,11 +2957,12 @@ function step(dt, T) {
     const target = poseFor(c, T);
     c.pose = target;
     c.dispPose = c.blend < 1 && c.snap ? blendPose(c.snap, target, smooth(c.blend)) : target;
-    const P = c.dispPose;
-    c.head = [c.x + P.hx * c.dir * c.k, c.y - c.z + P.hy * c.k];
+    const P = c.dispPose, s = sprOf(c);
+    if (s) { c.tintM = lightAt(c.x, c.y - 50, true); sprStep(c, s, dt, T); }
+    else c.head = [c.x + P.hx * c.dir * c.k, c.y - c.z + P.hy * c.k];
     updateLook(c, dt, T);
     c.face = faceFor(c, T);
-    stepTail(c, P, c.face, dt);
+    if (!s) stepTail(c, P, c.face, dt);
     c.light = lightAt(c.x, c.y - 50);
   });
   for (let i = parts.length - 1; i >= 0; i--) {
@@ -2731,11 +3006,12 @@ function render(T) {
     else {
       const c = d.cat;
       const gy = c.surf >= 0 ? L.ledges[c.surf].y : c.state === 'jump' && c.j ? lerp(c.j.y0, c.j.y1, clamp(c.t / c.j.dur, 0, 1)) : c.y;
-      const sh = 0.22 * (1 - clamp(c.z / 220, 0, 0.7));
-      const gr = ctx.createRadialGradient(c.x, gy, 4, c.x, gy, 52 * c.k);
-      gr.addColorStop(0, `rgba(40,28,40,${sh})`); gr.addColorStop(1, 'rgba(40,28,40,0)');
-      ctx.fillStyle = gr; ctx.save(); ctx.translate(c.x, gy); ctx.scale(1, 0.24); ctx.translate(-c.x, -gy); ctx.beginPath(); ctx.arc(c.x, gy, 52 * c.k, 0, TAU); ctx.fill(); ctx.restore();
-      drawCat(ctx, c);
+      const s = sprOf(c) && c.sv ? SPR[c.id] : null;
+      const rw = (s ? c.spr.foot * 1.25 : 52 * c.k) * (1 - clamp(c.z / 400, 0, 0.35)), rh = rw * 0.2 + 3;
+      ctx.globalAlpha = 0.34 * (1 - clamp(c.z / 220, 0, 0.7)) * (0.55 + 0.45 * E.dl);
+      ctx.drawImage(SHADOW, c.x - rw, gy - rh, rw * 2, rh * 2);
+      ctx.globalAlpha = 1;
+      if (s) drawSpriteCat(ctx, c, s); else drawCat(ctx, c);
       drawn.push(c.id + ':' + c.coat.name);
     }
   }
@@ -2840,7 +3116,7 @@ function selfTest(secs = 60, act) {
   }
   return { frames, idErrors, teleports: teleports.length, tpEx: teleports.slice(0, 5), maxStep: +maxStep.toFixed(1) };
 }
-window.__cats = { cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
+window.__cats = { prof, sprStats, goTo, seekShelter, SPR, cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
 })();
 </script>
 </body>

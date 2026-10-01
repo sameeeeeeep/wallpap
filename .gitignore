@@ -1,0 +1,8 @@
+wallpap.app/
+LiveWall.app/
+dist/
+.build/
+shots/
+site/scenes/
+.DS_Store
+__pycache__/

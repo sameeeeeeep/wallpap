@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>wallpap — a calm, living wallpaper for your Mac</title>
-<meta name="description" content="wallpap turns your Mac desktop into a calm, living world: a koi pond, a snowy cabin, a night train through India, a hidden jazz bar. Scenes follow your weather and the hour, show the music you're playing, remind you to drink water and breathe, and rest while you work. Free download for macOS 13+.">
-<meta name="theme-color" content="#14110f">
+<title>wallpap — animated wallpapers for Mac</title>
+<meta name="description" content="Eleven interactive wallpapers for Mac. Feed koi, watch cats, or ride an Indian sleeper train. Try every scene in the browser. Three scenes are free.">
+<meta name="theme-color" content="#f4f3ed">
 <link rel="canonical" href="https://wallpap.live/">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -13,23 +13,17 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="wallpap">
 <meta property="og:url" content="https://wallpap.live/">
-<meta property="og:title" content="wallpap — your desktop, alive">
-<meta property="og:description" content="Eleven calm, living worlds for your Mac desktop. They follow your weather and the hour, play along with your music, and rest while you work. Free for macOS.">
+<meta property="og:title" content="wallpap — animated wallpapers for Mac">
+<meta property="og:description" content="Eleven interactive wallpapers for Mac. Try a koi pond, a café, or an Indian sleeper train in your browser. Three scenes are free.">
 <meta property="og:image" content="https://wallpap.live/img/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Five illustrated cats on a Santorini terrace at sunset, as a living Mac wallpaper">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="wallpap — your desktop, alive">
-<meta name="twitter:description" content="A calm, living wallpaper for macOS that breathes with you.">
+<meta name="twitter:title" content="wallpap — animated wallpapers for Mac">
+<meta name="twitter:description" content="Koi ponds, cats and sleeper trains. Interactive wallpapers for Mac.">
 <meta name="twitter:image" content="https://wallpap.live/img/og.jpg">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Fonts load without blocking first paint; metric-matched fallbacks (styles.css) keep the swap from shifting layout. -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"></noscript>
 <link rel="preload" as="image" href="img/koi.jpg" fetchpriority="high">
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -60,18 +54,18 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy">
       <div class="hc-title">
-        <p class="eyebrow">A living wallpaper for macOS</p>
-        <h1 id="hero-title">Your desktop, <em>quietly alive.</em></h1>
+        <p class="eyebrow">wallpap for macOS</p>
+        <h1 id="hero-title">Put a koi pond<br>on your desktop.</h1>
       </div>
       <div class="hc-body">
-      <p class="lede">Eleven calm, living worlds behind your desktop icons. They follow your weather and the hour, show the song you're playing, and nudge you to sip water and breathe. Try them all, live, right here.</p>
+      <p class="lede">Feed the fish, pet the cats, or watch fields pass a train window. Eleven animated wallpapers for the space behind your apps.</p>
       <div class="cta-row">
         <a class="btn btn-light btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.9zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>
-          Download for Mac
+          Download free
         </a>
       </div>
-      <p class="meta">macOS 13+ · Apple Silicon &amp; Intel · free · <a href="#install">How to install</a></p>
+      <p class="meta">macOS 13+ · Apple Silicon &amp; Intel · <a href="#install">Install guide</a></p>
       </div>
     </div>
 
@@ -90,7 +84,7 @@
                 <b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span>
               </div>
               <div class="mb-right">
-                <button class="wave-btn" id="waveBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="waveMenu" title="wallpap menu — the real app menu">
+                <button class="wave-btn" id="waveBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="waveMenu" title="Preview the wallpap menu">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 13c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                   <span class="sr-only">Open the wallpap menu</span>
                 </button>
@@ -101,7 +95,7 @@
             </div>
             <!-- Mirrors the real app's menu-bar menu (built by main.js). -->
             <div class="wave-menu" id="waveMenu" role="menu" aria-label="wallpap" hidden></div>
-            <div class="menu-tip" id="menuTip" aria-hidden="true">The real app menu ↗</div>
+            <div class="menu-tip" id="menuTip" aria-hidden="true">Wallpaper menu ↗</div>
 
             <ul class="desk-icons" aria-label="Desktop icons (decorative)">
               <li><button type="button" tabindex="-1"><span class="di di-folder" aria-hidden="true"></span><span class="di-label">Projects</span></button></li>
@@ -109,7 +103,7 @@
               <li><button type="button" tabindex="-1"><span class="di di-img" aria-hidden="true"></span><span class="di-label">Screenshot</span></button></li>
             </ul>
 
-            <div class="app-window" id="appWindow" aria-hidden="true">
+            <div class="app-window away" id="appWindow" aria-hidden="true">
               <div class="aw-bar"><i></i><i></i><i></i><span>notes.md</span></div>
               <div class="aw-body">
                 <p class="aw-h">Today</p>
@@ -129,7 +123,7 @@
           <!-- Dock-style scene bar, inside the device frame. Built by main.js. -->
           <div class="scene-bar" id="sceneBar" role="group" aria-label="Scenes"></div>
         </div>
-        <p class="stage-note">Live in your browser. <span class="desk-only">Click the scene, pick a world below it, or open the 〰 menu — it's the real app menu.</span><span class="mob-only">Tap the scene, swipe the worlds, open Controls.</span></p>
+        <p class="stage-note"><span class="live-dot" aria-hidden="true"></span> This is a working preview. <span class="desk-only">Click the water to feed the koi. Switch scenes below.</span><span class="mob-only">Tap to interact. Swipe below to change scenes.</span></p>
       </div>
 
       <!-- Controls, right next to the screen (a bottom sheet on phones). -->
@@ -141,7 +135,7 @@
         </div>
         <div class="p-scene">
           <p class="p-name"><span id="pName">Koi Pond</span> <span id="pBadge"><span class="badge">Free</span></span></p>
-          <p class="p-cat" id="pCat">Nature — click the scene!</p>
+          <p class="p-cat" id="pCat">Nature · Free</p>
           <ul class="tips" id="sceneTips"><li>Click the water to drop food</li><li>Press and hold — the koi nibble your fingertip</li><li>Tap a koi to boop it</li></ul>
           <div class="row scene-actions" id="sceneActions"></div>
           <div class="bowls-ctl" data-for="bowls" hidden>
@@ -173,10 +167,10 @@
         <div class="p-block quick">
           <button class="q-btn" type="button" id="qBreathe" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg><span>Breathe</span><small>box 4·4·4·4</small></button>
           <button class="q-btn" type="button" id="qWater"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg><span>Water</span><small>remind me</small></button>
-          <button class="q-btn" type="button" id="qSound" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span><small id="qSoundSub">on</small></button>
-          <button class="q-btn" type="button" id="qDesktop" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18"/></svg><span>Desktop</span><small id="qDesktopSub">window open</small></button>
+          <button class="q-btn" type="button" id="qSound" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Sound</span><small id="qSoundSub">muted</small></button>
+          <button class="q-btn" type="button" id="qDesktop" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18"/></svg><span>Desktop</span><small id="qDesktopSub">desktop shown</small></button>
         </div>
-        <p class="fine p-foot">More in the <b>〰 menu</b> on the screen: Breathing Pattern, Sounds, Soundscape, Music Mode, AI Companions.</p>
+        <p class="fine p-foot">Open the <b>〰 menu</b> in the preview for music, soundscapes and more controls.</p>
       </aside>
     </div>
     <button class="sheet-btn" id="sheetBtn" type="button" aria-controls="panel" aria-expanded="false">
@@ -186,62 +180,18 @@
     <div class="scrim" id="scrim" hidden></div>
   </section>
 
-  <!-- ───────────── Features ───────────── -->
-  <section class="features reveal" id="features" aria-labelledby="feat-title">
-    <div class="section-head">
-      <p class="eyebrow">Small, kind details</p>
-      <h2 id="feat-title">A companion, <em>not a screensaver.</em></h2>
-      <p class="sub">Every “Try it” takes you back up to the live screen and switches the feature on.</p>
-    </div>
+  <section class="gallery" id="collection" aria-labelledby="gal-title">
+    <div class="section-head"><p class="eyebrow">The collection / 11 scenes</p><h2 id="gal-title">Pick somewhere else.</h2><p class="sub">A rainy café, an overnight train, a patch of grass.<br>Click any scene to try it above.</p></div>
+    <div class="gal-grid" id="galGrid"></div>
+  </section>
+
+  <section class="features" id="features" aria-labelledby="feat-title">
+    <div class="section-head"><p class="eyebrow">On your Mac</p><h2 id="feat-title">Made for<br>your desktop.</h2></div>
     <ul class="feat-grid">
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span>
-        <h3>Water &amp; stretch reminders <span class="tag">Pro</span></h3>
-        <p>“A sip of water?” appears in the world, then fades. On the Santorini terrace, the cats wander over and drink with you.</p>
-        <button class="try-btn" type="button" data-try="water">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><circle cx="5" cy="5" r="1.6" class="dot"/></svg></span>
-        <h3>Calm · Breathe <span class="tag">Pro</span></h3>
-        <p>Everything slows while an on-screen guide breathes with you: box breathing (in · hold · out · hold), 4-6 calm, or 4-7-8.</p>
-        <button class="try-btn" type="button" data-try="calm">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 14v-4M8 18V6M12 15V9M16 20V4M20 14v-4"/></svg></span>
-        <h3>Audio, your way</h3>
-        <p>Separate controls for interaction sounds, the scene's ambience (train clacks, café hiss, the fire), weather — plus soundscapes: rain, ocean, fireplace, brown, pink or white noise.</p>
-        <button class="try-btn" type="button" data-try="audio">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg></span>
-        <h3>Music Mode + Beat Sync <span class="tag">Pro</span></h3>
-        <p>Play something in Apple Music or Spotify and your album art and track appear in the world — the record-store frame, the speakeasy marquee, the rooftop projector. Beat Sync moves the scene with the music, on-device; nothing is recorded.</p>
-        <button class="try-btn" type="button" data-try="music">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
-        <h3>Live weather &amp; time of day</h3>
-        <p>Your real local weather — rain on the pond, snow on the cabin pines — and light that moves from dawn to dusk to fireflies.</p>
-        <button class="try-btn" type="button" data-try="weather">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 64 64"><circle cx="32" cy="34" r="17"/><circle cx="25.5" cy="32" r="2.6" class="dot"/><circle cx="38.5" cy="32" r="2.6" class="dot"/><path d="M27 40c3 2.4 7 2.4 10 0"/><path d="M32 17v-6M29 10.5h6"/></svg></span>
-        <h3>AI companions <span class="tag">Pro</span></h3>
-        <p>While Claude Code or Codex is working, a little companion shows up in your scene — and wanders off when it's done.</p>
-        <button class="try-btn" type="button" data-try="agents">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span>
-        <h3>Energy-smart</h3>
-        <p>When you're not on the desktop it softly blurs and stops rendering entirely — close to zero energy — and wakes the moment you're back.</p>
-        <button class="try-btn" type="button" data-try="rest">Try it <span aria-hidden="true">↑</span></button>
-      </li>
-      <li class="feat">
-        <span class="fi" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-        <h3>Private by design</h3>
-        <p>No account. No tracking. Location is optional and only used to ask for your weather. Your music and your agents never leave your Mac.</p>
-        <a class="try-btn" href="#faq">Privacy details <span aria-hidden="true">↓</span></a>
-      </li>
+      <li class="feat"><span class="feature-number">01</span><h3>Change with the day</h3><p>Morning light, rain at the window, lamps after dark. Follow the local time or choose a view yourself.</p><button class="try-btn" data-try="weather" type="button">Change the weather ↗</button></li>
+      <li class="feat"><span class="feature-number">02</span><h3>Play along with your music <span class="tag">Pro</span></h3><p>Apple Music and Spotify tracks appear on record sleeves, signs and the rooftop projector.</p><button class="try-btn" data-try="music" type="button">Try a demo track ↗</button></li>
+      <li class="feat"><span class="feature-number">03</span><h3>Make room for a break <span class="tag">Pro</span></h3><p>Optional water reminders and breathing guides. Set the sounds, volume and reminders from the menu bar.</p><button class="try-btn" data-try="calm" type="button">Try the breathing guide ↗</button></li>
+      <li class="feat"><span class="feature-number">04</span><h3>Pause when you’re working</h3><p>The scene sits behind your desktop icons and pauses rendering when the desktop is inactive. Your normal wallpaper stays underneath.</p><button class="try-btn" data-try="rest" type="button">See how it pauses ↗</button></li>
     </ul>
   </section>
 
@@ -250,7 +200,7 @@
     <div class="getit-card">
       <div class="getit-cta">
         <p class="eyebrow">Free download</p>
-        <h2 id="get-title">Bring it home <em>to your Mac.</em></h2>
+        <h2 id="get-title">On your desktop<br>in three steps.</h2>
         <a class="btn btn-light btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.9zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>
           Download for Mac
@@ -260,51 +210,17 @@
       <ol class="install-steps" aria-label="How to install">
         <li><span class="step-n">1</span><div><h3>Open the DMG</h3><p>Double-click <b>wallpap.dmg</b> in your Downloads.</p></div></li>
         <li><span class="step-n">2</span><div><h3>Drag to Applications</h3><p>Drop the wallpap icon onto the Applications folder.</p></div></li>
-        <li><span class="step-n">3</span><div><h3>First launch: Open Anyway</h3><p>Open wallpap once, then go to <i>System Settings → Privacy &amp; Security</i> and click <b>Open Anyway</b>. Only needed once — it isn't notarized by Apple yet.</p></div></li>
+        <li><span class="step-n">3</span><div><h3>Open wallpap</h3><p>Launch it from Applications. It's signed and notarized by Apple, so it opens like any other app. The wave 〰 appears in your menu bar.</p></div></li>
       </ol>
     </div>
-  </section>
-
-  <!-- ───────────── How it works ───────────── -->
-  <section class="how reveal" aria-labelledby="how-title">
-    <div class="section-head">
-      <p class="eyebrow">How it works</p>
-      <h2 id="how-title">It lives where your wallpaper lives.</h2>
-    </div>
-    <ol class="steps">
-      <li>
-        <span class="step-n">1</span>
-        <h3>Behind your icons</h3>
-        <p>A tiny menu-bar app places the scene just above your wallpaper — under your icons, on every Space and every display. Your files stay exactly where they are.</p>
-      </li>
-      <li>
-        <span class="step-n">2</span>
-        <h3>Click the desktop to play</h3>
-        <p>Show your desktop and the scene comes alive under your cursor: feed the koi, stoke the fire, drop the needle. Clicks inside your other apps never leak through.</p>
-      </li>
-      <li>
-        <span class="step-n">3</span>
-        <h3>Rests while you work</h3>
-        <p>When you're not looking at the desktop it softly blurs and stops rendering entirely, then wakes the moment your cursor comes back.</p>
-      </li>
-    </ol>
-  </section>
-
-  <!-- ───────────── Gallery ───────────── -->
-  <section class="gallery reveal" aria-labelledby="gal-title">
-    <div class="section-head">
-      <p class="eyebrow">Any weather, any hour</p>
-      <h2 id="gal-title">Little worlds. <em>More on the way.</em></h2>
-    </div>
-    <div class="gal-grid" id="galGrid"></div>
   </section>
 
   <!-- ───────────── Pricing ───────────── -->
   <section class="pricing reveal" id="pricing" aria-labelledby="price-title">
     <div class="section-head">
       <p class="eyebrow">Pricing</p>
-      <h2 id="price-title">Free to keep. <em>Pro, once.</em></h2>
-      <p class="sub">No subscription. Pay once and it's yours, along with every scene we make after.</p>
+      <h2 id="price-title">Start with three free scenes.</h2>
+      <p class="sub">Koi Pond, Touch Grass and Santorini Cats are free. Pro adds the rest.</p>
     </div>
     <div class="plans">
       <article class="plan">
@@ -315,7 +231,7 @@
           <li>Every interaction — feed, boop, play</li>
           <li>Pick the weather; light follows your time of day</li>
           <li>Interaction, ambience &amp; weather sound controls</li>
-          <li>Rests at near-zero energy while you work</li>
+          <li>Pauses rendering while the desktop is inactive</li>
           <li>Every Space &amp; every display</li>
         </ul>
         <a class="btn btn-light btn-block" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">Download for Mac</a>
@@ -324,9 +240,9 @@
       <article class="plan plan-pro" id="pro">
         <p class="ribbon">Coming soon</p>
         <h3>wallpap Pro</h3>
-        <p class="price"><span class="amt">$9</span><span class="per">once · no subscription</span></p>
+        <p class="price"><span class="amt">$5</span><span class="per">once · no subscription</span></p>
         <ul class="ticks">
-          <li><b>All 11 scenes:</b> Cozy Rooms, City Nights, Night Train &amp; Singing Bowls</li>
+          <li><b>All 11 scenes:</b> Cozy Rooms, City Nights, Indian Train &amp; Singing Bowls</li>
           <li>Every future scene &amp; all updates</li>
           <li>Music Mode + Beat Sync</li>
           <li>Calm · Breathe — box, 4-6 or 4-7-8</li>
@@ -335,8 +251,8 @@
           <li>Live local weather</li>
           <li>AI companions for Claude Code &amp; Codex</li>
         </ul>
-        <button class="btn btn-ghost btn-block" type="button" data-buy>Get Pro — $9</button>
-        <p class="fine center"><b class="soon-note">Pro is coming soon.</b> Join the list and we'll write once, the day it opens.</p>
+        <button class="btn btn-ghost btn-block" type="button" data-buy>About Pro</button>
+        <p class="fine center"><b class="soon-note">Pro is not available to buy yet.</b> Planned price: $5, one time.</p>
       </article>
     </div>
   </section>
@@ -345,24 +261,24 @@
   <section class="faq reveal" id="faq" aria-labelledby="faq-title">
     <div class="section-head">
       <p class="eyebrow">Questions</p>
-      <h2 id="faq-title">Good to know.</h2>
+      <h2 id="faq-title">Before you download.</h2>
     </div>
     <div class="faq-list">
       <details>
         <summary>How do I install it?</summary>
-        <p>Download <b>wallpap.dmg</b>, open it and drag wallpap into Applications. On first launch macOS will stop it, because it isn't notarized by Apple yet: go to <i>System Settings → Privacy &amp; Security</i>, scroll down and click <i>Open Anyway</i>. You only do this once. The wave 〰 then lives in your menu bar.</p>
+        <p>Download <b>wallpap.dmg</b>, open it and drag wallpap into Applications, then open it. The app is signed and notarized by Apple, so there are no security warnings to click through. The wave 〰 then lives in your menu bar.</p>
       </details>
       <details>
         <summary>Will it drain my battery?</summary>
-        <p>No. wallpap only draws while you're actually looking at your desktop, and frame-caps itself while it does. The rest of the time it blurs softly and stops rendering completely. You can also choose <i>Pause on Battery</i> or <i>Pause Animation</i> from the menu bar.</p>
+        <p>Animation uses energy while it is running. wallpap limits its frame rate and pauses rendering when the desktop is inactive. You can also choose <i>Pause on Battery</i> or <i>Pause Animation</i> from the menu bar.</p>
       </details>
       <details>
         <summary>What happens to my privacy?</summary>
-        <p>Nothing leaves your Mac. There's no account, no analytics and no tracking. Location is optional: if you allow it, wallpap uses it only to fetch your local weather from Open-Meteo. Music Mode reads the current track locally. Beat Sync listens to your Mac's audio on-device to find the beat — nothing is recorded or sent anywhere. AI companions only notice that Claude Code or Codex is running; they never read your code.</p>
+        <p>No account is required. Weather requests send location coordinates to Open-Meteo; the app uses an approximate time-zone location unless you enable precise location. Sun and moon calculations run locally. Music and beat analysis also run on your Mac. Optional AI companions reflect activity from Claude Code and Codex.</p>
       </details>
       <details>
         <summary>Which scenes are free?</summary>
-        <p>The three Nature scenes — Koi Pond, Touch Grass and Santorini Cats — are free forever, with every interaction. Pro unlocks the Cozy Rooms (Night Café, Snowy Cabin, Record Store), City Nights (Speakeasy, Rooftop, Ramen Alley), the Night Train and Singing Bowls, plus everything we make next.</p>
+        <p>The three Nature scenes — Koi Pond, Touch Grass and Santorini Cats — are free forever, with every interaction. Pro unlocks the Cozy Rooms (Night Café, Snowy Cabin, Record Store), City Nights (Speakeasy, Rooftop, Ramen Alley), the Indian Train and Singing Bowls, plus everything we make next.</p>
       </details>
       <details>
         <summary>Which Macs does it run on?</summary>
@@ -378,18 +294,18 @@
       </details>
       <details>
         <summary>Is Pro really a one-time payment?</summary>
-        <p>Yes. It's $9 once, with every future scene and update included — no subscription. Pro is coming soon; join the list and we'll let you know the moment it's available.</p>
+        <p>Pro is planned as a $5 one-time purchase. It isn’t available to buy yet. You can try all the scenes in the browser while the three free scenes are available in the Mac app.</p>
       </details>
     </div>
   </section>
 
   <!-- ───────────── Final CTA ───────────── -->
   <section class="final reveal" aria-labelledby="final-title">
-    <h2 id="final-title">Let your desktop <em>breathe.</em></h2>
-    <p class="lede">Free to download. A minute to set up. Calm for as long as you like.</p>
+    <h2 id="final-title">The fish are waiting.</h2>
+    <p class="lede">Start with Koi Pond, Touch Grass and Santorini Cats. Free for Mac.</p>
     <div class="cta-row center">
       <a class="btn btn-light btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">Download for Mac</a>
-      <button class="btn btn-ghost btn-lg" type="button" data-buy>Get Pro — $9</button>
+      <button class="btn btn-ghost btn-lg" type="button" data-buy>About Pro</button>
     </div>
     <p class="meta">macOS 13+ · Apple Silicon &amp; Intel · free</p>
   </section>
@@ -398,7 +314,7 @@
 <footer class="footer">
   <div class="foot-brand">
     <img src="favicon.svg" alt="" width="22" height="22"><span>wallpap</span>
-    <p>A calm, living wallpaper for your Mac.</p>
+    <p>Animated wallpapers for Mac.</p>
   </div>
   <div class="foot-dl">
     <a class="btn btn-small btn-light" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">Download for Mac</a>
@@ -412,7 +328,7 @@
     <a href="#faq">FAQ</a>
     <a href="https://github.com/sameeeeeeep/wallpap/issues" rel="noopener">Contact</a>
   </nav>
-  <p class="foot-fine">© <span id="year">2026</span> wallpap · Made slowly, with care. · No cookies, no tracking.</p>
+  <p class="foot-fine">© <span id="year">2026</span> wallpap · macOS 13 and later.</p>
 </footer>
 
 <!-- After a download click: a gentle reminder of the three install steps. -->
@@ -432,10 +348,11 @@
     <button class="modal-x" type="submit" value="close" aria-label="Close" formnovalidate>×</button>
     <div class="modal-step" id="proAsk">
       <p class="eyebrow">wallpap Pro</p>
-      <h2 id="proModalTitle">Pro is coming <em>soon.</em></h2>
-      <p id="proModalText">$9 once for every scene and every Pro feature. Leave your email and we'll send a single note the day it's ready. Nothing else, ever.</p>
+      <h2 id="proModalTitle">Pro is still in the works.</h2>
+      <p id="proModalText">The planned price is $5 once for all scenes and Pro features. There’s no checkout or mailing list open yet. Updates will be posted with the releases.</p>
       <label class="sr-only" for="proEmail">Email address</label>
-      <div class="email-row">
+      <p class="release-link"><a href="https://github.com/sameeeeeeep/wallpap/releases" target="_blank" rel="noopener">View releases ↗</a></p>
+      <div class="email-row" hidden>
         <input type="email" id="proEmail" name="email" placeholder="you@example.com" autocomplete="email" required>
         <button class="btn btn-light" type="submit" value="join" id="proSubmit">Notify me</button>
       </div>
@@ -443,7 +360,7 @@
     </div>
     <div class="modal-step" id="proThanks" hidden>
       <p class="eyebrow">Thank you</p>
-      <h2>You're on the list. <em>Breathe easy.</em></h2>
+      <h2>You’re on the list.</h2>
       <p>We'll write once, when Pro is ready. Until then, the free scenes are all yours.</p>
       <button class="btn btn-ghost" type="submit" value="close">Close</button>
     </div>

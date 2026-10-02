@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>wallpap</title>
+<!-- Menu-bar panel (host/Panel.swift). Styled after wallpap.live's control column.
+     Host → page: render(state). Page → host: webkit.messageHandlers.panel.postMessage({a, v, tag}).
+     Opened standalone in a browser it renders a mock state so it can be designed in isolation. -->
+<style>
+:root{--ink:#20382d;--ink-2:#556158;--ink-3:#6c746b;--line:#d7dcd1;--card:#e9ede3;--card-2:#dfe6d8;--accent:#335c41;--bg:rgba(246,244,236,.9);--ease:cubic-bezier(.22,.8,.24,1)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent;color:var(--ink);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
+body{width:340px;background:var(--bg)}
+#root{padding:14px 14px 10px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.logo{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.logo svg{width:22px;height:10px}
+.pill{border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600}
+.pill.pro{background:var(--card-2);color:var(--accent)}
+.pill.unlock{background:var(--ink);color:#fff}
+/* now showing */
+.now{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:2.25/1;background:#2b3a31 center/cover no-repeat}
+.now::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,20,14,.72))}
+.now .t{position:absolute;left:11px;bottom:9px;z-index:1;color:#fff}
+.now .t b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.now .t span{font-size:11px;opacity:.8}
+.now .acts{position:absolute;right:8px;bottom:8px;z-index:1;display:flex;gap:5px}
+.now .acts button{background:rgba(255,255,255,.18);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;border-radius:7px;padding:4px 8px;font-size:11px}
+.now .acts button:hover{background:rgba(255,255,255,.3)}
+.ctl{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.ctl .lbl{font-size:11px;color:var(--ink-3);margin-bottom:3px}
+/* scene picker */
+.tabs{display:flex;flex-wrap:wrap;gap:3px 4px;margin:4px 0 7px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;padding:3px 8px;border-radius:99px;color:var(--ink-2);font-size:11px}
+.tabs button[aria-pressed=true]{background:var(--card-2);color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tile{text-align:left}
+.tile i{display:block;aspect-ratio:16/10;border-radius:7px;background:var(--card) center/cover no-repeat;box-shadow:inset 0 0 0 1px rgba(32,56,45,.08);transition:transform .18s var(--ease)}
+.tile:hover i{transform:translateY(-1px)}
+.tile[aria-current=true] i{box-shadow:0 0 0 2px var(--accent)}
+.tile span{display:block;margin-top:3px;font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile[aria-current=true] span{color:var(--ink);font-weight:600}
+.tile.offer i{position:relative;opacity:.85}
+.tile.offer i b{position:absolute;right:4px;bottom:4px;background:var(--ink);color:#fff;font-size:9.5px;font-weight:600;border-radius:5px;padding:1px 6px}
+.lock{font-size:9px;font-weight:700;color:var(--accent);margin-left:3px}
+/* sections */
+section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+h2{font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:8px;display:flex;align-items:baseline;gap:6px}
+h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px}
+.row+.row,.row+.chips,.chips+.row,.chips+.chips{margin-top:6px}
+.chips{display:flex;background:var(--card);border-radius:7px;padding:2px;gap:2px}
+.chips.grid4{display:grid;grid-template-columns:repeat(4,1fr)}
+.chips button{flex:1;border-radius:5px;padding:3px 4px;color:var(--ink-2);font-size:11px;white-space:nowrap}
+.chips button:hover{color:var(--ink)}
+.chips button[aria-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(32,56,45,.15)}
+.sw{width:28px;height:16px;border-radius:99px;background:var(--line);position:relative;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s var(--ease)}
+.sw[aria-checked=true]{background:var(--accent)}
+.sw[aria-checked=true]::after{transform:translateX(12px)}
+.sub{padding-left:12px;color:var(--ink-2)}
+.note{font-size:10.5px;color:var(--ink-3)}
+.warn{font-size:11px;color:#8a4b2a;text-decoration:underline}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tl{background:var(--card);border-radius:9px;padding:9px 10px;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .15s}
+.tl:hover{background:var(--card-2)}
+.tl b{font-size:12px;font-weight:600}
+.tl span{font-size:10.5px;color:var(--ink-3)}
+.tl[aria-pressed=true]{background:var(--ink);color:#fff}
+.tl[aria-pressed=true] span{color:#cfd8cf}
+details summary{list-style:none;cursor:pointer}
+details summary::-webkit-details-marker{display:none}
+details summary h2 small{margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+details summary h2::after{content:"›";padding-left:8px;transition:transform .2s;display:inline-block}
+details[open] summary h2::after{transform:rotate(90deg)}
+details summary h2{margin-bottom:0}
+details[open] summary h2{margin-bottom:8px}
+.foot{display:flex;gap:2px;margin-top:12px;padding-top:9px;border-top:1px solid var(--line)}
+.foot button{flex:1;padding:5px 4px;border-radius:6px;color:var(--ink-2);font-size:11px}
+.foot button:hover{background:var(--card);color:var(--ink)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const host = window.webkit && webkit.messageHandlers && webkit.messageHandlers.panel;
+const send = (a, v, tag) => host ? host.postMessage({ a, v: v === undefined ? null : v, tag: tag == null ? null : tag }) : console.log('[panel]', a, v, tag);
+let S = null, tab = null;
+
+const WEATHER = [['', 'Live'], ['clear', 'Clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Storm'], ['snow', 'Snow'], ['fog', 'Fog']];
+const VIEWS = [['auto', 'Auto'], ['sunrise', 'Sunrise'], ['day', 'Day'], ['sunset', 'Sunset'], ['evening', 'Evening'], ['night', 'Night']];
+const SCAPES = [['off', 'Off'], ['white', 'White'], ['pink', 'Pink'], ['brown', 'Brown'], ['rain', 'Rain'], ['ocean', 'Ocean'], ['fire', 'Fire'], ['stream', 'Stream']];
+const BREATHS = [['box', 'Box 4-4-4-4'], ['calm', 'Calm 4·6'], ['478', 'Relax 4-7-8']];
+const WATER = [[0, 'Off'], [30, '30m'], [45, '45m'], [60, '1h'], [90, '90m']];
+const FPS = [[20, '20 fps'], [30, '30 fps'], [60, '60 fps']];
+const COMP = [['off', 'Off'], ['native', 'In the scene'], ['characters', 'Characters']];
+const LEVELS = [['fx', 'Interactions'], ['ambience', 'Ambience'], ['weather', 'Weather']];
+const VOLS = [[0.4, 'Quiet'], [0.7, 'Medium'], [1, 'Full']];
+
+const key = (x) => (x !== null && typeof x === 'object' ? JSON.stringify(x) : String(x));
+const chips = (list, cur, act, opt = {}) => `<div class="chips${list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
+  `<button aria-pressed="${key(v) === key(cur)}" data-a="${act}" data-v='${esc(JSON.stringify(v))}'${opt.tag ? ' data-tag' : ''}>${esc(l)}</button>`).join('')}</div>`;
+const sw = (on, act, v) => `<button class="sw" role="switch" aria-checked="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${esc(JSON.stringify(v))}'` : ''}></button>`;
+const pro = (locked) => (locked ? '<span class="lock">PRO</span>' : '');
+// Bundled scenes ship a thumbnail in art/thumbs; add-ons and catalog offers carry their own.
+const thumb = (id, src) => `url('${src || `art/thumbs/${id}.jpg`}')`;
+
+function render(state) {
+  S = state;
+  const cur = S.scenes.find((s) => s.id === S.scene) || S.scenes[0] || { id: '', title: '', cat: '' };
+  if (!tab || !S.categories.includes(tab)) tab = cur.cat;
+  const offers = S.offers || [];
+  const cats = S.categories.filter((c) => S.scenes.some((s) => s.cat === c) || offers.some((o) => o.cat === c));
+  const locked = !S.pro;
+  const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
+    ? `<div><div class="lbl">${esc(c.title)}</div>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div>`
+    : '').join('');
+  const sceneActs = S.sceneCtl.filter((c) => c.type === 'action').slice(0, 3)
+    .map((c) => `<button data-a="runAction" data-v='${esc(JSON.stringify(c.v))}'>${esc(c.title.replace(/^(Feed|Fill) the /, '$1 '))}</button>`).join('');
+
+  $('#root').innerHTML = `
+  <div class="head">
+    <div class="logo"><svg viewBox="0 0 22 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 4c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1"/><path d="M1 8.5c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1" opacity=".45"/></svg>wallpap</div>
+    ${S.pro ? '<span class="pill pro">Pro</span>' : '<span style="display:flex;gap:8px;align-items:center"><button class="note" data-a="enterLicense" style="text-decoration:underline">Have a key?</button><button class="pill unlock" data-a="openPro">Unlock Pro · $5</button></span>'}
+  </div>
+
+  <div class="now" style="background-image:${thumb(cur.id, cur.thumb)}">
+    <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${S.paused ? ' · paused' : ''}</span></div>
+    <div class="acts">${sceneActs}</div>
+  </div>
+  ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
+
+  ${sec('scenes', 'Scenes', esc(cur.title), `
+    <div class="tabs">${cats.map((c) => `<button aria-pressed="${c === tab}" data-tab="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+    <div class="grid">${S.scenes.filter((s) => s.cat === tab).map((s) =>
+      `<button class="tile" aria-current="${s.id === S.scene}" data-a="${s.pro && locked ? 'openPro' : 'pickScene'}" data-v='${esc(JSON.stringify(s.id))}'><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}${pro(s.pro && locked)}</span></button>`).join('')}${offers.filter((o) => o.cat === tab).map((o) =>
+      `<button class="tile offer" data-a="${o.busy ? '' : 'installScene:'}" data-v='${esc(JSON.stringify(o.id))}'><i style="background-image:${thumb(o.id, o.thumb)}"><b>${o.busy ? 'Downloading…' : 'Get'}</b></i><span>${esc(o.title)}${pro(o.pro && locked)}</span></button>`).join('')}</div>
+    <div class="row" style="margin-top:6px"><span class="note">${offers.length ? `${offers.length} new scene${offers.length > 1 ? 's' : ''} to download` : ''}</span><button class="note" data-a="addSceneFolder" style="text-decoration:underline">Add your own…</button></div>`)}
+
+  ${sec('env', 'Environment', `${esc(label(VIEWS, S.timeView))} · ${esc(label(WEATHER, S.weather))}`, `
+    <div class="lbl note" style="margin-bottom:4px">Time of day</div>
+    ${chips(VIEWS, S.timeView, 'pickTimeView', { seg: true })}
+    <div class="row" style="margin-top:9px"><span class="note">Weather</span><span class="note">${esc(S.liveWeather || '')}</span></div>
+    ${chips(WEATHER.map(([v, l]) => [v, v === '' && locked ? 'Live ·Pro' : l]), S.weather, 'pickWeather')}
+    <div class="row"><span>Use my precise location</span>${sw(S.precise, 'togglePreciseLocation')}</div>`)}
+
+  ${sec('sound', 'Sound &amp; Music', [S.muted ? 'muted' : 'sound on', S.music && 'music mode', S.soundscape !== 'off' && label(SCAPES, S.soundscape).toLowerCase()].filter(Boolean).join(' · '), `
+    <div class="row"><span>Sound</span>${sw(!S.muted, 'toggleMute')}</div>
+    <div class="row"><span>Music Mode${pro(locked)} <span class="note">Music · Spotify</span></span>${sw(S.music, locked ? 'openPro' : 'toggleMusicMode')}</div>
+    ${S.music && S.musicDenied ? '<button class="warn" data-a="openAutomationSettings">Allow wallpap to control Music/Spotify…</button>' : ''}
+    ${S.music ? `<div class="row sub"><span>Beat Sync <span class="note">moves with the beat</span></span>${sw(S.beat, 'toggleBeatSync')}</div>` : ''}
+    <div class="row" style="margin-top:9px"><span class="note">Soundscape${pro(locked)}</span></div>
+    ${chips(SCAPES, S.soundscape, locked ? 'openPro' : 'pickSoundscape')}
+    ${S.soundscape !== 'off' ? chips([[0.18, 'Quiet'], [0.35, 'Medium'], [0.6, 'Loud']], S.ssVol, 'pickSoundscapeVolume', { seg: true }) : ''}
+    <div class="row" style="margin-top:9px"><span class="note">Levels</span></div>
+    ${LEVELS.map(([c, l]) => { const p = S.audio.find((x) => x.c === c) || { on: true, vol: 1 };
+      return `<div class="row"><span>${l}</span><span style="display:flex;gap:6px;align-items:center">${p.on ? chips(VOLS.map(([v, n]) => [JSON.stringify([c, v]), n]), JSON.stringify([c, p.vol]), 'pickAudioVol', { seg: true }) : ''}${sw(p.on, 'toggleAudioCat', c)}</span></div>`; }).join('')}`)}
+
+  ${sec('well', `Wellbeing${locked ? ' <small>Pro</small>' : ''}`, [S.calm && 'breathing', S.water ? `water ${S.water}m` : 'water off'].filter(Boolean).join(' · '), `
+    <div class="tiles">
+      <button class="tl" aria-pressed="${S.calm}" data-a="toggleCalm"><b>Breathe</b><span>${esc(label(BREATHS, S.breath))}</span></button>
+      <button class="tl" aria-pressed="${S.water > 0}" data-a="${locked ? 'openPro' : 'cycleWater'}"><b>Water</b><span>${S.water ? `every ${S.water} min` : 'reminder off'}</span></button>
+    </div>
+    ${S.calm ? `<div style="margin-top:6px">${chips(BREATHS, S.breath, 'pickBreath', { seg: true })}</div>` : ''}
+    ${S.water ? `<div class="row"><span class="note">Remind every</span>${chips(WATER, S.water, 'pickReminder', { seg: true, tag: true })}</div><div class="row"><span></span><button class="note" data-a="remindNow" style="text-decoration:underline">Remind me now</button></div>` : ''}
+    <div class="row" style="margin-top:8px"><span class="note">AI companions${pro(locked)}</span></div>
+    ${chips(COMP, S.companions, locked ? 'openPro' : 'pickCompanions', { seg: true })}`)}
+
+  ${sec('perf', 'Performance', `${S.paused ? 'paused · ' : ''}${S.fps} fps${S.idle ? ' · rests when idle' : ''}`, `
+    <div class="row"><span>${S.paused && !S.userPaused ? 'Paused (on battery)' : 'Pause animation'}</span>${sw(S.paused, 'togglePause')}</div>
+    <div class="row"><span>Frame rate</span>${chips(FPS, S.fps, 'pickFps', { seg: true, tag: true })}</div>
+    <div class="row"><span>Rest when not in use</span>${sw(S.idle, 'togglePauseWhenIdle')}</div>
+    <div class="row"><span>Pause on battery</span>${sw(S.pob, 'togglePauseOnBattery')}</div>
+    <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>`)}
+
+  <div class="foot">
+    <button data-a="reloadScene">Reload</button>
+    <button data-a="showNativeMenu">All settings…</button>
+    <button data-a="quit">Quit</button>
+  </div>`;
+  reportHeight();
+}
+
+// Collapsible sections: each remembers open/closed (per viewer); the summary line shows
+// the current settings while collapsed, so a closed panel still reads at a glance.
+const SEC_DEFAULT = { scenes: true, env: true, sound: false, well: false, perf: false };
+const secOpen = (() => { try { return JSON.parse(localStorage.getItem('panel.sec') || '{}'); } catch (e) { return {}; } })();
+const isOpen = (k) => (k in secOpen ? secOpen[k] : SEC_DEFAULT[k]);
+const label = (list, v) => ((list.find((x) => String(x[0]) === String(v)) || list[0])[1]);
+const sec = (k, title, hint, body) => `<section><details ${isOpen(k) ? 'open' : ''}><summary data-open="${k}"><h2><span>${title}</span><small>${isOpen(k) ? '' : hint}</small></h2></summary>${body}</details></section>`;
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab],[data-a],summary');
+  if (!t) return;
+  if (t.matches('summary')) {
+    const k = t.dataset.open; const d = t.parentElement;
+    setTimeout(() => { secOpen[k] = d.open; try { localStorage.setItem('panel.sec', JSON.stringify(secOpen)); } catch (err) {} render(S); });
+    return;
+  }
+  if (t.dataset.tab) { tab = t.dataset.tab; render(S); return; }
+  const a = t.dataset.a;
+  if (!a) return;
+  let v = t.dataset.v !== undefined ? JSON.parse(t.dataset.v) : null;
+  if (a === 'pickAudioVol' && typeof v === 'string') v = JSON.parse(v);
+  if (a === 'cycleWater') { send('pickReminder', null, S.water ? 0 : 60); return; }
+  send(a, v, t.hasAttribute('data-tag') ? Number(v) : null);
+});
+
+let lastH = 0;
+function reportHeight() {
+  requestAnimationFrame(() => {
+    const h = Math.ceil(document.getElementById('root').getBoundingClientRect().height);
+    if (h !== lastH) { lastH = h; send('height', h); }
+  });
+}
+
+if (host) send('ready');
+else render({ // standalone design preview
+  pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
+  scenes: [['koi', 'Koi Pond', 'Nature'], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Night Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Night Train', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful', 1]].map(([id, title, cat, p]) => ({ id, title, cat, pro: !!p })),
+  sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }],
+  timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24° (Bengaluru)', precise: false, muted: false,
+  audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
+  soundscape: 'off', ssVol: 0.35, music: true, musicDenied: false, beat: true, companions: 'native',
+  calm: false, breath: 'box', water: 45, paused: false, userPaused: false, pob: false, idle: true, fps: 30, login: true,
+});
+</script>
+</body>
+</html>

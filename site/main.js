@@ -4,10 +4,13 @@
 // ─── Fill these in ────────────────────────────────────────────────────────────
 // Direct download of the latest release (GitHub Releases asset).
 const DOWNLOAD_URL = 'https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg';
-// TODO(payments): set to the checkout URL once a provider is chosen
-// (Lemon Squeezy / Paddle / Gumroad / a Stripe Payment Link). While empty,
-// every "Get Pro" button opens the "Pro is coming soon" waitlist modal.
-const BUY_URL = '';
+// Dodo Payments checkout for wallpap Pro ($5 one-time; Dodo emails a license key the app
+// activates). Put the LIVE-mode link in BUY_URL_LIVE. The TEST link only switches on with
+// ?buytest, so the public page never hands out test checkouts (test cards = free keys).
+// While neither applies, every "Get Pro" button opens the "Pro is coming soon" modal.
+const BUY_URL_LIVE = 'https://checkout.dodopayments.com/buy/pdt_0NosaY1TW3DDcAxJHpWcE?quantity=1';
+const BUY_URL_TEST = 'https://test.checkout.dodopayments.com/buy/pdt_0NosZuADhm7udzYpywSQq?quantity=1';
+const BUY_URL = BUY_URL_LIVE || (new URLSearchParams(location.search).has('buytest') ? BUY_URL_TEST : '');
 // TODO(optional): an endpoint that accepts {email} as JSON POST (Formspree,
 // Buttondown, a Worker…). While empty, the waitlist just says thank you and
 // nothing leaves the browser.
@@ -90,8 +93,8 @@ const SCENES = [
     actions: [['feed', 'Feed the cats']],
   },
   {
-    id: 'train', name: 'Night Train', cat: 'Journeys', tier: 'pro', hour: 21.5, weather: 'clear',
-    desc: 'An Indian Railways sleeper at night',
+    id: 'train', name: 'Indian Train', cat: 'Journeys', tier: 'pro', hour: 21.5, weather: 'clear',
+    desc: 'An Indian sleeper, moving through the countryside',
     palette: ['#0a1020', '#1a2c4f', '#3a4a6a', '#9fc4f0'],
     hints: ['Click the window to skip ahead to new country', 'Try rain on the glass, or a dawn arrival', 'Box breathing with the rhythm of the rails'],
   },
@@ -127,12 +130,12 @@ const qs = new URLSearchParams(location.search);
 const state = {
   scene: SCENES.some((s) => s.id === qs.get('scene')) ? qs.get('scene') : 'koi',
   hour: 16, hourTouched: false, weather: 'clear', weatherTouched: false,
-  calm: false, breath: 'box', ambient: 'off', sound: true,
+  calm: false, breath: 'box', ambient: 'off', sound: false,
   buses: { fx: true, ambience: true, weather: true },
   waterEvery: 45, agentStyle: 'off',
   auto: 'off', set: 'tibetan7',
   track: 0, npOn: false, playing: false, beatSync: false,
-  windowShown: true,
+  windowShown: false,
 };
 const AGENTS = [
   { id: 'c1', kind: 'claude', project: 'wallpap', state: 'working' },
@@ -182,8 +185,6 @@ const DEV_VIRTUAL = qs.has('virtual');
 const saveData = !!(navigator.connection && navigator.connection.saveData);
 
 function setPalette(s) {
-  const r = document.documentElement.style;
-  ['--c1', '--c2', '--c3', '--accent'].forEach((k, i) => r.setProperty(k, s.palette[i]));
   document.body.dataset.scene = s.id;
 }
 function sceneURL(s) {
@@ -309,12 +310,12 @@ function setWindow(shown, arm = true) {
   $('#qDesktopSub').textContent = shown ? 'window open' : 'desktop shown';
   if (shown) { if (arm) armRest(); } else wake();
 }
-let revealedOnce = false, revealTimer = 0;
+let revealedOnce = true, revealTimer = 0;
 function scheduleReveal() {
   revealedOnce = true;
   revealTimer = setTimeout(() => setWindow(false), reduceMotion ? 1200 : 2600);
 }
-setWindow(true, false);
+setWindow(false, false);
 
 // ─── Hints over the scene ────────────────────────────────────────────────────
 let hintTimer = 0, hintIdx = 0, hintMuteUntil = 0;
@@ -371,7 +372,7 @@ function syncSceneUI() {
   $$('#sceneBar [data-scene]').forEach((t) => t.setAttribute('aria-pressed', String(t.dataset.scene === state.scene)));
   $('#pName').textContent = s.name;
   $('#pBadge').innerHTML = badge(s);
-  $('#pCat').textContent = `${s.cat}${s.music ? ' · shows your music' : ''} — click the scene!`;
+  $('#pCat').textContent = `${s.cat}${s.music ? ' · music controls' : ''}`;
   $('#sceneTips').innerHTML = (s.hints || []).slice(0, 3).map((h) => `<li>${h}</li>`).join('');
   $$('#panel [data-for]').forEach((p) => { p.hidden = p.dataset.for !== s.id; });
   $('#sceneActions').innerHTML = (s.actions || []).map(([a, label]) => `<button class="btn btn-small btn-soft" type="button" data-action="${a}">${label}</button>`).join('');
@@ -533,7 +534,7 @@ function menuModel() {
   const cur = sceneById(state.scene);
   return [
     { title: 'wallpap' },
-    { label: 'Unlock Pro — $9 one-time…', act: () => { closeMenu(); openModal(); } },
+    { label: 'Unlock Pro — $5 one-time…', act: () => { closeMenu(); openModal(); } },
     'sep',
     ...CATS.map((c) => ({
       key: `cat:${c}`, label: cur.cat === c ? `${c} — ${cur.name}` : c, mark: cur.cat === c,
@@ -677,24 +678,18 @@ $$('[data-try]').forEach((b) => b.addEventListener('click', () => {
 
 // ─── Gallery ─────────────────────────────────────────────────────────────────
 const GALLERY = [
-  { scene: 'records', img: 'records-np', title: 'Music Mode, after hours', text: 'Your album art in the big frame, the title on the letter board.', env: { hour: 21, weather: 'clear' }, wide: true, music: true },
-  { scene: 'train', img: 'train', title: 'Night Train', text: 'A sleeper berth, moonlit paddy fields, the hum of the rails.', env: { hour: 21.5, weather: 'clear' }, wide: true },
-  { scene: 'cabin', img: 'cabin', title: 'Snowy Cabin', text: 'The fire is lit. The pup is asleep.', env: { hour: 20, weather: 'snow' } },
-  { scene: 'ramen', img: 'ramen', title: 'Ramen Alley, raining', text: 'Lanterns on wet stone, a cat on the vending machine.', env: { hour: 22, weather: 'rain' } },
-  { scene: 'koi', img: 'koi-night', title: 'Summer night', text: 'Fireflies drift over dark water.', env: { hour: 21.5, weather: 'clear' } },
-  { scene: 'speakeasy', img: 'speakeasy', title: 'Speakeasy', text: 'Ring twice. The house trio plays your song.', env: { hour: 22, weather: 'clear' }, wide: true },
-  { scene: 'rooftop', img: 'rooftop', title: 'Rooftop', text: 'String lights, two chairs, a projector on the wall next door.', env: { hour: 20.5, weather: 'clear' }, wide: true },
-  { scene: 'cats', img: 'cats-rain', title: 'A rainy afternoon', text: 'Everyone sheltering under the awning.', env: { hour: 12, weather: 'rain' } },
-  { scene: 'bowls', img: 'bowls-crystal', title: 'Crystal, in the rain', text: 'Swap to the crystal set for a brighter ring.', env: { hour: 22, weather: 'rain' }, set: 'crystal' },
-  { scene: 'grass', img: 'grass', title: 'Touch Grass', text: 'Pandas munching bamboo, kites overhead.', env: { hour: 11, weather: 'clear' } },
-  { scene: 'cafe', img: 'cafe', title: 'Night Café', text: 'Rain on the glass, a record turning, a cat on the counter.', env: { hour: 22, weather: 'rain' }, wide: true },
-  { scene: 'cats', img: 'cats', title: 'Cats on the terrace', text: 'Five cats, one Santorini sunset.', env: { hour: 18.6, weather: 'clear' }, wide: true },
+  {scene:'train',img:'train',title:'Indian Train',text:'Blue berths. Chai by the window. Fields passing outside.',env:{hour:21,weather:'clear'}},
+  {scene:'cats',img:'cats',title:'Santorini Cats',text:'Five cats with a terrace to themselves.',env:{hour:18.6,weather:'clear'}},
+  {scene:'cafe',img:'cafe',title:'Night Café',text:'Rain on the glass and a record on the turntable.',env:{hour:22,weather:'rain'}},
+  {scene:'grass',img:'grass',title:'Touch Grass',text:'A bamboo grove, two pandas and their cub.',env:{hour:11,weather:'clear'}},
+  {scene:'cabin',img:'cabin',title:'Snowy Cabin',text:'A fireplace and fresh snow outside.',env:{hour:20,weather:'snow'}},
+  {scene:'bowls',img:'bowls',title:'Singing Bowls',text:'Strike a bowl or circle its rim to make it sing.',env:{hour:19.2,weather:'clear'}}
 ];
 function renderGallery() {
   $('#galGrid').innerHTML = GALLERY.map((g, i) => {
     const s = sceneById(g.scene);
     const set = `img/${g.img}-sm.jpg 720w, img/${g.img}.jpg 1440w`;
-    const sizes = g.wide ? '(max-width: 720px) 100vw, (max-width: 900px) 50vw, 600px' : '(max-width: 720px) 100vw, (max-width: 900px) 50vw, 400px';
+    const sizes = '(max-width: 720px) 100vw, 600px';
     return `<button class="gal-item${g.wide ? ' wide' : ''}" type="button" data-gal="${i}" aria-label="${g.title} — open ${s.name} in the playground">
       <img src="img/${g.img}-sm.jpg" srcset="${set}" sizes="${sizes}" alt="" loading="lazy" decoding="async" width="720" height="450" onerror="this.style.visibility='hidden'">
       <span class="gal-cap"><span class="gal-title">${g.title}</span><span class="gal-text">${g.text}</span>${badge(s)}</span>
@@ -729,20 +724,29 @@ const modal = $('#proModal');
 function openModal() {
   $('#proAsk').hidden = false; $('#proThanks').hidden = true; $('#proErr').hidden = true;
   if (typeof modal.showModal === 'function') modal.showModal(); else modal.setAttribute('open', '');
-  setTimeout(() => $('#proEmail').focus(), 60);
+  $('#proAsk .email-row').hidden = !WAITLIST_URL;
+  setTimeout(() => (WAITLIST_URL ? $('#proEmail') : $('#proAsk .release-link a')).focus(), 60);
+}
+if (BUY_URL) {   // checkout is open: drop the "not available yet" wording
+  $$('[data-buy]').forEach((b) => { b.textContent = 'Get Pro — $5'; });
+  $$('.soon-note').forEach((n) => { n.textContent = 'One-time $5. Your license key arrives by email.'; });
 }
 $$('[data-buy]').forEach((b) => b.addEventListener('click', () => {
   if (BUY_URL) { location.href = BUY_URL; return; }
   openModal();
 }));
-$('#proForm').addEventListener('submit', (e) => {
+$('#proForm').addEventListener('submit', async (e) => {
   if (!e.submitter || e.submitter.value !== 'join') return;     // close buttons just close
   e.preventDefault();
   const input = $('#proEmail'), email = input.value.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { $('#proErr').hidden = false; input.focus(); return; }
-  if (WAITLIST_URL) {
-    fetch(WAITLIST_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ email, source: 'wallpap.live' }) }).catch(() => {});
-  }
+  if (!WAITLIST_URL) return;
+  const submit=$('#proSubmit');submit.disabled=true;
+  try {
+    const response=await fetch(WAITLIST_URL,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({email,source:'wallpap.live'})});
+    if(!response.ok)throw new Error('Request failed');
+  }catch(e){$('#proErr').textContent='Couldn’t save your email. Please try again.';$('#proErr').hidden=false;submit.disabled=false;return;}
+  submit.disabled=false;
   input.value = '';
   $('#proAsk').hidden = true; $('#proThanks').hidden = false;
   $('#proThanks .btn').focus();
@@ -772,10 +776,7 @@ const boot = () => checkAvailability().then(() => {
   if (saveData) { $('#playLive').hidden = false; return; }
   // Nobody touched it yet: go live once the page is idle, if the playground is on screen.
   idle(() => { if (stageVisible && !liveStarted) startLive(); }, 1500);
-  setTimeout(() => {
-    waveBtn.classList.add('pulse');
-    if (stageVisible && waveMenu.hidden) { $('#menuTip').classList.add('show'); setTimeout(() => $('#menuTip').classList.remove('show'), 5000); }
-  }, 4500);
+
 });
 if (document.readyState === 'complete') boot();
 else addEventListener('load', () => idle(boot, 600));

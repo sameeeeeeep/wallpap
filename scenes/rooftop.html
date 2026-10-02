@@ -11,19 +11,21 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="pet-motion.js"></script>
 <script>
 'use strict';
 (() => {
 // =====================================================================
 //  Rooftop — a cozy city rooftop at night, as a live wallpaper.
-//  An old boombox on a crate plays the user's music (its cassette window
-//  shows the album art); a little projector beams the art, title and artist
+//  An analog cassette boombox on a crate plays the user's music;
+//  a projector on a tall stand beams the art, title and artist
 //  onto the whitewashed wall of the building next door, like a rooftop
 //  cinema. String lights sway over the deck; the skyline twinkles, a bridge
 //  glows in the distance, planes blink past, and on a strong beat a far-off
 //  firework sometimes blooms. A corgi wanders between the blanket, the deck
-//  chairs and the ledge; a ginger cat patrols the ledge and the planters.
+//  and the ledge; a ginger cat patrols the ledge and the planters.
 //  Click the boombox = play/pause, the projector or the wall = next track.
 //  The sky follows LW.env: golden hour, night stars + moon, rain (wet deck,
 //  streaks in the projector beam), snow (on the plants), fog between towers.
@@ -38,11 +40,12 @@
 //
 //  ART SLOTS (all optional; missing files fall back to the procedural
 //  painting quietly). Drop PNGs into scenes/art/rooftop/:
-//    bg-night.png / bg-day.png   4800×2000 px = design x 0–2400 × y 0–1000
+//    bg-night.png / bg-day.png   design x −180–2220 × y 0–1000
 //                   at 2×; replaces the procedural sky + city + rooftop
 //                   (crossfades by time of day). Keep these live areas simple:
 //      projected wall panel x 444–836, y 150–520 (art square x 520–760, y 176–416)
-//      boombox: base centre (585, 826), 200×108 · projector lens (996, 758)
+//      boombox: base centre (585, 800), 200×108; projector lens derived from aim
+//    chairs.png: two equal atlas cells; rear three-quarter view toward the wall
 //      string-light strands: (860,132)→(1320,300)→(2070,272), (860,268)→(1320,306)
 //      sky above the parapet (y < 640, x > 860): planes + fireworks drawn live
 //    Animals (side view, facing RIGHT, feet on the bottom edge, centred):
@@ -181,13 +184,14 @@ function computeTarget() {
     if (w === 'snow') snow = 0.4 + 0.6 * it;
     if (w === 'fog') fog = 0.55 + 0.45 * it;
   }
+  moon *= LW.moonVisibility();
   Et = { hour: hr, weather: w, it, top, bot, day, warm, rain, storm, snow, fog, cloud, moon };
   if (!E) { E = JSON.parse(JSON.stringify(Et)); E.wet = rain > 0 ? 1 : 0; E.snowCover = snow > 0 ? 1 : 0; }
 }
 const ENV_KEYS = ['day', 'warm', 'rain', 'storm', 'snow', 'fog', 'cloud', 'moon', 'it'];
 let lastBake = -99, bakedSnap = null, fade = 1;
 function updateEnv(dt) {
-  const k = 1 - Math.exp(-dt / 9);   // ~25–35 s to settle → a slow crossfade
+  const k = LW.envBlend(dt, 9);   // gradual in Auto; shorter when a view is selected
   for (const key of ENV_KEYS) E[key] += (Et[key] - E[key]) * k;
   for (const key of ['top', 'bot']) for (let i = 0; i < 3; i++) E[key][i] += (Et[key][i] - E[key][i]) * k;
   E.hour = Et.hour; E.weather = Et.weather;
@@ -212,20 +216,33 @@ function envAmb() {
 // =====================================================================
 //  art slots (see the header)
 // =====================================================================
-const ART = { bg: {}, pets: { cat: {}, dog: {} } };
+const ART = { bg: {}, props: {}, pets: { cat: {}, dog: {} } };
 let rsT = null;
 function loadSlot(group, key, file, sub) {
   const img = new Image();
   img.onload = () => {
     if (!img.naturalWidth) return;
+    if (group === 'props' && key === 'chairs') {
+      // Measure alpha once: contact points use the painted feet, not atlas padding.
+      const c = newCanvas(img.width,img.height), g = c.getContext('2d'); g.drawImage(img,0,0);
+      const pixels = g.getImageData(0,0,c.width,c.height).data, cell = c.width / 2;
+      img.bounds = [0,1].map(i => {
+        let x0=(i+1)*cell,y0=c.height,x1=i*cell,y1=0;
+        for(let y=0;y<c.height;y++) for(let x=i*cell;x<(i+1)*cell;x++) if(pixels[(y*c.width+x)*4+3]>20) {
+          x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);
+        }
+        return {x:x0,y:y0,w:x1-x0+1,h:y1-y0+1};
+      });
+    }
     if (sub) { img.pri = true; ART[group][sub][key] = img; } else ART[group][key] = img;
-    if (group === 'bg') { clearTimeout(rsT); rsT = setTimeout(rebuild, 30); }
+    if (group === 'bg' || group === 'props') { clearTimeout(rsT); rsT = setTimeout(rebuild, 30); }
   };
   img.onerror = () => {};
   img.src = 'art/rooftop/' + file;
 }
 const NOART = new URLSearchParams(location.search).get('noart') === '1';
 if (!NOART) {
+  loadSlot('props', 'chairs', 'chairs.png');
   loadSlot('bg', 'night', 'bg-night.png'); loadSlot('bg', 'day', 'bg-day.png');
   for (const id of ['cat', 'dog']) for (const k of ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch', 'play-bow']) loadSlot('pets', k, `${id}-${k}.png`, id);
 }
@@ -254,12 +271,16 @@ function computeLayout() {
   o.wall = { x0: Math.min(vx0 - 80, 60), x1: 860, top: 46 };
   o.screen = { x0: 444, x1: 836, y0: 150, y1: 520 };
   o.art = { x: 520, y: 176, s: 240 };
-  o.radio = { x: 585, base: 826, w: 200, h: 108 };
-  o.crateR = { x0: 494, x1: 676, top: 826, base: 904 };
+  o.radio = { x: 585, base: 800, w: 200, h: 108 };
+  o.crateR = { x0: 494, x1: 676, top: 800, base: 904 };
   o.blanket = { x0: 690, x1: 1010, y0: 884, y1: 970 };
-  o.proj = { x: 1046, top: 794, base: 872, lens: { x: 994, y: 762 } };
-  o.crateP = { x0: 990, x1: 1104, top: 794, base: 872 };
-  o.chairs = [{ x: 1238, base: 850 }, { x: 1400, base: 844 }];
+  o.proj = { x: 1600, top: 680, base: 950 };
+  const P = o.proj, sx = (o.screen.x0 + o.screen.x1) / 2, sy = (o.screen.y0 + o.screen.y1) / 2;
+  P.angle = Math.atan2(P.top - 25 - sy, P.x - sx);
+  // The optical axis and the beam share the same transformed lens origin.
+  P.lens = { x: P.x - 62 * Math.cos(P.angle), y: P.top - 25 - 62 * Math.sin(P.angle) };
+  o.crateP = { x0: P.x - 64, x1: P.x + 64, top: P.top + 16, base: P.base };
+  o.chairs = [{ x: 1110, base: 894, w: 204, h: 234 }, { x: 1304, base: 960, w: 224, h: 256 }];
   o.pot = { x: 1494, base: 748, rim: 692, r: 46 };
   o.herbs = { x0: 1000, x1: 1150, y: 640 };
   o.poles = [{ x: 1320, top: 292 }, { x: 2070, top: 264 }];
@@ -282,7 +303,7 @@ function computeLayout() {
   for (const s of o.strands) for (const t of [0.2, 0.5, 0.8]) { const [x, y] = catenary(s.a, s.b, s.sag, t); o.lights.push({ x, y: y + 60, rx: 210, ry: 190, k: 0.28, c: [1.0, 0.72, 0.42], night: 1 }); }
   o.lights.push({ x: 1100, y: 840, rx: 600, ry: 170, k: 0.55, c: [1.0, 0.7, 0.45], night: 1 });
   o.lights.push({ x: 1250, y: 720, rx: 420, ry: 90, k: 0.35, c: [1.0, 0.72, 0.46], night: 1 });   // warm spill on the deck
-  o.lights.push({ x: 600, y: 790, rx: 190, ry: 120, k: 0.3, c: [1.0, 0.78, 0.55], night: 1 });    // the boombox glow
+  // The radio is a passive object, lit by the string lights.
   o.lights.push({ x: 640, y: 335, rx: 260, ry: 230, k: 0.1, c: [0.92, 0.9, 1.0], night: 1 });    // projected light on the wall
   L = o;
   buildCity();
@@ -297,14 +318,12 @@ function buildNav() {
       floor: { floor: true, kAt: (y) => lerp(0.86, 1.16, clamp((y - 704) / 280, 0, 1)) },
       ledge: { y: o.horizon - 2, k: 0.82, x0: 880, x1: 1960 },
       pot: { y: o.pot.rim - 4, k: 0.86, x0: o.pot.x, x1: o.pot.x },
-      chair: { y: 790, k: 0.98, x0: o.chairs[0].x - 6, x1: o.chairs[0].x - 6 },
     },
     links: [
       [{ s: 'floor', x: 930, y: 746 }, { s: 'ledge', x: 930 }, 'cat'],
       [{ s: 'floor', x: 1290, y: 744 }, { s: 'ledge', x: 1290 }, 'cat'],
       [{ s: 'floor', x: 1440, y: 752 }, { s: 'pot', x: o.pot.x }, 'cat'],
       [{ s: 'pot', x: o.pot.x }, { s: 'ledge', x: 1520 }, 'cat'],
-      [{ s: 'floor', x: o.chairs[0].x - 52, y: 872 }, { s: 'chair', x: o.chairs[0].x - 6 }],
     ],
     spots: {
       cat: [
@@ -313,17 +332,14 @@ function buildNav() {
         { name: 'ledgeM', s: 'ledge', x: 1300, poses: ['loaf', 'sit'], dur: [20, 45], wt: 1.5, face: 1, music: true, look: { x: 1180, y: 300 } },
         { name: 'ledgeR', s: 'ledge', x: 1640, poses: ['sit'], dur: [6, 11], wt: 1.2, brief: true, face: 1, look: { x: 1900, y: 520 } },
         { name: 'pot', s: 'pot', x: o.pot.x, poses: ['loaf', 'curl'], dur: [30, 70], wt: 2, face: -1 },
-        { name: 'chair', s: 'chair', x: o.chairs[0].x - 6, poses: ['curl', 'loaf'], dur: [35, 80], wt: 1.5, face: -1 },
       ],
       dog: [
         { name: 'blanket', s: 'floor', x: 842, y: 932, poses: ['loaf', 'curl', 'sit'], dur: [40, 90], wt: 3, face: -1, music: true, look: { x: 640, y: 330 } },
-        { name: 'chair', s: 'chair', x: o.chairs[0].x - 6, poses: ['curl', 'sit'], dur: [30, 70], wt: 2, face: -1, look: { x: 640, y: 330 } },
         { name: 'ledge', s: 'floor', x: 1200, y: 750, poses: ['sit'], dur: [14, 30], wt: 2, face: 1, look: { x: 1300, y: 380 } },
         { name: 'radio', s: 'floor', x: 720, y: 864, poses: ['sit', 'loaf'], dur: [16, 34], wt: 1.2, music: true, face: -1, look: { x: 585, y: 770 } },
       ],
     },
-    // crates and chairs stand between the front (blanket) and the back (ledge):
-    // cross through the gap between the radio crate and the projector
+    // Cross through the clear aisle left of the chairs.
     via(a, p, q) {
       const front = (pt) => pt.y > 880, back = (pt) => pt.y < 830;
       if ((front(p) && back(q)) || (back(p) && front(q))) return [{ x: clamp((p.x + q.x) / 2, 760, 930), y: 852 }];
@@ -448,6 +464,7 @@ function bakeRoom() {
     f.drawImage(ART.bg.night || ART.bg.day, -180, 0, 2400, 1000);
     f.globalCompositeOperation = 'source-over';
   }
+  paintFurniture(f);
   paintFrontSnow(f);
   albCv.width = albCv.height = 1; lmCv.width = lmCv.height = 1;
 }
@@ -716,15 +733,18 @@ function paintRoofEmissive(g) {
 }
 // ----- front layer: deck chairs, crates, the big pot --------------------------------------
 function paintChair(g, x, b, col) {
-  // a slatted Adirondack chair, side-on, facing the projected wall (left)
-  const hi = mix3(hex(col), [255, 255, 255], 0.25), lo = mix3(hex(col), [0, 0, 0], 0.35);
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 6, b + 2, 70, 7, 0, 0, TAU); g.fill();
-  g.strokeStyle = rgba(lo); g.lineWidth = 7; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(x - 46, b); g.lineTo(x - 40, b - 72); g.moveTo(x + 40, b); g.lineTo(x + 30, b - 46); g.stroke();   // legs
-  g.fillStyle = col; g.beginPath(); g.moveTo(x - 52, b - 64); g.lineTo(x + 38, b - 50); g.lineTo(x + 38, b - 40); g.lineTo(x - 52, b - 54); g.closePath(); g.fill();   // seat
-  for (let i = 0; i < 5; i++) { g.fillStyle = i % 2 ? col : rgba(hi); g.save(); g.translate(x + 30 + i * 2, b - 48); g.rotate(-0.42); rr(g, -6 + i * 0.5, -120 + i * 3, 11, 120 - i * 3, 5); g.fill(); g.restore(); }   // slatted back
-  g.fillStyle = rgba(hi); rr(g, x - 66, b - 92, 112, 9, 3); g.fill();   // armrest
-  g.fillStyle = rgba(lo); g.fillRect(x - 44, b - 84, 7, 22);
+  // A consistent projected wooden frame also serves the no-art fallback.
+  const pt=(w,z,h)=>[x+.78*w+.75*z,b+.28*z-.18*w-h-25];
+  const edge=(a,b,color,width)=>{g.strokeStyle=color;g.lineWidth=width;g.beginPath();g.moveTo(...pt(...a));g.lineTo(...pt(...b));g.stroke();};
+  const face=(points,color)=>{g.fillStyle=color;g.beginPath();points.forEach((p,i)=>g[i?'lineTo':'moveTo'](...pt(...p)));g.closePath();g.fill();};
+  const hi=rgba(mix3(hex(col),[255,239,210],.25)),lo=rgba(mix3(hex(col),[21,26,31],.4));
+  g.lineCap='round';
+  for(const w of [-42,42]) for(const z of [-44,42]) edge([w,z,0],[w,z,60],lo,8);
+  face([[-45,-50,57],[45,-50,57],[45,44,57],[-45,44,57]],col);
+  face([[-39,-43,61],[39,-43,61],[39,39,61],[-39,39,61]],'#c2b395');
+  for(let w=-40;w<=40;w+=16) edge([w,43,58],[w,66,159-Math.abs(w)*.18],hi,12);
+  for(const w of [-49,49]) { edge([w,-40,58],[w,-40,88],lo,7); edge([w,-52,88],[w,52,98],hi,11); }
+  edge([-44,48,53],[44,48,53],lo,7);
 }
 function paintCrate(g, c, label) {
   const w = c.x1 - c.x0, h = c.base - c.top;
@@ -735,11 +755,7 @@ function paintCrate(g, c, label) {
   if (label) { g.fillStyle = 'rgba(40,20,10,0.4)'; g.font = `600 11px ${DECO}`; g.textAlign = 'center'; g.fillText(label, (c.x0 + c.x1) / 2, c.top + h * 0.62); g.textAlign = 'left'; }
 }
 function paintFront(g) {
-  for (const [i, ch] of L.chairs.entries()) paintChair(g, ch.x, ch.base, i ? '#3f7a76' : '#d9cdb4');
   paintCrate(g, L.crateR, 'FRAGILE');
-  paintCrate(g, L.crateP, '');
-  // film cans by the projector
-  for (const [dx, dy] of [[-30, 0], [-26, -9]]) { g.fillStyle = '#6a6a70'; g.beginPath(); g.ellipse(L.crateP.x0 + dx, L.crateP.base - 4 + dy, 22, 5, 0, 0, TAU); g.fill(); g.fillStyle = '#8a8a92'; g.fillRect(L.crateP.x0 + dx - 22, L.crateP.base - 9 + dy, 44, 5); }
   // the big terracotta pot
   const p = L.pot;
   g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(p.x, p.base + 2, 58, 8, 0, 0, TAU); g.fill();
@@ -748,10 +764,40 @@ function paintFront(g) {
   g.fillStyle = '#b8653f'; rr(g, p.x - p.r - 5, p.rim - 4, p.r * 2 + 10, 12, 4); g.fill();
   g.fillStyle = '#3a2a1e'; g.beginPath(); g.ellipse(p.x, p.rim - 3, p.r, 4, 0, 0, TAU); g.fill();
 }
+function paintFurniture(g) {
+  const P = L.proj, C = L.crateP;
+  // A narrow four-legged AV stand. Its tray sits beneath the projector's pivot.
+  g.save();
+  g.fillStyle = 'rgba(5,8,15,.28)'; g.beginPath(); g.ellipse(P.x + 8, P.base + 1, 86, 13, 0, 0, TAU); g.fill();
+  g.strokeStyle = '#292d30'; g.lineWidth = 8; g.lineCap = 'round';
+  for (const [dx,dy] of [[-49,-14],[43,-14],[-49,0],[55,0]]) {
+    g.beginPath(); g.moveTo(P.x + dx, C.top + dy); g.lineTo(P.x + dx * 1.15, P.base + dy); g.stroke();
+    g.strokeStyle = '#565550'; g.lineWidth = 2; g.stroke(); g.strokeStyle = '#292d30'; g.lineWidth = 8;
+  }
+  for (const y of [C.top, P.base - 64]) {
+    g.fillStyle = '#514334'; g.beginPath(); g.moveTo(C.x0,y); g.lineTo(C.x0+14,y-16); g.lineTo(C.x1-10,y-16); g.lineTo(C.x1,y); g.closePath(); g.fill();
+    g.fillStyle = '#897055'; g.fillRect(C.x0,y,C.x1-C.x0,6);
+  }
+  // Power cord drops down the rear leg and runs discreetly to the parapet.
+  g.strokeStyle = 'rgba(15,18,22,.75)'; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(P.x+42,P.top-9); g.bezierCurveTo(P.x+76,P.top+12,P.x+54,P.base-60,P.x+65,P.base-10); g.quadraticCurveTo(P.x+120,P.base+10,P.x+148,P.base-42); g.stroke();
+  for (const [i,ch] of L.chairs.entries()) {
+    const img = ART.props.chairs;
+    if (img) {
+      const b = img.bounds[i], width = ch.h*b.w/b.h;
+      // Contact shadows follow the three visible feet at their respective depths.
+      g.fillStyle = 'rgba(6,9,16,.25)';
+      for(const [fx,fy] of [[.13,.77],[.97,.85],[.62,.995]]) {
+        g.beginPath(); g.ellipse(ch.x-width/2+width*fx,ch.base-ch.h+ch.h*fy,13,4,0,0,TAU); g.fill();
+      }
+      g.drawImage(img,b.x,b.y,b.w,b.h,ch.x-width/2,ch.base-ch.h,width,ch.h);
+    } else paintChair(g,ch.x,ch.base,i ? '#3f7a76' : '#d9cdb4');
+  }
+  g.restore();
+}
 function paintFrontSnow(g) {
   const s = E.snowCover; if (s < 0.05) return;
   g.fillStyle = `rgba(240,244,250,${0.92 * s})`;
-  for (const ch of L.chairs) rr(g, ch.x - 66, ch.base - 96, 112, 5 * s, 2), g.fill();
   for (const c of [L.crateR, L.crateP]) g.fillRect(c.x0, c.top - 4 * s, c.x1 - c.x0, 4 * s);
   g.fillRect(L.pot.x - L.pot.r - 5, L.pot.rim - 6 * s - 4, L.pot.r * 2 + 10, 5 * s);
 }
@@ -994,33 +1040,26 @@ function updateMotes(dt, T) {
   }
 }
 function drawProjector(g, T) {
-  // a little 16 mm projector on its crate: two reels turning, lens forward-left
   const P = L.proj, lt = lightAt(P.x, P.top - 40), on = projLevel() > 0.05;
-  const playing = music.np && music.np.playing;
-  music.reel += music.reelW * (1 / 30);
-  const c = (rgb) => rgba(mul(rgb, lt.map((v) => Math.max(v, 0.32))));
+  const c = (rgb) => rgba(mul(rgb, lt.map(v => Math.max(v, 0.55))));
   g.save(); g.translate(P.x, P.top);
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(0, 0, 54, 6, 0, 0, TAU); g.fill();
-  g.fillStyle = c([58, 62, 70]); rr(g, -44, -40, 88, 38, 7); g.fill();          // body
-  g.fillStyle = c([90, 96, 106]); g.fillRect(-44, -40, 88, 5);
-  g.fillStyle = c([30, 32, 36]); rr(g, -62, -32, 22, 18, 4); g.fill();           // lens barrel
-  g.fillStyle = c([150, 160, 170]); g.beginPath(); g.ellipse(-62, -23, 4, 9, 0, 0, TAU); g.fill();
-  for (const [rx, ry, R] of [[-16, -66, 26], [24, -60, 22]]) {               // reels
-    g.strokeStyle = c([40, 42, 46]); g.lineWidth = 3; g.beginPath(); g.moveTo(rx, ry); g.lineTo(rx * 0.5, -40); g.stroke();
-    g.fillStyle = c([70, 74, 82]); g.beginPath(); g.arc(rx, ry, R, 0, TAU); g.fill();
-    g.fillStyle = c([30, 30, 34]); g.beginPath(); g.arc(rx, ry, R * 0.72, 0, TAU); g.fill();
-    g.save(); g.translate(rx, ry); g.rotate(-music.reel);
-    g.fillStyle = c([110, 116, 126]); for (let k = 0; k < 3; k++) { g.rotate(TAU / 3); g.beginPath(); g.ellipse(0, -R * 0.45, R * 0.18, R * 0.26, 0, 0, TAU); g.fill(); }
-    g.fillStyle = c([170, 176, 184]); g.beginPath(); g.arc(0, 0, 3, 0, TAU); g.fill();
-    g.restore();
-  }
-  g.strokeStyle = c([20, 20, 22]); g.lineWidth = 1; g.beginPath(); g.moveTo(-16, -40); g.quadraticCurveTo(4, -30, 24, -38); g.stroke();   // film path
-  if (on) { g.fillStyle = `rgba(255,214,140,${0.5 + 0.3 * (playing ? 1 : 0)})`; g.fillRect(30, -18, 6, 3); }   // pilot lamp
+  // Adjustable yoke supports the tilted body, with its feet resting on the tray.
+  g.strokeStyle = c([83,87,89]); g.lineWidth = 6;
+  g.beginPath(); g.moveTo(-26,16); g.lineTo(-26,-12); g.lineTo(18,-12); g.lineTo(18,16); g.stroke();
+  g.translate(0,-25); g.rotate(P.angle); g.translate(0,25);
+  let gr = g.createLinearGradient(0,-47,0,-4);
+  gr.addColorStop(0,c([207,196,170])); gr.addColorStop(1,c([111,110,102]));
+  g.fillStyle = gr; rr(g,-44,-47,96,43,7); g.fill();
+  g.fillStyle = c([230,218,192]); rr(g,-40,-46,85,6,3); g.fill();
+  g.fillStyle = c([39,43,48]); rr(g,-62,-35,23,20,3); g.fill();
+  g.strokeStyle = c([131,141,147]); g.lineWidth=2; g.beginPath(); g.ellipse(-62,-25,4,10,0,0,TAU); g.stroke();
+  g.fillStyle = on ? '#ece6ce' : '#2c3a43'; g.beginPath(); g.ellipse(-62,-25,2.5,7,0,0,TAU); g.fill();
+  g.fillStyle = c([53,59,62]); for(let i=0;i<7;i++) g.fillRect(6+i*5,-33,2,15);
+  g.fillStyle = on ? '#bdad77' : '#4c4c43'; g.beginPath(); g.arc(37,-39,1.6,0,TAU); g.fill();
   g.restore();
 }
 function drawRadio(g, T) {
-  // a cream-and-teal boombox: speakers breathe with the bass, the cassette
-  // window shows the album art as the tape's J-card
+  // Analog cassette deck: physical tape, tuning needle, and mechanical controls.
   const R = L.radio, lt = lightAt(R.x, R.base - 50), playing = music.np && music.np.playing, m = LW.music, p = music.pal || DEFAULT_PAL;
   const lift = (v) => lt.map((q) => Math.max(q, v));
   const lv = lift(0.38), c = (rgb, a = 1) => rgba(mul(rgb, lv), a);
@@ -1028,8 +1067,6 @@ function drawRadio(g, T) {
   const x0 = R.x - R.w / 2, y0 = R.base - R.h, w = R.w, h = R.h;
   g.save();
   g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(R.x, R.base + 1, w * 0.52, 6, 0, 0, TAU); g.fill();
-  // glow on the wall/deck behind when playing
-  g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.16 * on * (0.6 + 0.4 * E.night); g.drawImage(tintGlow || GLOW_WARM, R.x - 170, y0 - 110, 340, 300); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   // handle + antenna
   g.strokeStyle = c([150, 154, 160]); g.lineWidth = 5; g.lineCap = 'round';
   g.beginPath(); g.moveTo(x0 + 40, y0 + 2); g.lineTo(x0 + 48, y0 - 16); g.lineTo(x0 + w - 48, y0 - 16); g.lineTo(x0 + w - 40, y0 + 2); g.stroke();
@@ -1047,28 +1084,31 @@ function drawRadio(g, T) {
     const sx = R.x + s * 62, sy = y0 + 52, sr = 30;
     g.fillStyle = c([44, 46, 50]); g.beginPath(); g.arc(sx, sy, sr + 4, 0, TAU); g.fill();
     g.fillStyle = c([28, 29, 32]); g.beginPath(); g.arc(sx, sy, sr, 0, TAU); g.fill();
-    const k = 1 + bass * 0.06;
+    const k = 1 + bass * 0.012;
     gr = g.createRadialGradient(sx - 6, sy - 6, 2, sx, sy, sr * 0.8 * k);
     gr.addColorStop(0, c([90, 92, 98])); gr.addColorStop(1, c([30, 31, 34]));
     g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, sr * 0.8 * k, 0, TAU); g.fill();
     g.fillStyle = c([150, 154, 160]); g.beginPath(); g.arc(sx, sy, 6 * k, 0, TAU); g.fill();
     g.strokeStyle = c([10, 10, 12], 0.5); g.lineWidth = 0.8; for (let yy = sy - sr + 4; yy < sy + sr; yy += 4) { const hw = Math.sqrt(Math.max(0, sr * sr - (yy - sy) ** 2)); g.beginPath(); g.moveTo(sx - hw, yy); g.lineTo(sx + hw, yy); g.stroke(); }
   }
-  // cassette window with the album art as J-card
+  // Cassette shell behind the clear door; no electronic display.
   const cw = 62, ch = 44, cx = R.x - cw / 2, cy = y0 + 20;
   g.fillStyle = c([30, 30, 34]); rr(g, cx - 4, cy - 4, cw + 8, ch + 8, 4); g.fill();
   g.save(); rr(g, cx, cy, cw, ch, 2); g.clip();
-  if (coverCv && music.ever) { g.globalAlpha = 0.55 + 0.45 * on; g.drawImage(coverCv, cx, cy + (ch - cw) / 2, cw, cw); g.globalAlpha = 1; }
-  else { g.fillStyle = c([210, 120, 70]); g.fillRect(cx, cy, cw, ch); g.fillStyle = c([240, 220, 180]); g.fillRect(cx, cy + 12, cw, 8); }
+  g.fillStyle = c([100,77,53]); g.fillRect(cx,cy,cw,ch);
+  g.fillStyle = c([222,205,160]); g.fillRect(cx+3,cy+3,cw-6,13);
+  g.fillStyle = c([109,89,65]); g.fillRect(cx+7,cy+7,cw-20,1); g.fillRect(cx+7,cy+11,cw-26,1);
   // tape reels turning
   g.fillStyle = 'rgba(20,18,20,0.7)'; g.fillRect(cx + 10, cy + 22, cw - 20, 14);
   for (const s of [-1, 1]) { const rx = R.x + s * 15, ry = cy + 29; g.fillStyle = 'rgba(250,246,236,0.85)'; g.beginPath(); g.arc(rx, ry, 5.5, 0, TAU); g.fill(); g.save(); g.translate(rx, ry); g.rotate(music.reel * 3 * s); g.fillStyle = '#2a2a2a'; for (let k = 0; k < 6; k++) { g.rotate(TAU / 6); g.fillRect(-0.6, -5, 1.2, 2.2); } g.restore(); }
   const sh = g.createLinearGradient(cx, cy, cx + cw, cy + ch); sh.addColorStop(0, 'rgba(255,255,255,0.22)'); sh.addColorStop(0.5, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(cx, cy, cw, ch);
   g.restore();
-  // LED VU meter + tuning strip
-  const n = 8, vu = playing ? m.level * 1.4 + music.beatEnv * 0.4 : 0;
-  for (let i = 0; i < n; i++) { const litv = i / n < vu; g.fillStyle = litv ? (i > 5 ? 'rgba(255,110,80,0.95)' : 'rgba(140,240,170,0.95)') : c([60, 64, 60]); g.fillRect(R.x - 24 + i * 6, cy + ch + 8, 4, 4); }
-  g.fillStyle = `rgba(255,190,110,${0.25 + 0.6 * on})`; g.fillRect(x0 + 18, y0 + h - 30, 30, 3);
+  // Printed FM scale under glass, a fixed red needle, two knurled dials.
+  g.fillStyle = c([55,54,47]); rr(g,R.x-29,cy+ch+8,58,12,2); g.fill();
+  g.strokeStyle = c([197,189,153]); g.lineWidth=.8; g.beginPath();
+  for(let i=0;i<13;i++) { const tx=R.x-25+i*4; g.moveTo(tx,cy+ch+10); g.lineTo(tx,cy+ch+(i%3===0?16:13)); } g.stroke();
+  g.fillStyle = c([212,110,69]); g.fillRect(R.x+8,cy+ch+9,1.5,9);
+  for(const dx of [-62,62]) { g.fillStyle=c([163,155,135]); g.beginPath(); g.arc(R.x+dx,y0+h-25,5,0,TAU); g.fill(); g.fillStyle=c([58,59,54]); g.fillRect(R.x+dx-.6,y0+h-29,1.2,4); }
   for (let i = 0; i < 4; i++) { g.fillStyle = c([210, 200, 180]); rr(g, R.x - 26 + i * 14, y0 + 4, 10, 6, 2); g.fill(); }
   g.restore();
 }
@@ -1129,7 +1169,7 @@ function drawSky(g, T) {
     drawSprite(g,GLOW_WARM,1420,125,75,.12);g.restore();
   }
   // twinkling windows (a few lights switching on and off across the city)
-  if (night > 0.05) for (const w of CITY.tw) {
+  if (!hasBg() && night > 0.05) for (const w of CITY.tw) {
     if (!w.on || w.x < L.wall.x1 || w.x > vx0 + W * 0.7) continue;
     const k = Math.min(1, (w.on ? 1 : 0)) * night * (1 - E.fog * 0.5);
     g.fillStyle = w.warm ? rgba([255, 206, 130], 0.85 * k) : rgba([190, 215, 255], 0.75 * k); g.fillRect(w.x, w.y, w.w, w.h);
@@ -1487,14 +1527,14 @@ function updateAnimal(a, dt, T) {
   if (calm.on && a.plan.length && (!a.act || a.act.t !== 'hop')) { a.plan = []; a.act = null; a.restPose = 'curl'; a.restT = rand(30, 60); }
   if (!a.act && a.plan.length) { a.act = a.plan.shift(); a.act.e = 0; }
   let target = animalGoalPose(a, T), walking = false, turning = false;
-  a.air = 0;
+  a.air = 0; a.hopPh = null;
   const act = a.act;
   if (act) {
     act.e += dt;
     if (act.t === 'pose') { target = act.pose; if (act.e > act.dur) a.act = null; }
     else if (act.t === 'swalk' || act.t === 'fwalk') {
       target = 'stand';
-      if (a.w.stand > 0.65) {
+      if (a.w.stand > 0.85 && act.e > .45 && !LW.petSeqBusy(a)) {
         const v = S.speed * (playing ? 1.08 : 1) * (a.happyT > 0 ? 1.2 : 1);
         if (act.t === 'swalk') {
           const d = act.x - a.x;
@@ -1534,6 +1574,7 @@ function updateAnimal(a, dt, T) {
       if (a.w.stand > 0.6 || act.started) {
         act.started = true;
         const t = act.ee = (act.ee || 0) + dt / act.dur;
+        a.hopPh = t < 0.25 ? 'crouch' : t < 0.85 ? 'air' : 'land'; a.hopU = (t - 0.25) / 0.6;
         if (t < 0.25) a.crouch = smooth(t / 0.25);
         else if (t < 0.85) {
           const u = (t - 0.25) / 0.6, up = act.to.y < act.from.y;
@@ -1676,6 +1717,7 @@ function loadPetSprites(base) {
   for (const id in PET_SPRITES) {
     const S2 = PET_SPRITES[id], files = new Set(Object.values(S2.map)); files.add('walk1'); files.add('walk2');
     ART.pets[id] = ART.pets[id] || {};
+    S2.seq = LW.petSeqLoad(base, S2.dir);   // drawn in-between frames (t/), see seqFrame
     for (const f of files) {
       const img = new Image();
       img.onload = () => { if (img.naturalWidth && !(ART.pets[id][f] && ART.pets[id][f].pri)) ART.pets[id][f] = img; };
@@ -1734,19 +1776,33 @@ function spriteCanvas(a, f, im) {
   o.lk = lk; o.img = im; o.pad = pad;
   return c;
 }
+// Drawn in-between frames stand in for the top pose while they play: a pose change
+// (stand ↔ sit ↔ sleep), turning round while walking, and the hop.
+function seqFrame(a, A, top) {
+  const S2 = PET_SPRITES[a.id], T = S2.seq; if (!T || !A.walk1) return null;
+  const sleepN = S2.map.curl;
+  LW.petSeqPrep(T, (f) => { const n = f === 'sleep' ? sleepN : f === 'sit' ? S2.map.sit : f, im = A[n]; return im ? { im, k: LW.petPoseScale(a.kind, n, A.walk1, im), fa: 0.5 } : null; });
+  for (const n in T.img) if (!A[n]) A[n] = T.img[n];
+  const jump = a.hopPh && T.has('jump') ? LW.petJumpFrame(a.hopPh, a.hopU) : null;
+  const fam = jump ? 'jump' : top === 'walk2' ? 'walk1' : top === sleepN ? 'sleep' : top === S2.map.sit ? 'sit' : top;
+  const f = LW.petSeqStep(a, T, fam, a.face, nowS());
+  return jump || (f && A[f] ? f : null);
+}
 function drawAnimalSprites(g, a, layers) {
-  const A = ART.pets[a.id], S2 = PET_SPRITES[a.id], sc = S2.scale;
+  const A = ART.pets[a.id], S2 = PET_SPRITES[a.id], sc = LW.petUnit(a.kind,A.walk1);
+  const sq = seqFrame(a, A, layers[0][0]), jumpF = sq && sq.startsWith('jump-');
+  if (sq) layers = [[sq, 1]];
   const bob = a.walk > 0.05 ? -Math.abs(Math.sin(a.gait * TAU)) * 2.2 * a.walk : 0;
-  const br = 1 + (a.walk > 0.5 ? 0 : 0.014 * Math.sin(a.breathP)) - (a.crouch || 0) * 0.08;
+  const br = 1 + (a.walk > 0.5 ? 0 : 0.014 * Math.sin(a.breathP)) - (jumpF ? 0 : a.crouch || 0) * 0.08;
   const nod = 1 - (a.nod || 0) * 0.02;
-  g.save(); g.translate(a.x, a.y + bob * a.k); g.scale(a.k * a.face * a.xs * sc, a.k * sc * br * nod);
-  if (a.air > 0.01) g.rotate(-a.air * 0.12 * Math.sign(a.act && a.act.to ? a.act.from.y - a.act.to.y : 1));
+  g.save(); g.translate(a.x, a.y + bob * a.k); g.scale(a.k * a.face * (sq && sq.startsWith('turn-') ? 1 : a.xs) * sc, a.k * sc * br * nod);
+  if (a.air > 0.01 && !jumpF) g.rotate(-a.air * 0.12 * Math.sign(a.act && a.act.to ? a.act.from.y - a.act.to.y : 1));
   const pose = LW.poseState(a, layers[0][0]);
-  const im = A[pose.pose] || A[layers[0][0]], cv = spriteCanvas(a, pose.pose, im), p = 6;
-  g.scale(pose.sx, pose.sy);
-  g.globalAlpha = 1;
-  g.drawImage(cv, -im.naturalWidth / 2 - p, -im.naturalHeight - p + (S2.sink || 0) / sc);
-  g.globalAlpha = 1;
+  LW.petComposite(g,a,pose.layers.map(layer=>{
+    const key=A[layer.pose]?layer.pose:layers[0][0],im=A[key],cv=spriteCanvas(a,key,im),pad=6;
+    const k=LW.petPoseScale(a.kind,key,A.walk1,im);
+    return {image:cv,x:(-im.naturalWidth/2-pad)*k,y:(-im.naturalHeight-pad)*k,w:cv.width*k,h:cv.height*k,alpha:layer.alpha};
+  }));
   g.restore();
 }
 function drawShadow(g, a) {
@@ -2056,7 +2112,7 @@ function makeAnimals() {
   cat.restT = rand(14, 30); dog.restT = rand(20, 40);
   animals = Object.freeze([cat, dog]);   // never reordered
 }
-const inFront = (a) => a.surf === 'chair' || a.surf === 'pot' || (a.surf === 'floor' && a.y > 905);
+const inFront = (a) => a.surf === 'pot' || (a.surf === 'floor' && a.y > (a.x < 1210 ? 900 : 965));
 
 // =====================================================================
 //  wellbeing: water glass, stretch, calm
@@ -2316,6 +2372,7 @@ function step(dt, T) {
   const want = music.intent ? music.intent.play : playing;
   music.lv = approach(music.lv, playing ? 1 : 0, playing ? 1.2 : 0.7, dt);
   music.reelW = approach(music.reelW, want ? 2.4 : 0, want ? 1.6 : 0.6, dt);
+  music.reel += music.reelW * dt;
   music.beatPh += dt * music.bpm / 60 * (playing ? 1 : 0.3);
   music.beatEnv = Math.max(0, music.beatEnv - dt * 2.2);
   music.swap = Math.min(1, music.swap + dt / 0.9);

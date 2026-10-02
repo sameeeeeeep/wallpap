@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Indian Night Train</title>
+<title>Indian Train</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0a0d; }
   canvas { position: fixed; left: 0; top: 0; display: block; }
@@ -11,6 +11,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="astronomy.js"></script>
 <script src="lw.js"></script>
 <script>
 /* =====================================================================
@@ -22,9 +23,9 @@
    Click the window to skip to the next landscape.
    Dev keys: s stretch, w weather, t time.
 
-   Art: art/train/bg-night.png and optional bg-day.png use a 1600×1000 stage.
+   Art: art/train/bg-night.png and bg-day.png use a 1600×1000 stage.
    Window opening: x480…950, y322…550. Table: x580…850, y590…626.
-   art/train/countryside-night.png supplies the moonlit moving fields.
+   art/train/countryside-night.png and countryside-day.png supply matching moving fields.
    art/birds/sparrow.png is a shared four-frame transparent flight atlas.
    ===================================================================== */
 'use strict';
@@ -120,7 +121,7 @@ const fbm = (x, seed) => vnoise(x, seed) * 0.6 + vnoise(x * 2.3, seed + 7) * 0.2
 // =====================================================================
 const ART = { dir: 'art/train/', img: {} };
 function loadArtSlots() {
-  for (const name of ['bg-night', 'bg-day', 'countryside-night']) {
+  for (const name of ['bg-night', 'bg-day', 'countryside-night', 'countryside-night-sky', 'countryside-day']) {
     try {
       const im = new Image();
       im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); };
@@ -181,6 +182,7 @@ function computeTarget() {
     if (w === 'fog') fog = 0.55 + 0.45 * it;
   }
   const litFrac = hr >= 18 || hr < 0.5 ? 0.5 : hr < 1.5 ? 0.42 : hr < 5 ? 0.18 : hr < 7.5 ? 0.35 : 0.05;
+  moon *= LW.moonVisibility();
   Et = { hour: hr, weather: w, it, top, bot, day, lamp, city, warm, rain, storm, snow, fog, cloud, moon, litFrac };
   if (!E) { E = JSON.parse(JSON.stringify(Et)); E.wetGlass = rain > 0 ? 1 : 0; }
 }
@@ -193,7 +195,7 @@ function envAmb() {
 }
 const envSnap = () => [...ENV_KEYS.map((q) => E[q] * (q === 'litFrac' ? 0.5 : 1)), E.wetGlass * 0.5, ...E.top.map((v) => v / 255), ...E.bot.map((v) => v / 255)];
 function updateEnv(dt) {
-  const k = 1 - Math.exp(-dt / 9);
+  const k = LW.envBlend(dt, 9);
   for (const key of ENV_KEYS) E[key] += (Et[key] - E[key]) * k;
   for (const key of ['top', 'bot']) for (let i = 0; i < 3; i++) E[key][i] += (Et[key][i] - E[key][i]) * k;
   E.hour = Et.hour; E.weather = Et.weather;
@@ -824,13 +826,13 @@ function updateTrain(dt, T) {
     }
     if (sk.t > 1.25) train.skip = null;
   }
-  // track joints → a tiny jolt + a soft clack-clack (only if the audio context is running)
+  // track joints → a tiny jolt (the da-dum clacks are scheduled by the ambience bed, from train.v)
   const jn = Math.floor(train.d / 520);
-  if (jn !== train.joint) { train.joint = jn; rock.jv += 14 * (train.v / 200); if (!train.skip) sClack(train.v); }
+  if (jn !== train.joint) { train.joint = jn; rock.jv += 14 * (train.v / 200) * (1 - 0.6 * calm.lv * breathHold()); }
   rock.jv += (-rock.jy * 90 - rock.jv * 9) * dt; rock.jy += rock.jv * dt;
-  const amp = (0.45 + 0.55 * train.v / 220) * (1 - calm.lv * 0.4);
-  rock.y = (Math.sin(T * 1.7) * 1.0 + Math.sin(T * 2.9 + 1) * 0.5) * amp + rock.jy * 0.12;
-  rock.x = Math.sin(T * 1.1 + 0.4) * 0.6 * amp;
+  const amp = (0.45 + 0.55 * train.v / 220) * (1 - calm.lv * (0.4 + 0.35 * breathHold()));   // the holds: very still
+  rock.y = (Math.sin(T * 1.7) * 2.0 + Math.sin(T * 2.9 + 1) * 0.8) * amp + rock.jy * 0.35;
+  rock.x = Math.sin(T * 1.1 + 0.4) * 1.3 * amp;
 }
 function tunnelCover() {
   // fraction of the glass covered by tunnel wall right now
@@ -943,16 +945,16 @@ function drawOutside(g, T) {
   if (E.fog > 0.02) { const fg = g.createLinearGradient(0, v.y0, 0, v.y1); fg.addColorStop(0, rgba(E.bot, 0.2 * E.fog)); fg.addColorStop(0.55, rgba(E.bot, 0.55 * E.fog)); fg.addColorStop(1, rgba(E.bot, 0.3 * E.fog)); g.fillStyle = fg; g.fillRect(v.x0, v.y0, v.ww, v.wh); }
   if (E.rain > 0.05) { g.fillStyle = rgba(mix3(E.bot, [60, 70, 90], 0.5), 0.16 * E.rain); g.fillRect(v.x0, v.y0, v.ww, v.wh); }
   // NEAR: catenary masts, lamps, bushes, walls, bridge girders
-  drawNear(g, T);
-  if (train.tunnel > 0.001) drawTunnel(g, T);
+  if (!artMode()) drawNear(g, T);
   drawPaintedCountryside(g,T);
+  if (train.tunnel > 0.001) drawTunnel(g, T);
   if (E.snow > 0.02) drawSnow(g, T);
 }
 // Cache mirrored, feathered panorama bands once. Their speeds follow distance,
 // so calm mode, acceleration and landscape skips affect every layer together.
-let countrysideLayers = null;
+const countrysideLayers = new WeakMap();
 function prepareCountryside(im) {
-  if(countrysideLayers && countrysideLayers.image === im)return countrysideLayers;
+  if(countrysideLayers.has(im))return countrysideLayers.get(im);
   const iw=Math.min(1200,im.naturalWidth),ih=Math.round(iw*im.naturalHeight/im.naturalWidth);
   const bands=[{start:.46,speed:.045},{start:.625,speed:.22},{start:.79,speed:.68}].map(spec=>{
     const sy=Math.floor(ih*spec.start),bh=ih-sy,cv=newCanvas(iw*2,bh),c=cv.getContext('2d');
@@ -964,27 +966,60 @@ function prepareCountryside(im) {
     c.globalCompositeOperation='destination-in';c.fillStyle=mask;c.fillRect(0,0,cv.width,cv.height);
     return {...spec,start:sy/ih,cv};
   });
-  return countrysideLayers={image:im,bands};
+  const land={image:im,bands};countrysideLayers.set(im,land);return land;
 }
 function drawPaintedCountryside(g,T) {
-  const im=ART.img['countryside-night'];if(!im || !artMode())return;
-  const a=(1-E.day)*(1-train.tunnel);if(a<.005)return;
-  const v=L.V,w=v.ww,h=v.wh,land=prepareCountryside(im);
-  g.save();g.globalAlpha=a;g.beginPath();g.rect(v.x0,v.y0,w,h);g.clip();
-  const cropW=Math.min(im.naturalWidth,im.naturalHeight*w/h);
-  // Moon and distant sky stay fixed as the terrain travels past the train.
-  g.drawImage(im,0,0,cropW,im.naturalHeight,v.x0,v.y0,w,h);
-  const tileW=2*h*im.naturalWidth/im.naturalHeight;
-  for(const layer of land.bands){
-    const offset=((train.d*layer.speed)%tileW+tileW)%tileW;
-    const y=v.y0+h*layer.start,dh=h*(1-layer.start);
-    for(let x=v.x0-offset;x<v.x1;x+=tileW)g.drawImage(layer.cv,x,y,tileW,dh);
+  const moonless=ART.img['countryside-night-sky'];
+  const night=moonless||ART.img['countryside-night'],day=ART.img['countryside-day'];
+  if(!(night||day) || !artMode())return;
+  const v=L.V,w=v.ww,h=v.wh;
+  g.save();g.beginPath();g.rect(v.x0,v.y0,w,h);g.clip();
+  const paint=(im,alpha)=>{
+    if(!im || alpha<.001)return;
+    // Composite the full landscape first: alpha belongs to the finished view,
+    // not each overlapping band (otherwise the night view leaks through daylight).
+    const land=prepareCountryside(im),c=land.frame||(land.frame=newCanvas(Math.ceil(w),Math.ceil(h)));
+    if(c.width!==Math.ceil(w)||c.height!==Math.ceil(h)){c.width=Math.ceil(w);c.height=Math.ceil(h);}
+    const f=c.getContext('2d');f.clearRect(0,0,c.width,c.height);
+    const cropW=Math.min(im.naturalWidth,im.naturalHeight*w/h);
+    f.drawImage(im,0,0,cropW,im.naturalHeight,0,0,w,h);
+    const tileW=2*h*im.naturalWidth/im.naturalHeight;
+    for(const layer of land.bands){
+      const offset=((train.d*layer.speed)%tileW+tileW)%tileW;
+      for(let x=-offset;x<w;x+=tileW)f.drawImage(layer.cv,x,h*layer.start,tileW,h*(1-layer.start));
+    }
+    g.globalAlpha=alpha;g.drawImage(c,v.x0,v.y0,w,h);g.globalAlpha=1;
+  };
+  paint(night||day,1);if(day&&night)paint(day,E.day);
+  // A separate moon can set; the original panorama had a permanent full moon.
+  if(moonless && E.moon>.01 && LW.moonVisibility()>.01){
+    const sky=LW.env.astronomy,moon=sky&&sky.moon;
+    const x=v.x0+w*(moon ? .18+.64*(moon.azimuth+Math.PI)/(2*Math.PI):.26);
+    const y=v.y0+h*(moon ? .49-.34*Math.max(0,Math.sin(moon.altitude)):.19),radius=h*.037;
+    g.save();g.globalAlpha=E.moon*(moon?Math.min(1,moon.fraction*4):1);
+    const glow=g.createRadialGradient(x,y,radius*.5,x,y,radius*3.2);
+    glow.addColorStop(0,'rgba(237,235,205,.25)');glow.addColorStop(1,'rgba(237,235,205,0)');
+    g.fillStyle=glow;g.fillRect(x-radius*3.2,y-radius*3.2,radius*6.4,radius*6.4);
+    g.fillStyle='#eeecdb';g.beginPath();
+    if(moon){
+      const side=moon.phase<.5?1:-1;
+      g.save();g.translate(x,y);g.scale(side,1);g.moveTo(0,-radius);g.arc(0,0,radius,-Math.PI/2,Math.PI/2);
+      for(let i=0;i<=32;i++){const yy=radius*(1-i/16);g.lineTo((1-2*moon.fraction)*Math.sqrt(Math.max(0,radius*radius-yy*yy)),yy);}
+      g.closePath();g.fill();g.restore();
+    }else{g.arc(x,y,radius,0,TAU);g.fill();}
+    g.restore();
   }
+  if(E.warm>.01){g.fillStyle=rgba([241,159,91],E.warm*.17);g.fillRect(v.x0,v.y0,w,h);}
   const haze=Math.min(.65,E.fog*.5+E.rain*.18);
   if(haze>.01){g.fillStyle=rgba(E.bot,haze);g.fillRect(v.x0,v.y0,w,h);}
-  // Nearby poles move faster than the fields and enter/leave beyond the frame.
+  // The nearby fence and telegraph poles establish speed; hills barely drift.
   const px=v.x0+w+20-((train.d*.95)%(w*3.5));
-  g.strokeStyle='rgba(12,24,29,.7)';g.lineWidth=2;g.beginPath();g.moveTo(px,v.y1);g.lineTo(px,v.y0+h*.43);g.moveTo(px-9,v.y0+h*.46);g.lineTo(px+9,v.y0+h*.46);g.stroke();
+  g.strokeStyle=rgba(mix3([12,24,29],[63,66,49],E.day),.8);g.lineWidth=3;
+  g.beginPath();g.moveTo(px,v.y1);g.lineTo(px,v.y0+h*.3);g.moveTo(px-13,v.y0+h*.34);g.lineTo(px+13,v.y0+h*.34);g.stroke();
+  g.strokeStyle=rgba(mix3([12,22,26],[94,82,59],E.day),.55);g.lineWidth=1.5;
+  const gap=92,off=(train.d*1.25)%gap;
+  for(let x=v.x0-off;x<v.x1+gap;x+=gap){g.beginPath();g.moveTo(x,v.y1);g.lineTo(x,v.y1-22);g.stroke();}
+  g.beginPath();g.moveTo(v.x0,v.y1-14);g.lineTo(v.x1,v.y1-14);g.stroke();
   g.restore();
 }
 function drawHouse(g, x, base, e, s) {
@@ -1181,12 +1216,19 @@ function drawTea(g, T) {
 //  calm breathing and birds passing outside the glass
 // =====================================================================
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
-function breath() { const t = calm.t % 10; return t < 4 ? smooth(t / 4) : 1 - smooth((t - 4) / 6); }
+// lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
+const guide = { on: false, t0: 0, a: 0 };
+LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
+function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
+function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
+function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
+function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
+function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
 const outsideBirds = [], birdAtlas = new Image();
 birdAtlas.src = 'art/birds/sparrow.png';
 let birdWait = 4;
 function updateOutsideBirds(dt) {
-  const pace = 1 - calm.lv * .35;
+  const pace = calmPace();
   birdWait -= dt * pace;
   if (birdWait <= 0 && !outsideBirds.length && E.storm < .3 && E.rain < .5 && train.tunnel < .1) {
     const dir = Math.random() < .5 ? -1 : 1;
@@ -1272,7 +1314,13 @@ function showNote(head, text, secs) { note = { head, text, until: nowS() + secs 
 function startStretch(text) {
   showNote('stretch break', text && text.length < 32 ? text : 'roll your shoulders', 12);
 }
-function setCalm(on, auto = 0) { calm.on = on; if (on) { calm.t = 0; calm.auto = auto; } else calm.auto = 0; }
+// fromLW: echo of LW's own 'calm' event. Scene-started calm (reminder / menu action) flips LW.calm
+// so lw.js shows its breathing guide too.
+function setCalm(on, auto = 0, fromLW = false) {
+  const was = calm.on; calm.on = on;
+  if (on) { if (!was) calm.t = 0; if (!fromLW || !was) calm.auto = auto; } else calm.auto = 0;
+  if (!fromLW && LW.calm !== on) { LW.calm = on; LW.emit('calm', on); }
+}
 
 // =====================================================================
 //  audio: soft track clacks + small UI sounds (only when the context runs)
@@ -1300,19 +1348,145 @@ function tone(a, t, f0, f1, dur, amp, out, type = 'sine') {
   const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(amp, t + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(gn); gn.connect(out); o.start(t); o.stop(t + dur + 0.05);
 }
-function sClack(v) {
-  const a = ac(); if (!a) return;
-  const o = outNode(a), t = a.currentTime + 0.02, gap = clamp(26 / Math.max(60, v), 0.08, 0.3), amp = 0.022 * (1 - calm.lv * 0.6);
-  for (const dt of [0, gap]) { noiseHit(a, t + dt, 0.07, 'lowpass', 520, 0.8, amp, o); tone(a, t + dt, 90, 60, 0.08, amp * 0.8, o); }
-}
 function sClick() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.01; noiseHit(a, t, 0.025, 'bandpass', 2600, 2, 0.04, o); }
 function sSlide() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02; noiseHit(a, t, 1.0, 'lowpass', 900, 0.7, 0.02, o); tone(a, t + 1.1, 2900, 2850, 0.4, 0.016, o); }
 function sThunder() {
-  const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02;
+  const a = ac(); if (!a) return; outNode(a);
+  const o = LW.bus('weather'), t = a.currentTime + 0.02; if (!o) return;   // weather bus, not fx
   const s = a.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
   const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(240, t); lp.frequency.exponentialRampToValueAtTime(80, t + 3.5);
-  const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.16, t + 0.25); gn.gain.exponentialRampToValueAtTime(0.0001, t + 4);
+  const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.112, t + 0.25); gn.gain.exponentialRampToValueAtTime(0.0001, t + 4);
   s.connect(lp); lp.connect(gn); gn.connect(o); s.start(t); s.stop(t + 4.1);
+}
+
+// =====================================================================
+//  background ambience → LW.bus('ambience'), weather beds → LW.bus('weather')
+//  Cheap: a few looped noise buffers through filters + scheduled one-shots.
+//  Runs on its own timer (keeps going while the wallpaper idles), starts once
+//  the shared context is running, and goes quiet with LW.muted.
+// =====================================================================
+const AMB = { a: null, bus: null, wx: null, L: {}, bufs: {}, ev: {} };
+function ambBuf(a, color) {
+  if (AMB.bufs[color]) return AMB.bufs[color];
+  const n = a.sampleRate * 5, f = Math.floor(a.sampleRate * 0.1), x = new Float32Array(n + f);
+  let b0 = 0, b1 = 0, b2 = 0, last = 0, peak = 1e-6;
+  for (let i = 0; i < n + f; i++) {
+    const w = Math.random() * 2 - 1;
+    if (color === 'brown') { last = (last + 0.02 * w) / 1.02; x[i] = last; }
+    else if (color === 'pink') { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; x[i] = b0 + b1 + b2 + w * 0.1848; }
+    else x[i] = w;
+    peak = Math.max(peak, Math.abs(x[i]));
+  }
+  const buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (i < f ? x[i] * (i / f) + x[n + i] * (1 - i / f) : x[i]) * 0.7 / peak;   // seamless loop
+  return (AMB.bufs[color] = buf);
+}
+// a looped bed: noise → filter (→ optional tremolo) → gain; gain starts silent, ambGain eases it
+function ambLoop(name, color, type, f, q, dest, am = 0, depth = 0.35) {
+  const a = AMB.a, s = a.createBufferSource(), b = a.createBiquadFilter(), g = a.createGain();
+  s.buffer = ambBuf(a, color); s.loop = true; b.type = type; b.frequency.value = f; b.Q.value = q; g.gain.value = 0;
+  s.connect(b);
+  if (am) {
+    const m = a.createGain(), o = a.createOscillator(), og = a.createGain();
+    m.gain.value = 1; o.frequency.value = am; og.gain.value = depth; o.connect(og); og.connect(m.gain); o.start();
+    b.connect(m); m.connect(g);
+  } else b.connect(g);
+  g.connect(dest); s.start(a.currentTime, Math.random() * 4);
+  return (AMB.L[name] = { s, f: b, g });
+}
+function ambOsc(name, freq, dest, type = 'sine') {
+  const a = AMB.a, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq; g.gain.value = 0; o.connect(g); g.connect(dest); o.start();
+  return (AMB.L[name] = { s: o, f: o, g });
+}
+function ambGain(name, v, tc = 1.2) { const l = AMB.L[name]; if (l) l.g.gain.setTargetAtTime(Math.max(0, v), AMB.a.currentTime, tc); }
+function ambFreq(name, v, tc = 1.2) { const l = AMB.L[name]; if (l) l.f.frequency.setTargetAtTime(v, AMB.a.currentTime, tc); }
+// a noise swell (car passing, whoosh, sizzle): rises, falls, optional filter sweep f → f1
+function ambSwell(t, dur, type, f, q, amp, dest, f1 = f) {
+  const a = AMB.a, s = a.createBufferSource(), b = a.createBiquadFilter(), g = a.createGain();
+  s.buffer = ambBuf(a, 'pink'); s.loop = true; b.type = type; b.Q.value = q;
+  b.frequency.setValueAtTime(f, t); b.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(b); b.connect(g); g.connect(dest); s.start(t, Math.random() * 3); s.stop(t + dur + 0.05);
+}
+// how many Poisson events of `rate`/s land in this tick
+function ambN(rate, dt) { const m = rate * dt; let n = Math.floor(m); if (Math.random() < m - n) n++; return n; }
+function ambStart() {
+  const a = LW._ctx;
+  if (LW.muted || !a || a.state !== 'running' || !E || !L) return false;
+  const bus = LW.bus('ambience'), wx = LW.bus('weather');
+  if (!bus || !wx) return false;
+  outNode(a);   // shared one-shot noise buffer
+  AMB.a = a; AMB.bus = bus; AMB.wx = wx;
+  ambBuild(a, bus, wx);
+  return true;
+}
+setInterval(() => {
+  try {
+    if (!AMB.a && !ambStart()) return;
+    const a = AMB.a;
+    if (LW.muted || a.state !== 'running') return;
+    ambUpdate(a, a.currentTime, 0.25, AMB.bus, AMB.wx);
+  } catch (e) { console.error(e); }
+}, 250);
+
+// the sleeper at night: wheel rumble, da-dum … da-dum over the rail joints (rate follows train.v),
+// carriage creaks, the ceiling fan, a far-off horn, tunnel whoosh; rain on the glass on the weather bus
+function ambBuild(a, B, X) {
+  ambLoop('rumble', 'brown', 'lowpass', 110, 0.8, B);     // wheels on rail, through the floor
+  ambLoop('rail', 'pink', 'bandpass', 820, 0.7, B);       // steel-on-steel hiss
+  ambLoop('air', 'pink', 'bandpass', 1500, 0.5, B);       // night air past the window bars
+  ambLoop('fan', 'pink', 'bandpass', 240, 1.6, B, 4.4);   // the ceiling fan: soft whirr, blade flutter
+  ambOsc('fanHum', 96, B);                                // … and its motor
+  ambLoop('rain', 'pink', 'highpass', 1300, 0.5, X);      // rain streaking the glass
+  ambLoop('rainLow', 'brown', 'lowpass', 600, 0.5, X);
+  ambLoop('wind', 'pink', 'bandpass', 520, 1.1, X);
+  AMB.ev.clack = a.currentTime + 0.4; AMB.ev.n = 0; AMB.ev.tun = train.tunnel;
+}
+function sClack(a, t, v, amp, o, bridge) {   // one bogie over a joint: da-dum
+  const gap = clamp(26 / Math.max(60, v), 0.08, 0.3), f = 480 + 500 * bridge;
+  for (const dt of [0, gap]) { noiseHit(a, t + dt, 0.07, 'lowpass', f, 0.8, amp, o); tone(a, t + dt, 90, 60, 0.08, amp * 0.8, o); }
+  if (bridge > 0.3) tone(a, t + gap, 260, 250, 0.35, amp * 0.25 * bridge, o, 'triangle');   // girders ring on the bridge
+}
+function sCreak(a, t, amp, o) {             // the carriage flexing: a short bandpassed sawtooth groan
+  const s = a.createOscillator(), b = a.createBiquadFilter(), g = a.createGain(), f = rand(130, 240), d = rand(0.2, 0.45);
+  s.type = 'sawtooth'; s.frequency.setValueAtTime(f, t); s.frequency.linearRampToValueAtTime(f * rand(0.82, 1.18), t + d);
+  b.type = 'bandpass'; b.frequency.value = f * rand(3, 5); b.Q.value = 5;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp, t + d * 0.3); g.gain.linearRampToValueAtTime(0, t + d);
+  s.connect(b); b.connect(g); g.connect(o); s.start(t); s.stop(t + d + 0.05);
+}
+function sHorn(a, t, amp, o) {              // the loco, far up front: a two-note blare, softened by distance
+  const lp = a.createBiquadFilter(), g = a.createGain(), toots = Math.random() < 0.4 ? [[0, 1.4]] : [[0, 0.45], [0.65, 1.5]];
+  lp.type = 'lowpass'; lp.frequency.value = 760; lp.connect(g); g.connect(o); g.gain.value = 0;
+  for (const [s0, d] of toots) {
+    g.gain.setValueAtTime(0, t + s0); g.gain.linearRampToValueAtTime(amp, t + s0 + 0.12); g.gain.setValueAtTime(amp, t + s0 + d - 0.25); g.gain.linearRampToValueAtTime(0, t + s0 + d);
+  }
+  const end = t + toots[toots.length - 1][0] + toots[toots.length - 1][1] + 0.1;
+  for (const f of [311, 370, 313.5]) { const s = a.createOscillator(); s.type = 'sawtooth'; s.frequency.value = f; s.connect(lp); s.start(t); s.stop(end); }
+}
+function ambUpdate(a, t, dt, B, X) {
+  const v = clamp(train.v / 140, 0, 3.2), tun = train.tunnel, q = 1 - 0.25 * calm.lv;
+  const bridge = (biomeAt(train.d).water || 0), out = 1 - 0.75 * tun;
+  ambGain('rumble', 0.11 * (0.3 + 0.7 * Math.min(v, 1.4)) * (1 + 0.9 * tun) * q); ambFreq('rumble', 80 + 50 * Math.min(v, 1.5) + 60 * tun);
+  ambGain('rail', 0.012 * Math.min(v, 1.5) * (1 + 1.2 * tun) * q);
+  ambGain('air', 0.005 * Math.min(v, 1.5) * out * q);
+  ambGain('fan', 0.006 * q); ambGain('fanHum', 0.0018 * q);
+  const gust = 0.65 + 0.35 * Math.sin(t * 0.19) * Math.sin(t * 0.07 + 2);
+  ambGain('rain', 0.045 * E.rain * out); ambGain('rainLow', 0.055 * E.rain * out);
+  ambGain('wind', (0.05 * E.storm + 0.02 * E.snow) * gust * out); ambFreq('wind', 420 + 260 * gust);
+  // rail joints: two bogies over each joint → da-dum … da-dum (period follows the train's speed)
+  if (AMB.ev.clack < t) AMB.ev.clack = t + 0.05;
+  const period = 173 / Math.max(25, train.v);
+  while (AMB.ev.clack < t + dt + 0.3) {
+    if (!train.skip) sClack(a, AMB.ev.clack, train.v, 0.026 * (AMB.ev.n++ % 3 === 0 ? 1 : 0.7) * (1 + 0.6 * tun) * q, B, bridge);
+    AMB.ev.clack += period;
+  }
+  if (ambN(0.11 * (0.4 + 0.6 * Math.min(v, 1)), dt)) sCreak(a, t + Math.random() * dt, 0.0035 * q, B);
+  if (tun < 0.05 && !train.skip && ambN(1 / 110, dt)) sHorn(a, t + 0.1, 0.006 * q, B);
+  // into / out of a tunnel: a pressure whoosh
+  if ((AMB.ev.tun < 0.15) !== (tun < 0.15)) ambSwell(t + 0.02, 2.2, 'lowpass', 1800, 0.7, 0.05 * q, B, 350);
+  AMB.ev.tun = tun;
+  if (E.rain > 0.03 && tun < 0.5) for (let i = ambN(18 * E.rain * out, dt); i > 0; i--) noiseHit(a, t + Math.random() * dt, rand(0.006, 0.016), 'bandpass', rand(2600, 6000), 2, rand(0.002, 0.006) * E.rain, X);
 }
 
 // =====================================================================
@@ -1336,7 +1510,7 @@ LW.on('reminder', (r) => {
   else if (r.kind === 'stretch') startStretch(r.text);
   else if (r.kind === 'breathe') setCalm(true, 60);
 });
-LW.on('calm', (on) => setCalm(!!on));
+LW.on('calm', (on) => setCalm(!!on, 0, true));
 LW.on('action', (a) => {
   if (a === 'water') startWater();
   else if (a === 'stretch') startStretch();
@@ -1363,13 +1537,14 @@ function step(dt, T) {
   runTimers();
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
+  stepGuide(dt);
   updateEnv(dt);
   if (note && T > note.until) note = null;
   updateTrain(dt, T);
   // storms: the odd flash over the fields
   flash.t += dt;
   if (E.storm > 0.5 && flash.t > flash.next) { flash.t = 0; flash.next = rand(9, 26); later(rand(1.5, 4), sThunder); }
-  updateParticles(dt, T);
+  updateParticles(dt * calmPace(), T);
   updateWater(dt);
   updateOutsideBirds(dt);
 }
@@ -1385,8 +1560,10 @@ function render(T, dt) {
   if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, rx, ry);
   ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, rx, ry); ctx.globalAlpha = 1;
   setWR(ctx);
-  const lv = E.lamp * (1 - 0.6 * calm.lv);
-  if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60, 0.4 * lv);
+  const lv = E.lamp * (1 - E.day) * (1 - 0.6 * calm.lv);
+  // in calm the berth lamps dim to candlelight and swell with the breath (lw.js draws the guide)
+  const bl = calm.lv > 0.01 ? breath() : 0;
+  if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60 + 40 * calm.lv * bl, 0.4 * lv * (1 + calm.lv * (0.9 * bl - 0.2)));
   drawTea(ctx, T);
   drawWater(ctx);
   if(note && !water){
@@ -1397,20 +1574,14 @@ function render(T, dt) {
   }
   drawParticles(ctx);
   drawSweeps(ctx, dt);
-  // Quiet night shading and the breathing glow on the glass
+  // Quiet night shading (+ the calm-mode breathing warmth)
   setW(ctx);
-  const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * .48, 0, .8);
+  const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * (.48 - .1 * breath()), 0, .8);   // the carriage breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,4,8,${dim})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); }
   if (calm.lv > 0.01) {
-    const b = breath(), tt = calm.t % 10, inhale = tt < 4, w = L.win;
-    const edge = inhale ? Math.min(tt + 0.4, 4 - tt) : Math.min(tt - 4, 10 - tt);
-    const a = smooth(clamp(edge / 0.9, 0, 1)) * calm.lv * 0.5;
-    const bx = w.x0 + w.w * 0.5, by = w.y0 + w.h * 0.42;
-    drawSprite(ctx, GLOW_WARM, bx, by, 140 + b * 110, 0.12 * calm.lv * (0.5 + 0.5 * b));
-    ctx.font = `300 28px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(255,236,215,${a})`; ctx.fillText(inhale ? 'breathe in' : 'breathe out', bx, by - b * 6);
-    ctx.strokeStyle = `rgba(255,236,215,${calm.lv * 0.28})`; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(bx, by + 40, 5 + b * 10, 0, TAU); ctx.stroke();
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    // the lamps' warmth on the tea table breathes too
+    const b = breath();
+    drawSprite(ctx, GLOW_WARM, L.table.cx, L.cup.y - 30, 160 + 90 * b, 0.1 * calm.lv * (0.4 + 0.6 * b));
   }
 }
 // =====================================================================
@@ -1448,7 +1619,7 @@ function selfTest(secs = 60) {
   }
   return {err,maxBirds};
 }
-window.__train = { get E() { return E; }, get L() { return L; }, get W() { return W; }, outsideBirds, train, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
+window.__train = { get E() { return E; }, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

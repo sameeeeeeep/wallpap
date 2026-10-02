@@ -1,6 +1,7 @@
 // cutout — lift every subject out of an image (macOS Vision subject lifting, on-device)
 // and save each as a tightly-cropped transparent PNG.
-//   swift tools/cutout.swift sheet.png out/dir prefix
+//   swift tools/cutout.swift sheet.png out/dir prefix [strip]
+//   (strip = one row of animation frames: order purely left→right, e.g. a jump arc)
 // → out/dir/prefix-1.png, prefix-2.png … ordered left→right, top→bottom.
 import AppKit
 import Vision
@@ -43,8 +44,9 @@ for inst in obs.allInstances {
 }
 // Reading order: rows (by center y, tolerance = 1/3 of median height), then x.
 let medH = pieces.map { $0.rect.height }.sorted().dropFirst(pieces.count / 2).first ?? 100
+let strip = args.count > 4 && args[4] == "strip"
 let sorted = pieces.sorted { a, b in
-    abs(a.rect.midY - b.rect.midY) > medH / 3 ? a.rect.midY < b.rect.midY : a.rect.midX < b.rect.midX
+    strip ? a.rect.midX < b.rect.midX : abs(a.rect.midY - b.rect.midY) > medH / 3 ? a.rect.midY < b.rect.midY : a.rect.midX < b.rect.midX
 }
 for (i, p) in sorted.enumerated() {
     let rep = NSBitmapImageRep(cgImage: p.image)

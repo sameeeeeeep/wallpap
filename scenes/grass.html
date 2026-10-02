@@ -15,7 +15,9 @@
 <canvas id="ov"></canvas>
 <div id="hud"></div>
 <script>window.__realNow = performance.now.bind(performance);</script>
+<script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="pet-motion.js"></script>
 <script>
 'use strict';
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +26,7 @@
 //            depth) interleaved with SDF "vector" actors (pandas, songbirds, black kites,
 //            water basin, bamboo bundles) → fog/vignette pass.
 //   2D overlay (no texture uploads): butterflies, fireflies, rain/snow, seeds,
-//            hearts, speech bubbles, breathing text.
+//            hearts, speech bubbles (lw.js draws the breathing guide).
 //   Touch: a small CPU spring field (lean, flatten) uploaded as an RG8
 //          texture; the grass vertex shader bends around the cursor/pandas.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,6 +636,7 @@ function sunPos(h) {
   return [x, y, smooth(-0.03, 0.05, k) * smooth(1.03, 0.95, k)];
 }
 function moonPos(h) {
+  const sky=LW.env.astronomy;if(sky){const m=sky.moon;return [W*(.18+.48*(m.azimuth+Math.PI)/(2*Math.PI)),yH-Math.max(0,Math.sin(m.altitude))*.27*H-.03*H,m.visibility];}
   const k = (((h - 19.6) % 24) + 24) % 24 / 10.4;
   const x = lerp(0.18, 0.66, clamp(k, 0, 1)) * W;
   const y = yH - Math.sin(clamp(k, 0, 1) * Math.PI) * 0.27 * H - 0.03 * H;
@@ -673,7 +676,7 @@ function targetLight() {
 let snapLight = true;
 function stepLight(dt) {
   const t = targetLight();
-  const a = snapLight ? 1 : 1 - Math.exp(-dt / 6.5);
+  const a = snapLight ? 1 : LW.envBlend(dt, 6.5);
   for (const key in t) {
     if (Array.isArray(t[key])) Lt[key] = Lt[key] ? Lt[key].map((v, i) => lerp(v, t[key][i], a)) : t[key].slice();
     else Lt[key] = Lt[key] === undefined ? t[key] : lerp(Lt[key], t[key], a);
@@ -1266,7 +1269,7 @@ const SPR_HEAD = {
   'mei/walk1': [0.83, 0.38, 0.13], 'mei/walk2': [0.84, 0.35, 0.13], 'mei/sit-eat': [0.5, 0.3, 0.33], 'mei/back-sleep': [0.25, 0.48, 0.17],
 };
 // the painted poses aren't drawn to one scale: per-image size correction (matched by head size)
-const SPR_K = { 'bao/sit-leaf': 0.86, 'bao/roll': 0.85, 'mei/sit-eat': 0.88 };
+const SPR_K = { 'bao/sit-leaf': .7, 'bao/roll': .82, 'mei/sit-eat': .78, 'mei/back-sleep': .95 };
 const SPR_LEN = 118;     // walk1 width in actor units (≈ the procedural panda, nose to tail)
 const SPR_FADE = 0.38;   // pose crossfade (s)
 const sprImgs = {};      // decoded source images (read-only; each set belongs to one panda)
@@ -1274,9 +1277,11 @@ function sprImg(src) { let im = sprImgs[src]; if (!im) { im = sprImgs[src] = new
 function sprInit(p) {
   const set = SPR_SETS[p.ap.name]; if (!set) return null;
   const names = [...new Set(Object.values(set.poses))];
-  const S = { set, names, imgs: {}, rects: {}, base: null, cv: null, ctx: null, tex: null, unit: 1, key: '', ready: false, failed: false, tints: 0 };
-  let left = names.length;
+  const S = { set, names, imgs: {}, rects: {}, base: null, cv: null, ctx: null, tex: null, unit: 1, key: '', ready: false, failed: false, tints: 0, seq: null };
+  let left = names.length + 1;
   const done = () => { if (--left === 0 && !S.failed) sprBuild(p, S); };
+  // drawn in-between frames (t/): baked into the same atlas, so they wait for the build
+  S.seq = LW.petSeqLoad('art/sprites/', 'pandas/' + set.dir, done);
   for (const n of names) {
     const im = S.imgs[n] = sprImg(SPR_DIR + set.dir + '/' + n + '.png');
     if (im.complete && im.naturalWidth) done();
@@ -1287,19 +1292,33 @@ function sprInit(p) {
 }
 function sprBuild(p, S) {
   if (p.dead || S.base) return;
-  const PAD = 6, ims = S.names.map((n) => S.imgs[n]);
+  // in-between frames: sized and anchored between the poses they join (mirrored turn
+  // frames just swap their UVs below); their head marks come from the nearer pose
+  const T = S.seq, P = S.set.poses, poseK = (n) => SPR_K[S.set.dir + '/' + n] || 1;
+  const endN = { walk1: 'walk1', sit: P.sit, sleep: P.back };
+  LW.petSeqPrep(T, (f) => ({ im: S.imgs[endN[f]], k: poseK(endN[f]), fa: 0.5 }), (im) => im, { mirror: false });
+  const frames = Object.keys(T.img);
+  for (const n of frames) S.imgs[n] = T.img[n];
+  const all = S.names.concat(frames), NC = all.length > 8 ? 4 : 2;
+  const PAD = 6, ims = all.map((n) => S.imgs[n]);
   const colW = Math.max(...ims.map((im) => im.naturalWidth)) + PAD * 2, rowH = [];
-  ims.forEach((im, i) => { rowH[i >> 1] = Math.max(rowH[i >> 1] || 0, im.naturalHeight + PAD * 2); });
-  const cw = colW * 2, ch = rowH.reduce((a, b) => a + b, 0);
+  ims.forEach((im, i) => { const r = Math.floor(i / NC); rowH[r] = Math.max(rowH[r] || 0, im.naturalHeight + PAD * 2); });
+  const cw = colW * NC, ch = rowH.reduce((a, b) => a + b, 0);
   const base = document.createElement('canvas'); base.width = cw; base.height = ch;
   const bx = base.getContext('2d', { willReadFrequently: true });
   let y = 0;
   ims.forEach((im, i) => {
-    if (i && !(i & 1)) y += rowH[(i >> 1) - 1];
-    const x = (i & 1) * colW + PAD, yy = y + PAD, w = im.naturalWidth, h = im.naturalHeight;
+    if (i && !(i % NC)) y += rowH[i / NC - 1];
+    const x = (i % NC) * colW + PAD, yy = y + PAD, w = im.naturalWidth, h = im.naturalHeight, n = all[i];
     bx.drawImage(im, x, yy);
-    const hd = SPR_HEAD[S.set.dir + '/' + S.names[i]] || [0.5, 0.3, 0.15];
-    S.rects[S.names[i]] = { w, h, u0: x / cw, v0: yy / ch, u1: (x + w) / cw, v1: (yy + h) / ch, hx: hd[0], hy: hd[1], hr: hd[2], k: SPR_K[S.set.dir + '/' + S.names[i]] || 1 };
+    let hd = SPR_HEAD[S.set.dir + '/' + n], k = poseK(n);
+    if (im.petK) {   // a drawn frame: head from the nearer pose, flipped once a turn is past side-on
+      const nh = SPR_HEAD[S.set.dir + '/' + endN[im.petNear]] || [0.5, 0.3, 0.15];
+      hd = [n.startsWith('turn-') && +n[5] > 2 ? 1 - nh[0] : nh[0], nh[1], nh[2]]; k = im.petK;
+    }
+    hd = hd || [0.5, 0.3, 0.15];
+    S.rects[n] = { w, h, u0: x / cw, v0: yy / ch, u1: (x + w) / cw, v1: (yy + h) / ch, hx: hd[0], hy: hd[1], hr: hd[2], k };
+    if (n.startsWith('turn-')) { const r = S.rects[n]; S.rects[n + '~m'] = { ...r, u0: r.u1, u1: r.u0, hx: 1 - r.hx }; }
   });
   // De-fringe: the cut-outs carry a pale halo; fade it out and pull edge pixels
   // toward the ink outline so they sit cleanly on the grass.
@@ -1313,7 +1332,7 @@ function sprBuild(p, S) {
   bx.putImageData(id, 0, 0);
   S.base = base;
   S.cv = document.createElement('canvas'); S.cv.width = cw; S.cv.height = ch; S.ctx = S.cv.getContext('2d');
-  S.unit = SPR_LEN * S.set.k / S.rects.walk1.w;
+  S.unit = 74 * S.set.k / S.rects.walk1.h;
   S.tex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex); texParams(gl.LINEAR_MIPMAP_LINEAR);
 }
@@ -1363,7 +1382,7 @@ function sprTintPass() {
   }
 }
 function sprBreathe(o, p, t) {
-  const br = p.state === 'calm' ? breath(calmT) : 0.5 + 0.5 * Math.sin(t * 1.25 + p.ph0);
+  const br = p.state === 'calm' ? calmBr.level : 0.5 + 0.5 * Math.sin(t * 1.25 + p.ph0);
   o.sy = 1 + 0.03 * br; o.sx = 1 + 0.01 * br;
 }
 // Behaviour state → abstract pose + a little motion (rotation, squash, bob).
@@ -1413,7 +1432,15 @@ function emitPandaSprite(p, t) {
   const S = p.spr, L = p.prims; L.reset();
   L.footY = p.y; L.haze = hazeAt(p.s); L.paper = 0;
   p.hopT += p.edt;
-  const o = sprPose(p, t), r = S.rects[S.set.poses[o.pose]];
+  const o = sprPose(p, t);
+  // drawn in-between frames: pose changes (stand ↔ sit ↔ back), turning round on its feet,
+  // and the startled hop; a rolling ball keeps its own motion (and the crossfade)
+  const img = S.set.poses[o.pose], P = S.set.poses, gaitP = img === 'walk1' || img === 'walk2';
+  let fam = o.ball ? 'ball' : gaitP ? 'walk1' : img === P.sit ? 'sit' : img === P.back ? 'sleep' : img;
+  if (gaitP && p.hopT < 0.42 && S.seq.has('jump')) { const u = p.hopT / 0.42; o.pose = LW.petJumpFrame(u < 0.12 ? 'crouch' : u < 0.88 ? 'air' : 'land', (u - 0.12) / 0.76); fam = 'jump'; }
+  const sf = LW.petSeqStep(p, S.seq, fam, p.dir < 0 ? -1 : 1, t);
+  if (sf && S.rects[sf]) o.pose = sf;
+  const r = S.rects[P[o.pose] || o.pose];
   // facing flips are crossfaded (a painted sprite squashed to a sliver reads as a flat card)
   const sc = S.unit * p.S * r.k, sg = p.dir < 0 ? -1 : 1;
   const ang = o.rot * sg, ca = Math.cos(ang), sa = Math.sin(ang);
@@ -1428,11 +1455,14 @@ function emitPandaSprite(p, t) {
   // crossfade between poses (walk1 ↔ walk2 is a hard gait swap)
   const sv = p.sv;
   if (sv.pose !== o.pose || sv.sg !== sg) {
-    const gait = (n) => n === 'walk1' || n === 'walk2';
-    if (sv.pose && (sv.sg !== sg || !(gait(sv.pose) && gait(o.pose)))) { sv.prev.set(sv.cur); sv.prevX = p.x; sv.prevY = p.y; sv.k = 0; }
+    const gait = (n) => n === 'walk1' || n === 'walk2', drawn = (n) => !!(S.rects[n] && S.rects[n].k && /^(stand-sit|sit-sleep|turn|jump)-/.test(n));
+    // hard cut into a drawn sheet (its first frame is the pose it leaves) and frame to frame
+    const cut = drawn(o.pose) && (drawn(sv.pose) || !o.pose.startsWith('jump-'));
+    if (cut) sv.k = 1;
+    else if (sv.pose && (sv.sg !== sg || !(gait(sv.pose) && gait(o.pose)))) { sv.prev.set(sv.cur); sv.prevX = p.x; sv.prevY = p.y; sv.k = 0; sv.fd = drawn(sv.pose) || drawn(o.pose) ? 0.12 : SPR_FADE; }
     sv.pose = o.pose; sv.sg = sg;
   }
-  sv.k = Math.min(1, sv.k + p.edt / SPR_FADE);
+  sv.k = Math.min(1, sv.k + p.edt / (sv.fd || SPR_FADE));
   const c = sv.cur;
   c[0] = p0[0]; c[1] = p0[1]; c[2] = p1[0] - p0[0]; c[3] = p1[1] - p0[1]; c[4] = p2[0] - p0[0]; c[5] = p2[1] - p0[1];
   c[6] = r.u0; c[7] = r.v0; c[8] = r.u1; c[9] = r.v1;
@@ -1449,22 +1479,32 @@ function emitPandaSprite(p, t) {
 const SPR_VS = `#version 300 es
 uniform vec2 uView, uO, uAx, uAy;
 uniform vec4 uUV;
-out vec2 vUV;
+out vec2 vUV, vWorld;
 void main(){
   vec2 cr = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
   vec2 p = uO + uAx*cr.x + uAy*cr.y;
-  vUV = mix(uUV.xy, uUV.zw, cr);
+  vUV = mix(uUV.xy, uUV.zw, cr); vWorld = p;
   gl_Position = vec4(p.x/uView.x*2.0 - 1.0, 1.0 - p.y/uView.y*2.0, 0.0, 1.0);
 }`;
 const SPR_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uTex;
 uniform vec3 uHaze;
-uniform float uHazeAmt, uGain, uAlpha;
-in vec2 vUV;
+uniform float uHazeAmt, uGain, uAlpha, uBlend, uMix;
+uniform vec2 uOldO,uOldX,uOldY,uNewO,uNewX,uNewY;
+uniform vec4 uOldUV,uNewUV;
+in vec2 vUV, vWorld;
 out vec4 o;
+vec4 poseSample(vec2 origin,vec2 ax,vec2 ay,vec4 uv){
+  vec2 d=vWorld-origin;
+  float det=ax.x*ay.y-ax.y*ay.x;
+  if(abs(det)<.00001)return vec4(0.);
+  vec2 q=vec2(d.x*ay.y-d.y*ay.x,ax.x*d.y-ax.y*d.x)/det;
+  if(any(lessThan(q,vec2(0.)))||any(greaterThan(q,vec2(1.))))return vec4(0.);
+  return texture(uTex,mix(uv.xy,uv.zw,q));
+}
 void main(){
-  vec4 t = texture(uTex, vUV);
+  vec4 t = uBlend>.5 ? mix(poseSample(uOldO,uOldX,uOldY,uOldUV),poseSample(uNewO,uNewX,uNewY,uNewUV),uMix) : texture(uTex, vUV);
   if (t.a < 0.004) discard;
   vec3 c = mix(t.rgb/t.a*uGain, uHaze, uHazeAmt);
   o = vec4(c*t.a, t.a)*uAlpha;
@@ -1495,7 +1535,7 @@ function drawBirdSprite(b) {
   q[6]=b.frame/4+.0005;q[7]=0;q[8]=(b.frame+1)/4-.0005;q[9]=1;
   gl.useProgram(sprP.p);gl.bindVertexArray(emptyVao);const u=sprP.u;
   gl.uniform2f(u.uView,W,H);gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,a.tex);gl.uniform1i(u.uTex,3);
-  gl.uniform3fv(u.uHaze,Lt.haze);gl.uniform1f(u.uHazeAmt,b.haze);gl.uniform1f(u.uGain,Math.max(.25,SL.gain));
+  gl.uniform1f(u.uBlend,0);gl.uniform3fv(u.uHaze,Lt.haze);gl.uniform1f(u.uHazeAmt,b.haze);gl.uniform1f(u.uGain,Math.max(.25,SL.gain));
   sprQuad(u,q,b.alpha);
 }
 function drawPandaSprite(p) {
@@ -1505,20 +1545,25 @@ function drawPandaSprite(p) {
   gl.uniform2f(u.uView, W, H);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex); gl.uniform1i(u.uTex, 3);
   gl.uniform3fv(u.uHaze, Lt.haze); gl.uniform1f(u.uHazeAmt, p.prims.haze); gl.uniform1f(u.uGain, SL.gain);
-  const q = p.poseQuad || (p.poseQuad = new Float32Array(10));
-  const previous = sv.k < 0.5;
-  q.set(previous ? sv.prev : sv.cur);
-  if (previous) { q[0] += p.x - sv.prevX; q[1] += p.y - sv.prevY; }
-  const tuck = sv.k < 1 ? Math.pow(Math.sin(Math.PI * sv.k), 2) : 0;
-  const sx = 1 + 0.025 * tuck, sy = 1 - 0.08 * tuck;
-  q[0] = p.x + (q[0] - p.x) * sx; q[1] = p.y + (q[1] - p.y) * sy;
-  q[2] *= sx; q[4] *= sx; q[3] *= sy; q[5] *= sy;
-  sprQuad(u, q, 1);
+  if(sv.k>=1){gl.uniform1f(u.uBlend,0);sprQuad(u,sv.cur,1);return;}
+  const old=p.poseQuad||(p.poseQuad=new Float32Array(10));old.set(sv.prev);
+  old[0]+=p.x-sv.prevX;old[1]+=p.y-sv.prevY;
+  const setPose=(prefix,q)=>{
+    gl.uniform2f(u[prefix+'O'],q[0],q[1]);gl.uniform2f(u[prefix+'X'],q[2],q[3]);gl.uniform2f(u[prefix+'Y'],q[4],q[5]);gl.uniform4f(u[prefix+'UV'],q[6],q[7],q[8],q[9]);
+  };
+  setPose('uOld',old);setPose('uNew',sv.cur);
+  gl.uniform1f(u.uBlend,1);gl.uniform1f(u.uMix,sv.k*sv.k*(3-2*sv.k));
+  const corners=[];
+  for(const q of [old,sv.cur])for(const [a,b] of [[0,0],[1,0],[0,1],[1,1]])corners.push([q[0]+q[2]*a+q[4]*b,q[1]+q[3]*a+q[5]*b]);
+  const x=Math.min(...corners.map(p=>p[0])),y=Math.min(...corners.map(p=>p[1]));
+  const w=Math.max(...corners.map(p=>p[0]))-x,h=Math.max(...corners.map(p=>p[1]))-y;
+  sprQuad(u,[x,y,w,0,0,h,0,0,1,1],1);
+  gl.uniform1f(u.uBlend,0);
 }
 
 // ─── Panda behaviour ────────────────────────────────────────────────────────
-let calmOn = LW.calm, calmT = 0, calmFade = calmOn ? 1 : 0, calmLean = 0, breathTemp = 0;
-function breath(t) { const c = t % 10; return c < 4 ? 0.5 - 0.5 * Math.cos((c / 4) * Math.PI) : 0.5 + 0.5 * Math.cos(((c - 4) / 6) * Math.PI); }
+let calmOn = LW.calm, calmFade = calmOn ? 1 : 0, calmLean = 0, breathTemp = 0, calmStill = 0;
+let calmBr = { phase: 'in', k: 0, level: 0 };   // LW.breathState on the guide's clock (lw.js draws the guide)
 // pandas stay out of the right ~28% of the screen (macOS widgets live there)
 const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * 0.72 - PS * 36;   // centre limit ≈ right edge at 72%
 function setState(p, name, data) {
@@ -1626,7 +1671,7 @@ ST.walk = (p, dt, t) => {
   const st = p.st, S = p.S;
   const dx = st.tx - p.x;
   if (Math.abs(dx) > 2 && Math.sign(dx) !== p.dir) p.dir = Math.sign(dx);
-  const turning = Math.abs(p.fx - p.dir) > 0.25;
+  const turning = Math.abs(p.fx - p.dir) > 0.25 || LW.petSeqBusy(p);   // (or still getting up: drawn frames)
   let moving = 0;
   if (!turning) {
     if (Math.abs(dx) > 1.5) {
@@ -1717,7 +1762,7 @@ ST.shelter = (p, dt, t) => {
 };
 ST.calm = (p, dt, t) => {
   if (!calmOn && breathTemp <= 0 && p.st.t > 1) { setState(p, 'idle', { dur: rand(1, 3), blend: 1.2 }); }
-  return poseLie(p, t, { breath: breath(calmT), eyes: 0 });
+  return poseLie(p, t, { breath: calmBr.level, eyes: 0 });
 };
 ST.bumpHit = (p, dt, t) => {
   const mom = pandas[0];
@@ -2388,17 +2433,6 @@ function drawOverlayInner(c, dt, t, wantFF) {
     mark(0, ay - H * 0.2, W, ay + 4);
     drawBubble(c, b.text, ax, ay, a, t);
   }
-  // breathing guide
-  if (calmFade > 0.01) {
-    const within = calmT % 10 < 4 ? (calmT % 10) / 4 : ((calmT % 10) - 4) / 6;
-    const phase = calmT % 10 < 4 ? 'breathe in' : 'breathe out';
-    const fs = Math.round(clamp(H * 0.026, 16, 40));
-    c.font = `italic 300 ${fs}px ui-serif, "New York", Georgia, serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = `rgba(250,246,236,${0.5 * calmFade * Math.sin(Math.PI * within)})`;
-    c.shadowColor = 'rgba(0,0,0,0.25)'; c.shadowBlur = 10;
-    c.fillText(phase, W * 0.46, yH * 0.62); c.shadowBlur = 0;
-    mark(W * 0.46 - fs * 8, yH * 0.62 - fs * 1.5, W * 0.46 + fs * 8, yH * 0.62 + fs * 1.5);
-  }
   // "you touched grass ✓"
   if (caption.t >= 0) {
     caption.t += dt;
@@ -2432,7 +2466,7 @@ function drawBubble(c, text, ax, ay, a, t) {
 }
 
 // ─── Audio (only when LW.audio() is running; very quiet) ────────────────────
-let master = null, windN = null, rainN = null, rustleN = null, noiseBuf = null;
+let master = null, windN = null, windW = null, rainN = null, rustleN = null, noiseBuf = null;
 function audioOut() {
   const ctx = LW.audio();
   if (!ctx || ctx.state !== 'running') return null;
@@ -2447,7 +2481,7 @@ function noiseSrc(ctx) {
   if (!noiseBuf) { noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
   const s = ctx.createBufferSource(); s.buffer = noiseBuf; return s;
 }
-function panner(ctx, x) { const p = ctx.createStereoPanner(); p.pan.value = clamp((x / W) * 2 - 1, -0.8, 0.8); p.connect(master); return p; }
+function panner(ctx, x, dest = master) { const p = ctx.createStereoPanner(); p.pan.value = clamp((x / W) * 2 - 1, -0.8, 0.8); p.connect(dest); return p; }
 function loopNoise(ctx, type, f, q) {
   const n = noiseSrc(ctx); n.loop = true;
   const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
@@ -2455,40 +2489,39 @@ function loopNoise(ctx, type, f, q) {
   n.connect(fl); fl.connect(g); g.connect(master); n.start(0, Math.random() * 1.5);
   return { n, fl, g };
 }
-let ambT = 0, nextCricket = 0, nextBird = 0;
+let ambT = 0, nextBird = 0;
+// Wind in the grass: a gentle breeze on the 'ambience' bus, the weather's extra gusts on 'weather'.
+// Rain on 'weather' too. Birdsong / crickets are scheduled by ambDrive below.
 function updateAmbience(dt, t) {
   ambT -= dt; if (ambT > 0) return; ambT = 0.25;
   const ctx = audioOut(); if (!ctx) return;
-  const w = LW.env.weather;
-  if (!windN) windN = loopNoise(ctx, 'bandpass', 520, 0.6);
-  if (!rainN) { rainN = loopNoise(ctx, 'highpass', 1100, 0.5); }
   if (!rustleN) rustleN = loopNoise(ctx, 'highpass', 2600, 0.7);
-  const gNear = gustJS(W * 0.5, 0.6, t % 20000);
-  windN.g.gain.setTargetAtTime((0.006 + 0.03 * Lt.wind * (0.3 + gNear)) * (1 - 0.6 * calmFade), ctx.currentTime, 0.6);
-  windN.fl.frequency.setTargetAtTime(380 + 420 * gNear * Lt.wind, ctx.currentTime, 0.8);
-  rainN.g.gain.setTargetAtTime(w === 'rain' ? 0.035 : w === 'storm' ? 0.06 : 0, ctx.currentTime, 2);
   rustleN.g.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
-  const clearish = w === 'clear' || w === 'cloudy';
-  if (Lt.night > 0.6 && clearish && Lt.snow < 0.2 && t > nextCricket) { nextCricket = t + rand(0.5, 1.6); cricket(ctx); }
-  const h = LW.env.hour;
-  if (Lt.night < 0.3 && clearish && t > nextBird) { nextBird = t + (h > 5.5 && h < 10.5 ? rand(3, 9) : rand(10, 26)); chirp(rand(W), rand(0.9, 1.3), 2 + Math.floor(rand(4)), 0.6); }
+  if (!windN) return;
+  const gNear = gustJS(W * 0.5, 0.6, t % 20000), calmK = 1 - 0.6 * calmFade - 0.25 * calmStill * calmFade;
+  windN.gain.setTargetAtTime((0.022 + 0.05 * Math.min(Lt.wind, 0.5) * (0.3 + gNear)) * calmK, ctx.currentTime, 0.6);
+  windN.f[0].frequency.setTargetAtTime(380 + 420 * gNear * Math.min(Lt.wind, 0.5), ctx.currentTime, 0.8);
+  if (windW) {
+    windW.gain.setTargetAtTime(0.045 * Math.max(0, Lt.wind - 0.4) * (0.3 + gNear) * calmK, ctx.currentTime, 0.6);
+    windW.f[0].frequency.setTargetAtTime(380 + 420 * gNear * Lt.wind, ctx.currentTime, 0.8);
+  }
 }
 function rustle(x, amt) {
   const ctx = audioOut(); if (!ctx || !rustleN) return;
   const tt = ctx.currentTime;
   rustleN.g.gain.cancelScheduledValues(tt); rustleN.g.gain.setTargetAtTime(0.02 * amt, tt, 0.03); rustleN.g.gain.setTargetAtTime(0, tt + 0.12, 0.12);
 }
-function cricket(ctx) {
-  const t0 = ctx.currentTime, pan = panner(ctx, rand(W)), f = rand(4200, 4800);
+function cricket(ctx, dest = master, t0 = ctx.currentTime, vol = 1) {
+  const pan = panner(ctx, rand(W), dest), f = rand(4200, 4800);
   for (let i = 0; i < 3; i++) {
     const t = t0 + i * 0.055, o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.006, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+    o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.006 * vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
     o.connect(g); g.connect(pan); o.start(t); o.stop(t + 0.05);
   }
 }
-function chirp(x, voice = 1, n = 2, vol = 1) {
+function chirp(x, voice = 1, n = 2, vol = 1, dest = master) {
   const ctx = audioOut(); if (!ctx) return;
-  const t0 = ctx.currentTime + 0.02, pan = panner(ctx, x);
+  const t0 = ctx.currentTime + 0.02, pan = panner(ctx, x, dest);
   for (let i = 0; i < n; i++) {
     const t = t0 + i * rand(0.09, 0.16), o = ctx.createOscillator(), g = ctx.createGain(), f = rand(2600, 3600) * voice;
     o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * rand(1.25, 1.5), t + 0.04); o.frequency.exponentialRampToValueAtTime(f * 0.9, t + 0.08);
@@ -2532,17 +2565,110 @@ function chime() {
   });
 }
 function thunder() {
-  const ctx = audioOut(); if (!ctx) return;
+  const ctx = audioOut(), wx = ctx && LW.bus('weather'); if (!wx) return;
   const t = ctx.currentTime + rand(0.6, 2.0), n = noiseSrc(ctx), lp = ctx.createBiquadFilter(), g = ctx.createGain();
   n.loop = true; lp.type = 'lowpass'; lp.frequency.value = 130;
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.28, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
-  n.connect(lp); lp.connect(g); g.connect(master); n.start(t); n.stop(t + 4.3);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.2);
+  n.connect(lp); lp.connect(g); g.connect(wx); n.start(t); n.stop(t + 4.3);
 }
+
+// ─── Breath clock: same zero as lw.js's on-screen guide ─────────────────────
+// The guide restarts its clock when calm turns on (unless it was still fading out, ~3s), so mirror it.
+const BR = { t0: performance.now() / 1000, off: -1e9 };
+LW.on('calm', (on) => { const n = performance.now() / 1000; if (on) { if (n - BR.off > 3) BR.t0 = n; } else BR.off = n; });
+function breathNow(ahead = 0) { return LW.breathState(performance.now() / 1000 - BR.t0 + ahead); }
+
+// ─── Ambience bed (procedural, quiet) ───────────────────────────────────────
+// Continuous background on LW.bus('ambience'); weather layers on LW.bus('weather').
+// Cheap: a few looped noise buffers through filters + sparse events scheduled 4×/s.
+const AMB = { on: false, out: null, wx: null, bufs: {} };
+function ambNoise(ctx, color) {
+  if (AMB.bufs[color]) return AMB.bufs[color];
+  const n = ctx.sampleRate * 4, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+  let l = 0, b0 = 0, b1 = 0, b2 = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.random() * 2 - 1;
+    if (color === 'brown') { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; }
+    else if (color === 'pink') { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.11; }
+    else d[i] = w * 0.5;
+  }
+  const f = Math.floor(ctx.sampleRate * 0.05);   // crossfade the loop seam
+  for (let i = 0; i < f; i++) { const k = i / f; d[n - f + i] = d[n - f + i] * (1 - k) + d[i] * k; }
+  return (AMB.bufs[color] = b);
+}
+function ambFilt(ctx, type, f, q = 0.7) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; }
+function ambLoop(ctx, color, dest, gain, ...filters) {   // looping noise → filters → gain → dest
+  const s = ctx.createBufferSource(), g = ctx.createGain();
+  s.buffer = ambNoise(ctx, color); s.loop = true; g.gain.value = gain;
+  let n = s; for (const f of filters) { n.connect(f); n = f; }
+  n.connect(g); g.connect(dest); s.start(0, Math.random() * 3.5);
+  g.f = filters; return g;
+}
+function ambLfo(ctx, rate, depth, param) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); return o; }
+function ambPan(ctx, dest, p = Math.random() * 1.6 - 0.8) { const s = ctx.createStereoPanner(); s.pan.value = p; s.connect(dest); return s; }
+function ambTone(ctx, dest, at, f0, f1, dur, amp, type = 'sine') {   // one enveloped pitch sweep
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, at); o.frequency.exponentialRampToValueAtTime(f1, at + dur);
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(amp, at + Math.min(0.02, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g); g.connect(dest); o.start(at); o.stop(at + dur + 0.02);
+}
+function ambBurst(ctx, dest, at, dur, f, q, amp, type = 'bandpass') {   // one filtered noise event
+  const s = ctx.createBufferSource(), b = ambFilt(ctx, type, f, q), g = ctx.createGain();
+  s.buffer = ambNoise(ctx, 'white');
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(amp, at + Math.min(0.01, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  s.connect(b); b.connect(g); g.connect(dest); s.start(at, Math.random() * 3, dur + 0.05);
+}
+function ambBird(ctx, dest, at, amp = 0.007) {   // a short, soft phrase of 2–5 notes
+  const pan = ambPan(ctx, dest), n = 2 + Math.floor(Math.random() * 4), base = 2300 + Math.random() * 1900;
+  for (let i = 0; i < n; i++) {
+    const f = base * (0.85 + Math.random() * 0.35), d = 0.05 + Math.random() * 0.08;
+    ambTone(ctx, pan, at, f, f * (Math.random() < 0.55 ? 1.3 : 0.78), d, amp * (0.6 + Math.random() * 0.4));
+    at += d + 0.03 + Math.random() * 0.09;
+  }
+}
+function ambCricket(ctx, dest, at, amp = 0.003) {   // three quick pulses
+  const pan = ambPan(ctx, dest), f = 4100 + Math.random() * 800;
+  for (let i = 0; i < 3; i++) ambTone(ctx, pan, at + i * 0.055, f, f * 0.99, 0.04, amp);
+}
+function ambFrog(ctx, dest, at, amp = 0.012) {   // distant two-part croak
+  const pan = ambPan(ctx, dest), lp = ambFilt(ctx, 'bandpass', 520, 2.2); lp.connect(pan);
+  for (const off of [0, 0.19]) ambTone(ctx, lp, at + off, 140, 108, 0.12, amp, 'sawtooth');
+}
+// Build once the shared AudioContext is running (after the first click; the host may start it sooner).
+function ambDrive(build, tick) {
+  setInterval(() => {
+    if (LW.muted) return;
+    const ctx = LW.isHost ? LW.audio() : LW._ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    if (!AMB.on) {
+      const bus = LW.bus('ambience'); if (!bus) return;
+      AMB.on = true; AMB.wx = LW.bus('weather');
+      AMB.out = ctx.createGain(); AMB.out.gain.value = 0; AMB.out.connect(bus);
+      AMB.out.gain.setTargetAtTime(1, ctx.currentTime, 2.5);   // slow fade-in
+      try { build(ctx); } catch (e) { console.error(e); }
+    }
+    try { tick(ctx, ctx.currentTime + 0.05); } catch (e) { console.error(e); }
+  }, 250);
+}
+
+
+// Meadow bed: breeze in the grass, birdsong by day, crickets at night; rain + storm gusts on the weather bus.
+ambDrive((ctx) => {
+  windN = ambLoop(ctx, 'white', AMB.out, 0, ambFilt(ctx, 'bandpass', 520, 0.6));
+  const leaves = ambLoop(ctx, 'pink', AMB.out, 0.03, ambFilt(ctx, 'highpass', 1800), ambFilt(ctx, 'lowpass', 5000));   // far-off leaf hiss
+  ambLfo(ctx, 0.06, 0.018, leaves.gain);
+  if (AMB.wx) { windW = ambLoop(ctx, 'white', AMB.wx, 0, ambFilt(ctx, 'bandpass', 520, 0.6)); rainN = ambLoop(ctx, 'white', AMB.wx, 0, ambFilt(ctx, 'highpass', 1100, 0.5)); }
+}, (ctx, at) => {
+  const w = LW.env.weather, clearish = w === 'clear' || w === 'cloudy', h = LW.env.hour, t = performance.now() / 1000;
+  if (rainN) rainN.gain.setTargetAtTime(w === 'rain' ? 0.016 : w === 'storm' ? 0.027 : 0, ctx.currentTime, 2);
+  if (Lt.night > 0.6 && clearish && Lt.snow < 0.2 && Math.random() < 0.3) cricket(ctx, AMB.out, at + Math.random() * 0.2, 0.45);   // (master was ×0.45)
+  if (Lt.night < 0.3 && clearish && t > nextBird) { nextBird = t + (h > 5.5 && h < 10.5 ? rand(3, 9) : rand(10, 26)); chirp(rand(W), rand(0.9, 1.3), 2 + Math.floor(rand(4)), 0.27, AMB.out); }
+});
 
 // ─── Wellbeing ──────────────────────────────────────────────────────────────
 LW.on('calm', (on) => {
   calmOn = on; lastInput = performance.now() / 1000;
-  if (on) { calmT = 0; for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.4 }); } }
+  if (on) { for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.4 }); } }
 });
 LW.on('reminder', (r) => {
   const t = performance.now() / 1000; lastInput = t;
@@ -2563,7 +2689,7 @@ LW.on('reminder', (r) => {
     const p = pandas[0];
     showBubble(r.text || 'roll your shoulders, unclench your jaw', () => [p.hit ? p.hit.hx : p.x, p.hit ? p.hit.hy - p.hit.hr : p.y - 100], 12);
   } else {
-    breathTemp = 14; calmT = 0;
+    breathTemp = 14; if (!LW.calm) BR.t0 = performance.now() / 1000;   // no on-screen guide here: start a fresh breath
     for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.2 }); }
     showBubble(r.text || 'breathe in… and out', () => [W * 0.46, yH * 0.62 + 60], 12);
   }
@@ -2728,7 +2854,7 @@ function render(t) {
   gl.useProgram(postP.p); gl.bindVertexArray(emptyVao); u = postP.u;
   gl.uniform2f(u.uRes, glc.width, glc.height); gl.uniform2f(u.uView, W, H); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uH, H);
   gl.uniform1f(u.uHor, yH); gl.uniform1f(u.uFog, Lt.fog); gl.uniform1f(u.uMist, Lt.mist * 0.8); gl.uniform1f(u.uFlash, Lt.flash);
-  gl.uniform1f(u.uVig, 0.32 + Lt.night * 0.15); gl.uniform1f(u.uDim, calmFade * 0.1);
+  gl.uniform1f(u.uVig, 0.32 + Lt.night * 0.15); gl.uniform1f(u.uDim, calmFade * (0.14 - 0.08 * calmBr.level));   // the meadow brightens as the lungs fill
   gl.uniform3fv(u.uFogC, Lt.haze.map((v, i) => lerp(v, Lt.ambCol[i] * Lt.amb, 0.3)));
   if (dbg.post) gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.disable(gl.BLEND);
@@ -2758,8 +2884,11 @@ function frame() {
   stepGusts(dt);
   calmFade = approach(calmFade, calmOn || breathTemp > 0 ? 1 : 0, dt / 2.5);
   if (breathTemp > 0) breathTemp -= dt;
-  if (calmOn || calmFade > 0.01 || breathTemp > 0) calmT += dt;
-  calmLean = calmFade * 0.22 * (breath(calmT) - 0.5);
+  if (calmOn || calmFade > 0.01 || breathTemp > 0) {
+    calmBr = breathNow();
+    calmStill = approach(calmStill, calmBr.phase === 'hold' || calmBr.phase === 'rest' ? 1 : 0, dt * 1.5);
+  } else calmStill = 0;
+  calmLean = calmFade * 0.22 * (calmBr.level - 0.5);   // the whole meadow leans with the breath
   if (basin.flowT > 0) basin.flowT -= dt; else basin.flow = approach(basin.flow, 0, dt * 0.4);
   for (let i = basin.ripples.length - 1; i >= 0; i--) { basin.ripples[i].t += dt; if (basin.ripples[i].t > 1.6) basin.ripples.splice(i, 1); }
   if (basin.flow > 0.3 && Math.random() < dt * 3) basin.ripples.push({ x: -0.55, t: 0 });
@@ -2828,7 +2957,7 @@ LW.on('focus', (on) => { if (on) prev = performance.now() / 1000; });
 // ─── Dev ────────────────────────────────────────────────────────────────────
 if (!LW.isHost) {
   const hud = document.getElementById('hud');
-  const show = () => { hud.textContent = `${LW.env.weather} · ${LW.env.hour.toFixed(1)}h${LW.calm ? ' · calm' : ''}${LW.muted ? ' · muted' : ''}   [w t r b m]`; hud.style.opacity = 0.8; clearTimeout(show.t); show.t = setTimeout(() => (hud.style.opacity = 0), 2500); };
+  const show = () => { hud.textContent = `${LW.env.weather} · ${(LW.env.clockHour??LW.env.hour).toFixed(1)}h${LW.calm ? ' · calm' : ''}${LW.muted ? ' · muted' : ''}   [w t r b m]`; hud.style.opacity = 0.8; clearTimeout(show.t); show.t = setTimeout(() => (hud.style.opacity = 0), 2500); };
   LW.on('env', show); LW.on('calm', show); LW.on('mute', show);
 }
 function selfTest(secs = 60, act) {
@@ -2888,6 +3017,8 @@ window.__grass = {
   clockHeads() { const t = performance.now() / 1000; return clocks.map((f) => [...flowerHead(f, t).map(Math.round), f.ready, +f.s.toFixed(2)]); },
   snap() { snapLight = true; stepLight(0); },
   swoop(i = 0) { kbSwoop(kiteBirds[i]); },
+  calm() { return { br: calmBr, guide: breathNow(), lean: calmLean, still: calmStill, fade: calmFade }; },
+  amb: AMB,
   env(patch) { LW.setEnv(patch); snapLight = true; stepLight(0); },
   arriveBird(i, kind) { const b = birds[i]; const t = performance.now() / 1000 % 20000; birdArrive(b, kind === 'panda' ? { kind: 'panda', panda: pandas[0] } : kind === 'stalk' ? { kind: 'stalk', stalk: frontStalks[0], f: stalkFracAtY(frontStalks[0], H * 0.38) } : { kind: 'ground', x: W * 0.55, s: 0.7 }, t); },
 };

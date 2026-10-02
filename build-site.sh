@@ -11,7 +11,7 @@ DST=site/scenes
 rm -rf "$DST"
 mkdir -p "$DST"
 setopt null_glob
-for f in $SRC/*.html $SRC/lw.js; do
+for f in $SRC/*.html $SRC/*.js; do
   cp "$f" "$DST/"
   echo "  + ${f:t}"
 done

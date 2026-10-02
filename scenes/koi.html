@@ -14,6 +14,7 @@
 <canvas id="gl"></canvas>
 <canvas id="over"></canvas>
 <div id="hud"></div>
+<script src="astronomy.js"></script>
 <script src="lw.js"></script>
 <script>
 'use strict';
@@ -22,7 +23,7 @@
 //   fish canvas (2D, underwater)  ─┐
 //   surface canvas (2D, pads…)    ─┼─► WebGL composite: ripple sim → refraction,
 //   ripple sim (GPU wave eq.)     ─┘   caustics, shadows, sky reflection, glints
-//   overlay canvas (2D, emissive: text, fireflies, breath ring, snow)
+//   overlay canvas (2D, emissive: text, fireflies, breath glow, snow)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TAU = Math.PI * 2;
@@ -614,30 +615,126 @@ function chime() { // soft reminder tone — a small bell over water
   });
 }
 function thunder() {
-  const ctx = audioOut(); if (!ctx) return;
+  const ctx = audioOut(), wx = ctx && LW.bus('weather'); if (!wx) return;
   const t = ctx.currentTime + rand(0.6, 2.2);
   const n = noise(ctx), lp = ctx.createBiquadFilter(), g = ctx.createGain();
   lp.type = 'lowpass'; lp.frequency.value = 140;
   n.loop = true;
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
-  n.connect(lp); lp.connect(g); g.connect(master); n.start(t); n.stop(t + 4.6);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.5);
+  n.connect(lp); lp.connect(g); g.connect(wx); n.start(t); n.stop(t + 4.6);
 }
 function updateRainAudio() {
   const ctx = audioOut();
   const w = LW.env.weather;
-  const target = (w === 'rain' ? 0.05 : w === 'storm' ? 0.09 : 0) * (0.5 + LW.env.intensity * 0.6);
+  const target = (w === 'rain' ? 0.028 : w === 'storm' ? 0.05 : 0) * (0.5 + LW.env.intensity * 0.6);   // (was via master ×0.55)
   if (!ctx) return;
   if (!rain && target > 0) {
     const n = noise(ctx); n.loop = true;
     const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
     const g = ctx.createGain(); g.gain.value = 0;
-    n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(master); n.start();
+    const wx = LW.bus('weather'); if (!wx) return;
+    n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(wx); n.start();
     rain = { n, g };
   }
   if (rain) rain.g.gain.setTargetAtTime(target, ctx.currentTime, 1.5);
 }
 LW.on('env', updateRainAudio);
+
+// ─── Breath clock: same zero as lw.js's on-screen guide ─────────────────────
+// The guide restarts its clock when calm turns on (unless it was still fading out, ~3s), so mirror it.
+const BR = { t0: performance.now() / 1000, off: -1e9 };
+LW.on('calm', (on) => { const n = performance.now() / 1000; if (on) { if (n - BR.off > 3) BR.t0 = n; } else BR.off = n; });
+function breathNow(ahead = 0) { return LW.breathState(performance.now() / 1000 - BR.t0 + ahead); }
+
+// ─── Ambience bed (procedural, quiet) ───────────────────────────────────────
+// Continuous background on LW.bus('ambience'); weather layers on LW.bus('weather').
+// Cheap: a few looped noise buffers through filters + sparse events scheduled 4×/s.
+const AMB = { on: false, out: null, wx: null, bufs: {} };
+function ambNoise(ctx, color) {
+  if (AMB.bufs[color]) return AMB.bufs[color];
+  const n = ctx.sampleRate * 4, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+  let l = 0, b0 = 0, b1 = 0, b2 = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.random() * 2 - 1;
+    if (color === 'brown') { l = (l + 0.02 * w) / 1.02; d[i] = l * 3.5; }
+    else if (color === 'pink') { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.11; }
+    else d[i] = w * 0.5;
+  }
+  const f = Math.floor(ctx.sampleRate * 0.05);   // crossfade the loop seam
+  for (let i = 0; i < f; i++) { const k = i / f; d[n - f + i] = d[n - f + i] * (1 - k) + d[i] * k; }
+  return (AMB.bufs[color] = b);
+}
+function ambFilt(ctx, type, f, q = 0.7) { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; }
+function ambLoop(ctx, color, dest, gain, ...filters) {   // looping noise → filters → gain → dest
+  const s = ctx.createBufferSource(), g = ctx.createGain();
+  s.buffer = ambNoise(ctx, color); s.loop = true; g.gain.value = gain;
+  let n = s; for (const f of filters) { n.connect(f); n = f; }
+  n.connect(g); g.connect(dest); s.start(0, Math.random() * 3.5);
+  g.f = filters; return g;
+}
+function ambLfo(ctx, rate, depth, param) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); return o; }
+function ambPan(ctx, dest, p = Math.random() * 1.6 - 0.8) { const s = ctx.createStereoPanner(); s.pan.value = p; s.connect(dest); return s; }
+function ambTone(ctx, dest, at, f0, f1, dur, amp, type = 'sine') {   // one enveloped pitch sweep
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, at); o.frequency.exponentialRampToValueAtTime(f1, at + dur);
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(amp, at + Math.min(0.02, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g); g.connect(dest); o.start(at); o.stop(at + dur + 0.02);
+}
+function ambBurst(ctx, dest, at, dur, f, q, amp, type = 'bandpass') {   // one filtered noise event
+  const s = ctx.createBufferSource(), b = ambFilt(ctx, type, f, q), g = ctx.createGain();
+  s.buffer = ambNoise(ctx, 'white');
+  g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(amp, at + Math.min(0.01, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  s.connect(b); b.connect(g); g.connect(dest); s.start(at, Math.random() * 3, dur + 0.05);
+}
+function ambBird(ctx, dest, at, amp = 0.007) {   // a short, soft phrase of 2–5 notes
+  const pan = ambPan(ctx, dest), n = 2 + Math.floor(Math.random() * 4), base = 2300 + Math.random() * 1900;
+  for (let i = 0; i < n; i++) {
+    const f = base * (0.85 + Math.random() * 0.35), d = 0.05 + Math.random() * 0.08;
+    ambTone(ctx, pan, at, f, f * (Math.random() < 0.55 ? 1.3 : 0.78), d, amp * (0.6 + Math.random() * 0.4));
+    at += d + 0.03 + Math.random() * 0.09;
+  }
+}
+function ambCricket(ctx, dest, at, amp = 0.003) {   // three quick pulses
+  const pan = ambPan(ctx, dest), f = 4100 + Math.random() * 800;
+  for (let i = 0; i < 3; i++) ambTone(ctx, pan, at + i * 0.055, f, f * 0.99, 0.04, amp);
+}
+function ambFrog(ctx, dest, at, amp = 0.012) {   // distant two-part croak
+  const pan = ambPan(ctx, dest), lp = ambFilt(ctx, 'bandpass', 520, 2.2); lp.connect(pan);
+  for (const off of [0, 0.19]) ambTone(ctx, lp, at + off, 140, 108, 0.12, amp, 'sawtooth');
+}
+// Build once the shared AudioContext is running (after the first click; the host may start it sooner).
+function ambDrive(build, tick) {
+  setInterval(() => {
+    if (LW.muted) return;
+    const ctx = LW.isHost ? LW.audio() : LW._ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    if (!AMB.on) {
+      const bus = LW.bus('ambience'); if (!bus) return;
+      AMB.on = true; AMB.wx = LW.bus('weather');
+      AMB.out = ctx.createGain(); AMB.out.gain.value = 0; AMB.out.connect(bus);
+      AMB.out.gain.setTargetAtTime(1, ctx.currentTime, 2.5);   // slow fade-in
+      try { build(ctx); } catch (e) { console.error(e); }
+    }
+    try { tick(ctx, ctx.currentTime + 0.05); } catch (e) { console.error(e); }
+  }, 250);
+}
+
+// Pond bed: water lapping at the stones + a thin trickle; birds by day, crickets (and the odd frog) at night.
+ambDrive((ctx) => {
+  const lap = ambLoop(ctx, 'pink', AMB.out, 0.09, ambFilt(ctx, 'bandpass', 480, 0.9), ambFilt(ctx, 'lowpass', 1400));
+  ambLfo(ctx, 0.13, 180, lap.f[0].frequency); ambLfo(ctx, 0.085, 0.04, lap.gain);
+  const trickle = ambLoop(ctx, 'white', AMB.out, 0.008, ambFilt(ctx, 'bandpass', 2600, 1.6));
+  ambLfo(ctx, 3.1, 800, trickle.f[0].frequency); ambLfo(ctx, 1.7, 450, trickle.f[0].frequency);
+  AMB.trickle = trickle;
+  updateRainAudio();
+}, (ctx, at) => {
+  const w = LW.env.weather, dry = w === 'clear' || w === 'cloudy', wet = w === 'rain' || w === 'storm';
+  if (Math.random() < 0.12) ambTone(ctx, ambPan(ctx, AMB.out), at + Math.random() * 0.2, rand(1300, 1900), rand(2000, 2600), 0.05, 0.0035);   // drip into the pond
+  if (L.night < 0.4 && dry && Math.random() < 0.05) ambBird(ctx, AMB.out, at, 0.006);
+  if (L.night > 0.6 && !wet && w !== 'snow') { if (Math.random() < 0.55) ambCricket(ctx, AMB.out, at + Math.random() * 0.2, 0.0028); if (Math.random() < 0.3) ambCricket(ctx, AMB.out, at + 0.1 + Math.random() * 0.15, 0.0018); }
+  if ((L.night > 0.6 || wet) && w !== 'snow' && Math.random() < 0.006) ambFrog(ctx, AMB.out, at, 0.008);
+});
 
 // ─── Koi ────────────────────────────────────────────────────────────────────
 const C = {
@@ -815,8 +912,9 @@ LW.on('up', () => {
 });
 
 // Wellbeing state.
-let calm = LW.calm, calmT = 0, calmFade = calm ? 1 : 0;
-LW.on('calm', (on) => { calm = on; calmT = 0; lastInput = performance.now() / 1000; });
+let calm = LW.calm, calmFade = calm ? 1 : 0, calmStill = 0, breathPh = '';
+let br = { phase: 'in', k: 0, level: 0 }, brLead = 0;   // LW.breathState on the guide's clock, refreshed each frame
+LW.on('calm', (on) => { calm = on; lastInput = performance.now() / 1000; });
 let reminder = null;
 LW.on('reminder', (r) => {
   reminder = { ...r, t: 0, x: W * 0.5, y: H * 0.78 };
@@ -826,16 +924,12 @@ LW.on('reminder', (r) => {
   lastInput = performance.now() / 1000;
 });
 let bloom = null;
-function calmCenter() { return [W * 0.46, H * 0.56]; }
-function breath(t) { // 0..1, 4s in / 6s out
-  const c = t % 10;
-  return c < 4 ? 0.5 - 0.5 * Math.cos((c / 4) * Math.PI) : 0.5 + 0.5 * Math.cos(((c - 4) / 6) * Math.PI);
-}
+function calmCenter() { return [W * 0.36, H * 0.46]; }   // lw.js draws the breathing guide here
 
 function updateFish(dt, t) {
   const calmK = calmFade;
   const [ccx, ccy] = calmCenter();
-  const br = breath(calmT);
+  const lv = brLead;   // koi need a moment to swim out, so steer by the breath ~1.8s ahead → the ring lands on the guide's beat
   const cursorStill = cur.inside && t - cur.lastMove < 8 && cur.speed < 260;
   for (const f of fish) {
     let dx = 0, dy = 0;
@@ -908,14 +1002,14 @@ function updateFish(dt, t) {
       dx += ((f.x - fx) / d) * 4; dy += ((f.y - fy) / d) * 4;
       targetSpeed = f.L * 2.4; turn = 5;
     }
-    // Calm mode: slow orbit around the breathing ring, radius following the breath.
+    // Calm mode: slow orbit around the breathing guide, radius swelling with the in-breath.
     if (calmK > 0.01) {
       const rx = f.x - ccx, ry = f.y - ccy, d = Math.hypot(rx, ry) || 1;
-      const R = Math.min(W, H) * (0.2 + 0.09 * br) + f.z * 60;
+      const R = Math.min(W, H) * (0.19 + 0.11 * lv) + f.z * 60;
       const radial = (R - d) / R;
-      const tx = -ry / d + (rx / d) * radial * 2.2, ty = rx / d + (ry / d) * radial * 2.2;
+      const tx = -ry / d + (rx / d) * radial * 3.2, ty = rx / d + (ry / d) * radial * 3.2;
       dx = lerp(dx, tx * 2, calmK * 0.85); dy = lerp(dy, ty * 2, calmK * 0.85);
-      targetSpeed = lerp(targetSpeed, f.cruise * 0.75, calmK);
+      targetSpeed = lerp(targetSpeed, f.cruise * (0.75 - 0.35 * calmStill), calmK);
     }
     // Reminder: gather round the lotus.
     if (reminder && reminder.t < 13) {
@@ -1484,24 +1578,13 @@ function drawOverlay(dt, t) {
   }
   c.globalAlpha = 1;
 
-  // Calm: breathing ring on the water.
+  // Calm: a soft pool of light on the water that fills and empties with the breath (lw.js draws the guide).
   if (calmFade > 0.01) {
-    const [cx, cy] = calmCenter(), b = breath(calmT);
-    const R = Math.min(W, H) * (0.1 + 0.08 * b);
-    const a = calmFade;
-    const g = c.createRadialGradient(cx, cy, R * 0.6, cx, cy, R * 1.25);
-    g.addColorStop(0, 'rgba(230,240,235,0)'); g.addColorStop(0.55, `rgba(230,240,235,${0.07 * a})`); g.addColorStop(1, 'rgba(230,240,235,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R * 1.3, 0, TAU); c.fill();
-    c.strokeStyle = `rgba(235,242,238,${0.22 * a})`; c.lineWidth = 1.2;
-    c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.stroke();
-    const phase = calmT % 10 < 4 ? 'breathe in' : 'breathe out';
-    const within = calmT % 10 < 4 ? (calmT % 10) / 4 : ((calmT % 10) - 4) / 6;
-    c.globalAlpha = a * Math.sin(Math.PI * within) * 0.75;
-    c.fillStyle = '#e8eee9';
-    c.font = `300 ${Math.round(Math.min(W, H) * 0.02)}px ui-serif, "New York", Georgia, serif`;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(phase, cx, cy);
-    c.globalAlpha = 1;
+    const [cx, cy] = calmCenter(), lv = br.level, a = calmFade;
+    const R = Math.min(W, H) * (0.2 + 0.12 * lv);
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, R);
+    g.addColorStop(0, `rgba(236,244,238,${(0.03 + 0.07 * lv) * a})`); g.addColorStop(0.6, `rgba(236,244,238,${(0.012 + 0.03 * lv) * a})`); g.addColorStop(1, 'rgba(236,244,238,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
   }
 
   // Companion name chips riding on the water above their koi.
@@ -1572,9 +1655,12 @@ function tick() {
   stepLight(dt);
   calmFade = lerp(calmFade, calm ? 1 : 0, 1 - Math.exp(-dt * 0.8));
   if (calm || calmFade > 0.01) {
-    const before = calmT % 10; calmT += dt;
-    if (calmFade > 0.3 && calmT % 10 < before) { const [cx, cy] = calmCenter(); addDrop(cx, cy, 30, -1.4); }
-  }
+    br = breathNow(); brLead = breathNow(1.8).level;
+    // hold / rest: the pond goes very still
+    calmStill = lerp(calmStill, br.phase === 'hold' || br.phase === 'rest' ? 1 : 0, 1 - Math.exp(-dt * 1.6));
+    // each in-breath starts with one slow ring spreading from the guide
+    if (br.phase !== breathPh) { if (calmFade > 0.3 && br.phase === 'in') { const [cx, cy] = calmCenter(); addDrop(cx, cy, 30, -1.4); } breathPh = br.phase; }
+  } else { calmStill = 0; breathPh = ''; }
   if (reminder) { reminder.t += dt; if (reminder.t > 17) reminder = null; else if (reminder.t < 12 && Math.random() < dt / 2.5) addDrop(reminder.x + rand(-60, 60), reminder.y - 64 + rand(-20, 20), 5, -0.5); }
   if (bloom) { bloom.t += dt; if (bloom.t > 17) bloom = null; }
 
@@ -1586,7 +1672,7 @@ function tick() {
 
   if (hand.pending && !hand.on && now - hand.downT > 0.45) hand.on = true;
   if (hand.on) { lastInput = now; if (Math.random() < dt * 2.5) addDrop(hand.x + rand(-3, 3), hand.y + rand(-3, 3), 5, -0.3); if (now - hand.downT > 45) hand.on = false; }
-  updateFish(dt * (1 - 0.35 * calmFade), t);
+  updateFish(dt * (1 - 0.35 * calmFade) * (1 - 0.5 * calmStill * calmFade), t);
   updateSurface(dt, t);
   updateFrog(dt, t);
   updateFly(dt, t);
@@ -1635,7 +1721,7 @@ requestAnimationFrame(tick);
 // Dev HUD (browser only).
 if (!LW.isHost) {
   const hud = document.getElementById('hud');
-  const show = () => { hud.textContent = `${LW.env.weather} · ${LW.env.hour.toFixed(1)}h${LW.calm ? ' · calm' : ''}${LW.muted ? ' · muted' : ''}   [w t r b m]`; hud.style.opacity = 0.8; clearTimeout(show.t); show.t = setTimeout(() => (hud.style.opacity = 0), 2500); };
+  const show = () => { hud.textContent = `${LW.env.weather} · ${(LW.env.clockHour??LW.env.hour).toFixed(1)}h${LW.calm ? ' · calm' : ''}${LW.muted ? ' · muted' : ''}   [w t r b m]`; hud.style.opacity = 0.8; clearTimeout(show.t); show.t = setTimeout(() => (hud.style.opacity = 0), 2500); };
   LW.on('env', show); LW.on('calm', show); LW.on('mute', show);
 }
 </script>

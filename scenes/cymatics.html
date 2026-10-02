@@ -1,0 +1,1033 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cymatics</title>
+<!--
+  wallpap scene: Cymatics, a Chladni sand plate driven by whatever is playing.
+
+  Port of instrument 1 from cymatica/ (src/sand.js + gl.js + post.js), trimmed for a wallpaper:
+  ~83k GPU sand grains (288², vs 262k in cymatica). Each grain hops in proportion to the
+  plate's local displacement |u| and drifts down the gradient of u², so sand piles onto the
+  nodal lines (the real mechanism behind Chladni figures). Modes crossfade, so sand flows
+  from one figure into the next.
+
+  Music (no mic, no Web Audio input; everything comes from the host):
+    LW.music.level           → sand agitation
+    'beat' strength + bass   → sand jumps
+    brightness (high vs low) → complexity tier (higher-order modes), applied on the cadence
+    cadence                  → every 16 strong beats (≥ 7s) or 15s, the figure steps to a
+                               neighbour on cymatica's circle-of-fifths layout
+    new track                → its own "home" figure (hash of title), sand jumps, plate shape
+                               (auto: each track picks square or round; the plate morphs)
+    artwork                  → sand + light tint subtly toward the artwork palette
+    paused / nothing playing → autopilot, slower and dimmer. Calm → breathing sand, dim.
+  Never strobes: beats move sand, never the light.
+
+  Layers (no 2D canvas is ever uploaded to WebGL):
+    #bg   canvas2D backdrop, baked at half res on time-of-day / palette change only
+    #gl   WebGL2 plate (square, sized to the plate + a small glow margin, render res capped)
+    #cap  canvas2D caption band under the plate (title/artist, figure, reminders), redrawn
+          only while something in it changes
+  Right ~28% of the screen: backdrop only.
+
+  Settings: plate = 'auto' | 'square' | 'round'   (LW.set('plate', …))
+  URL (dev): ?set.side=256 (grain texture side), ?cap=1400 (render-res cap), ?fake=0
+  Dev keys (browser only): n = fake track on/off (lw.js) with generated levels + beats,
+    p = play/pause demo tracks (with artwork), . = next, o = cycle plate, k = kick,
+    s = stretch reminder, r = water reminder (lw.js), b = calm (lw.js), t = +3h (lw.js)
+  Art slots: none (procedural).
+  Debug: window.__cym.bench(120) → ms/frame incl. GPU sync.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07080b; }
+  canvas { position: fixed; display: block; }
+  #bg { left: 0; top: 0; width: 100vw; height: 100vh; }
+  #gl, #cap { pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="gl"></canvas>
+<canvas id="cap"></canvas>
+<script src="lw.js"></script>
+<script>
+'use strict';
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const approach = (v, t, tau, dt) => v + (t - v) * (1 - Math.exp(-dt / Math.max(1e-4, tau)));
+const nowS = () => performance.now() / 1000;
+const qs = new URLSearchParams(location.search);
+const DEV = !LW.isHost;
+const SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
+const SANS = '-apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const SIDE = clamp(+(LW.settings.side || 288) | 0, 128, 512);     // 288² = 82,944 grains
+const CAP = clamp(+(qs.get('cap') || 1100), 512, 2400);            // max internal render px
+
+// =====================================================================
+//  Chladni modes (from cymatica/src/sand.js)
+// =====================================================================
+// Square plate (n, m, ±) ordered around the circle of fifths: harmonically close keys give related figures.
+const SQUARE = [
+  [1, 2, -1], [1, 3, 1], [2, 3, -1], [1, 4, -1], [2, 5, 1], [3, 4, 1],
+  [3, 5, -1], [2, 6, -1], [4, 5, -1], [3, 7, 1], [5, 6, 1], [4, 7, -1],
+];
+const ROUND = [
+  [0, 2], [2, 1], [3, 1], [1, 2], [4, 1], [2, 2],
+  [5, 1], [3, 2], [6, 1], [4, 2], [0, 4], [5, 2],
+];
+function sandMode(pc, tier, round) {
+  const i = (pc * 7) % 12;
+  if (round) { const [n, m] = ROUND[i]; return [n + tier, m + tier, 1]; }
+  const [n, m, s] = SQUARE[i];
+  return [n + tier, m + 2 * tier, s];
+}
+
+// =====================================================================
+//  WebGL2 helpers (from cymatica/src/gl.js)
+// =====================================================================
+const glCv = document.getElementById('gl');
+let gl = null;
+try {
+  gl = glCv.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: true, depth: false, stencil: false, preserveDrawingBuffer: false });
+  if (gl && !gl.getExtension('EXT_color_buffer_float')) { console.warn('cymatics: EXT_color_buffer_float missing'); gl = null; }
+} catch (e) { gl = null; }
+if (gl) gl.bindVertexArray(gl.createVertexArray());
+
+const FULLSCREEN_VS = `#version 300 es
+out vec2 vUv;
+void main() {
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+function makeSetter(info, loc) {
+  const arr = info.size > 1;
+  switch (info.type) {
+    case gl.FLOAT: return arr ? (v) => gl.uniform1fv(loc, v) : (v) => gl.uniform1f(loc, v);
+    case gl.FLOAT_VEC2: return (v) => gl.uniform2fv(loc, v);
+    case gl.FLOAT_VEC3: return (v) => gl.uniform3fv(loc, v);
+    case gl.FLOAT_VEC4: return (v) => gl.uniform4fv(loc, v);
+    case gl.UNSIGNED_INT: return (v) => gl.uniform1ui(loc, v);
+    case gl.INT: case gl.BOOL: case gl.SAMPLER_2D: return arr ? (v) => gl.uniform1iv(loc, v) : (v) => gl.uniform1i(loc, v);
+    default: return () => {};
+  }
+}
+function program(vsSrc, fsSrc) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vsSrc], [gl.FRAGMENT_SHADER, fsSrc]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const setters = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i);
+    setters[info.name.replace(/\[0\]$/, '')] = makeSetter(info, gl.getUniformLocation(p, info.name));
+  }
+  return { use(u = {}) { gl.useProgram(p); for (const k in u) if (setters[k]) setters[k](u[k]); } };
+}
+function target(w, h, { internal = gl.RGBA16F, type = gl.HALF_FLOAT, filter = gl.LINEAR, data = null } = {}) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fbo, w, h, dispose() { gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); } };
+}
+function bindTarget(t) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fbo : null);
+  gl.viewport(0, 0, t ? t.w : gl.drawingBufferWidth, t ? t.h : gl.drawingBufferHeight);
+}
+function bindTex(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
+
+// =====================================================================
+//  Sand simulation + plate (from cymatica/src/sand.js)
+// =====================================================================
+const FIELD = `
+#define PI 3.14159265
+uniform vec4 uModes[4];  // n, m, sign, weight
+uniform float uRound;
+float besselish(float n, float x) {
+  float a = cos(x - n * PI * 0.5 - PI * 0.25) * inversesqrt(max(x, 0.35));
+  return n < 0.5 ? a : a * (1.0 - exp(-x * x / (1.5 * n + 1.0)));
+}
+float modeSquare(vec2 p, vec3 nm) {
+  vec2 s = p * 0.5 + 0.5;
+  return cos(nm.x * PI * s.x) * cos(nm.y * PI * s.y) + nm.z * cos(nm.y * PI * s.x) * cos(nm.x * PI * s.y);
+}
+float modeRound(vec2 p, vec3 nm) {
+  float k = PI * (nm.y + 0.25 + 0.5 * nm.x);
+  return 1.6 * besselish(nm.x, k * length(p)) * cos(nm.x * atan(p.y, p.x));
+}
+float field(vec2 p) {
+  float u = 0.0, ws = 1e-4;
+  for (int i = 0; i < 4; i++) {
+    vec4 M = uModes[i];
+    if (M.w < 0.001) continue;
+    u += M.w * (uRound > 0.5 ? modeRound(p, M.xyz) : modeSquare(p, M.xyz));
+    ws += M.w;
+  }
+  return u / max(ws, 1.0);
+}`;
+
+// Plate outline: a superellipse, n = 2 (disc) … 40 (square, softly rounded corners), so a
+// shape change is a morph rather than a cut.
+const SHAPE = `
+uniform float uN;   // superellipse exponent, computed on the CPU from the shape morph
+float plateR(vec2 p) {
+  float n = uN;
+  vec2 a = abs(p);
+  return pow(pow(a.x, n) + pow(a.y, n), 1.0 / n);
+}`;
+
+const UPDATE_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform float uDt, uAgitate, uDrift, uScatter, uFloor;
+uniform uint uFrame;
+${FIELD}
+out vec4 o;
+uvec3 pcg3d(uvec3 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+vec3 hash3(uvec3 v) { return vec3(pcg3d(v)) * (1.0 / 4294967295.0); }
+void main() {
+  ivec2 ij = ivec2(gl_FragCoord.xy);
+  vec4 s = texelFetch(uState, ij, 0);
+  vec3 r = hash3(uvec3(ij, uFrame));
+  vec2 p = s.xy;
+  if (uScatter > 0.5) {
+    float a = r.x * 6.2831853;
+    p = uRound > 0.5 ? vec2(cos(a), sin(a)) * sqrt(r.y) * 0.98 : r.yz * 1.96 - 0.98;
+    o = vec4(p, s.z, 1.0);
+    return;
+  }
+  const float e = 0.003;
+  float u = field(p);
+  vec2 g = vec2(field(p + vec2(e, 0)) - field(p - vec2(e, 0)),
+                field(p + vec2(0, e)) - field(p - vec2(0, e))) / (2.0 * e);
+  float ang = r.x * 6.2831853;
+  // uFloor: grains jostle a little even on a nodal line, so lines have a sandy width
+  float hop = (abs(u) + uFloor) * uAgitate * (0.35 + r.y);
+  vec2 step = vec2(cos(ang), sin(ang)) * hop - u * g * uDrift;
+  p += step * uDt * 60.0;
+  if (uRound > 0.5) { float L = length(p); if (L > 0.975) p *= 0.975 / L; }
+  else p = clamp(p, -0.975, 0.975);
+  o = vec4(p, s.z, mix(s.w, abs(u), 0.12));
+}`;
+
+const DRAW_VS = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform int uSide;
+uniform float uSize, uK;
+out float vE; out float vR;
+void main() {
+  vec4 s = texelFetch(uState, ivec2(gl_VertexID % uSide, gl_VertexID / uSide), 0);
+  gl_Position = vec4(s.xy * uK, 0.0, 1.0);
+  gl_PointSize = uSize;
+  vE = s.w; vR = s.z;
+}`;
+const DRAW_FS = `#version 300 es
+precision highp float;
+uniform vec3 uHot, uCool;
+uniform float uGain;
+in float vE; in float vR; out vec4 o;
+void main() {
+  vec2 d = gl_PointCoord * 2.0 - 1.0;
+  float a = max(0.0, 1.0 - dot(d, d));
+  float settled = exp(-vE * 5.0);
+  vec3 c = mix(uCool, uHot, settled) * mix(0.25, 1.0, settled) * (0.6 + 0.8 * vR);
+  o = vec4(c * a * uGain, 1.0);
+}`;
+
+// The plate: dark brushed metal lit by a soft overhead box light, a bevel catching the light.
+// Static, so it is rendered into a texture only when the palette or shape changes; alpha = coverage.
+const PLATE_FS = `#version 300 es
+precision highp float;
+uniform vec3 uBase, uLight;
+uniform float uK, uPx, uBrush;
+${SHAPE}
+in vec2 vUv; out vec4 o;
+float h12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+  vec2 p = (vUv * 2.0 - 1.0) / uK;
+  float r = plateR(p);
+  if (r > 1.0 + 3.0 * uPx) { o = vec4(0.0); return; }
+  float L = 1.0 - 0.5 * smoothstep(0.0, 2.3, length(p - vec2(-0.45, 0.6)));
+  float br = h12(vec2(floor((p.y + 1.0) * uBrush), floor(p.x * 2.0 + h12(vec2(floor((p.y + 1.0) * uBrush), 1.0)) * 3.0)));
+  vec3 c = uBase * L * (0.93 + 0.14 * br);
+  float n = uN;
+  vec2 a = abs(p) + 1e-5;
+  vec2 nd = normalize(vec2(pow(a.x, n - 1.0) * sign(p.x), pow(a.y, n - 1.0) * sign(p.y)) + 1e-6);
+  float d = 1.0 - r;
+  float bev = exp(-pow((d - 0.006) / 0.009, 2.0));
+  float lit = 0.5 + 0.5 * dot(nd, normalize(vec2(-0.55, 0.8)));
+  c += uLight * bev * (0.015 + 0.12 * lit * lit);
+  c *= 1.0 - 0.35 * exp(-pow(d / 0.004, 2.0)) * (1.0 - lit);  // the far lip falls into shade
+  float m = 1.0 - smoothstep(1.0 - uPx, 1.0 + uPx, r);
+  o = vec4(c * m, m);
+}`;
+
+// =====================================================================
+//  Post: HDR → dual-filter bloom → ACES (from cymatica/src/post.js), then an
+//  analytic plate mask so the canvas composites over the backdrop with alpha.
+// =====================================================================
+const DOWN_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uThreshold; uniform int uPrefilter;
+in vec2 vUv; out vec4 o;
+vec3 pre(vec3 c) {
+  if (uPrefilter == 0) return c;
+  float b = max(c.r, max(c.g, c.b));
+  float soft = clamp(b - uThreshold + 0.5, 0.0, 1.0);
+  soft = soft * soft * 0.5;
+  return c * max(soft, b - uThreshold) / max(b, 1e-4);
+}
+uniform float uSpread;   // 0.5: classic dual-filter halving; 1.0: 4×4 box (first pass goes straight to 1/4 res)
+void main() {
+  vec2 h = uTexel * uSpread;
+  vec3 c = pre(texture(uSrc, vUv).rgb) * (uPrefilter == 0 ? 4.0 : 0.0);
+  c += pre(texture(uSrc, vUv - h).rgb);
+  c += pre(texture(uSrc, vUv + h).rgb);
+  c += pre(texture(uSrc, vUv + vec2(h.x, -h.y)).rgb);
+  c += pre(texture(uSrc, vUv - vec2(h.x, -h.y)).rgb);
+  o = vec4(c / (uPrefilter == 0 ? 8.0 : 4.0), 1.0);
+}`;
+const UP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel;
+in vec2 vUv; out vec4 o;
+vec3 t(vec2 d) { return texture(uSrc, vUv + d * uTexel).rgb; }
+void main() {
+  vec3 c = t(vec2(-2, 0)) + t(vec2(2, 0)) + t(vec2(0, -2)) + t(vec2(0, 2));
+  c += 2.0 * (t(vec2(-1, -1)) + t(vec2(1, -1)) + t(vec2(-1, 1)) + t(vec2(1, 1)));
+  o = vec4(c / 12.0, 1.0);
+}`;
+const COMP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uScene, uBloom, uPlate;
+uniform float uBloomAmt, uExposure, uGlow;
+in vec2 vUv; out vec4 o;
+vec3 aces(vec3 x) {
+  const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+  vec2 q = vUv * 2.0 - 1.0;
+  vec4 pl = texture(uPlate, vUv);
+  float a = pl.a;
+  float edge = 1.0 - smoothstep(0.80, 0.99, max(abs(q.x), abs(q.y)));
+  vec3 hdr = pl.rgb + texture(uScene, vUv).rgb * a + texture(uBloom, vUv).rgb * (uBloomAmt * mix(edge * uGlow, 1.0, a));
+  vec3 col = pow(aces(hdr * uExposure), vec3(1.0 / 2.2));
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0 * a;      // dither the dark metal
+  float alpha = max(a, max(col.r, max(col.g, col.b)));   // outside the plate: valid premultiplied glow
+  o = vec4(clamp(col, 0.0, 1.0), alpha);
+}`;
+
+const GPU = {};
+function initGL() {
+  GPU.update = program(FULLSCREEN_VS, UPDATE_FS);
+  GPU.draw = program(DRAW_VS, DRAW_FS);
+  GPU.plate = program(FULLSCREEN_VS, PLATE_FS);
+  GPU.down = program(FULLSCREEN_VS, DOWN_FS);
+  GPU.up = program(FULLSCREEN_VS, UP_FS);
+  GPU.comp = program(FULLSCREEN_VS, COMP_FS);
+  const count = SIDE * SIDE, init = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    init[i * 4] = Math.random() * 1.96 - 0.98; init[i * 4 + 1] = Math.random() * 1.96 - 0.98;
+    init[i * 4 + 2] = Math.random(); init[i * 4 + 3] = 1;
+  }
+  const opts = { internal: gl.RGBA32F, type: gl.FLOAT, filter: gl.NEAREST };
+  GPU.state = [target(SIDE, SIDE, { ...opts, data: init }), target(SIDE, SIDE, opts)];
+  GPU.cur = 0; GPU.frame = 0; GPU.size = 0; GPU.scene = null; GPU.mips = [];
+}
+function resizeGL(px) {
+  if (px === GPU.size) return;
+  GPU.size = px;
+  if (GPU.scene) { GPU.scene.dispose(); GPU.plateT.dispose(); }
+  GPU.plateT = target(px, px); GPU.plateKey = '';
+  GPU.mips.forEach((m) => m.dispose());
+  GPU.scene = target(px, px);
+  GPU.mips = [];
+  let s = px >> 2;   // bloom starts at quarter res (glow only; keeps the pyramid cheap)
+  for (let i = 0; i < 4 && s >= 8; i++, s >>= 1) GPU.mips.push(target(s, s));
+}
+
+const sand = {
+  slots: [], key: '', modes: new Float32Array(16), round: false, scatterNext: false,
+  setMode(n, m, s) {
+    const key = `${n},${m},${s}`;
+    if (key === this.key) return;
+    this.key = key;
+    for (const sl of this.slots) sl.target = 0;
+    const ex = this.slots.find((sl) => sl.key === key);
+    if (ex) ex.target = 1; else this.slots.push({ key, n, m, s, w: 0, target: 1 });
+    if (this.slots.length > 4) { this.slots.sort((a, b) => b.target - a.target || b.w - a.w); this.slots.length = 4; }
+  },
+  setRound(round) {
+    if (round === this.round) return;
+    this.round = round; this.key = ''; this.slots = []; this.scatterNext = true;
+  },
+  morphModes(dt, morph) {
+    const k = 1 - Math.exp(-dt / morph);
+    this.slots.forEach((sl) => { sl.w += (sl.target - sl.w) * k; });
+    this.slots = this.slots.filter((sl) => sl.target > 0 || sl.w > 0.003);
+    this.modes.fill(0);
+    this.slots.forEach((sl, i) => this.modes.set([sl.n, sl.m, sl.s, sl.w], i * 4));
+  },
+};
+function simStep(dt, agitate, morph) {
+  const src = GPU.state[GPU.cur], dst = GPU.state[1 - GPU.cur];
+  bindTarget(dst);
+  gl.disable(gl.BLEND);
+  bindTex(0, src.tex);
+  GPU.update.use({
+    uState: 0, uDt: dt, uAgitate: agitate, uDrift: 0.0012 * Math.sqrt(0.8 / Math.max(morph, 0.2)),
+    uFloor: sand.round ? 0.16 : 0.22, uScatter: sand.scatterNext ? 1 : 0, uModes: sand.modes, uRound: sand.round ? 1 : 0, uFrame: GPU.frame++,
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  GPU.cur = 1 - GPU.cur;
+  sand.scatterNext = false;
+}
+
+// =====================================================================
+//  Layout: the plate is the hero in the left/centre; right ~28% stays backdrop
+// =====================================================================
+const K = 0.88;          // plate size / GL canvas size (the rest is glow margin)
+const L = { W: 0, H: 0, dpr: 1, P: 0, cx: 0, cy: 0, C: 0, px: 0 };
+function layout() {
+  const W = innerWidth, H = innerHeight, zone = W * 0.72;
+  L.W = W; L.H = H; L.dpr = Math.min(2, devicePixelRatio || 1);
+  L.P = Math.round(Math.min(H * 0.72, zone * 0.8));
+  L.cx = Math.round(zone * 0.52);
+  L.cy = Math.round(H * 0.465);
+  L.C = Math.round(L.P / K);
+  L.px = Math.min(CAP, Math.round(L.C * L.dpr));
+  glCv.style.width = glCv.style.height = L.C + 'px';
+  glCv.style.left = (L.cx - L.C / 2) + 'px'; glCv.style.top = (L.cy - L.C / 2) + 'px';
+  if (gl) { if (glCv.width !== L.px) { glCv.width = glCv.height = L.px; } resizeGL(L.px); }
+  layoutCaption();
+  bg.dirty = true;
+}
+
+// =====================================================================
+//  Backdrop: a dark studio, a soft light pool on the plate, time-of-day tint
+// =====================================================================
+const bgCv = document.getElementById('bg'), bgx = bgCv.getContext('2d');
+const bg = { dirty: true, at: -1, key: '', noise: null, shadow: null, shadowKey: '' };
+// hour → [base, pool, light] (sRGB 0..255); light tints the plate bevel and sand highlights
+const TOD = [
+  [0,    [6, 7, 12],   [24, 27, 38],  [190, 205, 235]],
+  [5.5,  [7, 7, 12],   [28, 28, 40],  [200, 200, 230]],
+  [7.2,  [13, 10, 12], [50, 38, 40],  [255, 214, 200]],
+  [10,   [12, 12, 13], [46, 45, 46],  [240, 238, 232]],
+  [16.5, [12, 12, 13], [46, 44, 42],  [245, 236, 222]],
+  [18.6, [14, 10, 8],  [56, 39, 28],  [255, 205, 160]],
+  [20.6, [7, 8, 12],   [28, 29, 40],  [205, 210, 235]],
+  [24,   [6, 7, 12],   [24, 27, 38],  [190, 205, 235]],
+];
+function todAt(h) {
+  h = ((h % 24) + 24) % 24;
+  for (let i = 0; i < TOD.length - 1; i++) {
+    const a = TOD[i], b = TOD[i + 1];
+    if (h >= a[0] && h <= b[0]) {
+      const t = (h - a[0]) / (b[0] - a[0]), e = t * t * (3 - 2 * t);
+      return { base: mix3(a[1], b[1], e), pool: mix3(a[2], b[2], e), light: mix3(a[3], b[3], e) };
+    }
+  }
+  return { base: TOD[0][1], pool: TOD[0][2], light: TOD[0][3] };
+}
+function makeNoise() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), d = g.createImageData(128, 128);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0);
+  return c;
+}
+function rgb(c, a = 1) { return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`; }
+function bakeBg() {
+  const s = 0.5, w = Math.max(2, Math.round(L.W * s)), h = Math.max(2, Math.round(L.H * s));
+  if (bgCv.width !== w || bgCv.height !== h) { bgCv.width = w; bgCv.height = h; }
+  const g = bgx, base = V.bgBase, pool = V.bgPool;
+  g.setTransform(s, 0, 0, s, 0, 0);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+  g.fillStyle = rgb(base); g.fillRect(0, 0, L.W, L.H);
+  // light pool: a soft box light overhead, centred a little above the plate
+  const R = L.P * 1.25;
+  let gr = g.createRadialGradient(L.cx, L.cy - L.P * 0.12, 0, L.cx, L.cy - L.P * 0.12, R);
+  gr.addColorStop(0, rgb(pool)); gr.addColorStop(0.45, rgb(mix3(pool, base, 0.45)));
+  gr.addColorStop(1, rgb(base, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, L.W, L.H);
+  // a wide, very faint wash so the room isn't a black void at the edges (right side stays plain)
+  gr = g.createLinearGradient(0, 0, 0, L.H);
+  gr.addColorStop(0, rgb(mix3(base, pool, 0.18))); gr.addColorStop(0.55, rgb(base, 0)); gr.addColorStop(1, 'rgba(0,0,0,0.35)');
+  g.fillStyle = gr; g.fillRect(0, 0, L.W, L.H);
+  // contact shadow under the plate (light from straight above → soft, nearly centred).
+  // shadowBlur is slow, so it is rendered once per layout/shape and reused by every rebake.
+  const skey = w + 'x' + h + '|' + L.cx + ',' + L.cy + ',' + L.P + '|' + (V.shapeShown > 0.5 ? 1 : 0);
+  if (skey !== bg.shadowKey) {
+    bg.shadowKey = skey;
+    const sc = bg.shadow || (bg.shadow = document.createElement('canvas'));
+    sc.width = w; sc.height = h;
+    const sg = sc.getContext('2d');
+    const P = L.P, x0 = L.cx - P / 2, y0 = L.cy - P / 2;
+    sg.setTransform(s, 0, 0, s, 0, 0);
+    sg.shadowColor = 'rgba(0,0,0,0.7)'; sg.shadowBlur = P * 0.05 * s; sg.shadowOffsetX = 20000 * s; sg.shadowOffsetY = P * 0.018 * s;
+    sg.fillStyle = '#000'; sg.beginPath();
+    if (V.shapeShown > 0.5) sg.roundRect(x0 - 20000, y0, P, P, P * 0.04); else sg.arc(L.cx - 20000, L.cy, P / 2, 0, TAU);
+    sg.fill();
+    sg.shadowBlur = P * 0.16 * s; sg.shadowColor = 'rgba(0,0,0,0.45)'; sg.shadowOffsetY = P * 0.045 * s; sg.fill();
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(bg.shadow, 0, 0); g.setTransform(s, 0, 0, s, 0, 0);
+  // fine grain against banding
+  if (!bg.noise) bg.noise = makeNoise();
+  g.globalAlpha = 0.03; g.globalCompositeOperation = 'overlay';
+  g.fillStyle = g.createPattern(bg.noise, 'repeat'); g.fillRect(0, 0, L.W, L.H);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+}
+
+// =====================================================================
+//  Music: now playing, artwork palette, demo tracks, fake levels in dev
+// =====================================================================
+const music = { np: null, key: '', playing: false, ever: false, pal: null, art: null, artKey: '', newT: -99 };
+function hsl2rgb(h, s, l) {
+  const a = s * Math.min(l, 1 - l), f = (n) => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return [f(0) * 255, f(8) * 255, f(4) * 255];
+}
+function rgb2hsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function palFromHash(s) { const h = hash(s) % 360; return { tint: hsl2rgb(h, 0.45, 0.6), acc: hsl2rgb((h + 140) % 360, 0.4, 0.6), dark: hsl2rgb(h, 0.35, 0.14) }; }
+function extractPalette(img) {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 24;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, 24, 24);
+    const d = g.getImageData(0, 0, 24, 24).data;
+    const bins = Array.from({ length: 12 }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
+    let ar = 0, ag = 0, ab = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const [h, s, l] = rgb2hsl(d[i], d[i + 1], d[i + 2]);
+      ar += d[i]; ag += d[i + 1]; ab += d[i + 2];
+      const wgt = s * s * (1 - Math.abs(l - 0.52) * 1.6);
+      if (wgt <= 0) continue;
+      const bn = bins[Math.floor(h / 30) % 12];
+      bn.w += wgt; bn.r += d[i] * wgt; bn.g += d[i + 1] * wgt; bn.b += d[i + 2] * wgt;
+    }
+    const n = d.length / 4, avg = [ar / n, ag / n, ab / n];
+    const order = bins.map((b, i) => ({ ...b, i })).sort((a, b) => b.w - a.w);
+    const norm = (c, L2) => { const [h, s] = rgb2hsl(c[0], c[1], c[2]); return hsl2rgb(h, clamp(s, 0.25, 0.7), L2); };
+    if (order[0].w < 3) return { tint: norm(avg, 0.62), acc: norm(avg, 0.7), dark: avg.map((v) => v * 0.35) };
+    const b0 = order[0], c0 = [b0.r / b0.w, b0.g / b0.w, b0.b / b0.w];
+    const b1 = order.find((b) => b !== b0 && Math.min(Math.abs(b.i - b0.i), 12 - Math.abs(b.i - b0.i)) >= 2 && b.w > b0.w * 0.15) || b0;
+    return { tint: norm(c0, 0.62), acc: norm([b1.r / b1.w, b1.g / b1.w, b1.b / b1.w], 0.66), dark: avg.map((v) => v * 0.35) };
+  } catch (e) { return null; }
+}
+function loadArt(src, key, retry) {
+  music.artKey = src;
+  const img = new Image();
+  if (!retry && /^https?:/i.test(src)) img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    if (music.key !== key) return;
+    music.art = img;
+    const p = extractPalette(img);
+    if (p) music.pal = p;
+    cap.dirty = true;
+  };
+  img.onerror = () => { if (!retry && /^https?:/i.test(src)) loadArt(src, key, true); };
+  img.src = src;
+}
+function onNowPlaying(np) {
+  const prevKey = music.key;
+  music.np = np || null;
+  if (np) {
+    music.ever = true;
+    const key = (np.title || '') + '\n' + (np.artist || '') + '\n' + (np.album || '');
+    if (key !== prevKey) {
+      music.key = key; music.newT = nowS(); music.art = null;
+      music.pal = palFromHash(key);
+      if (!np.artwork) music.artKey = '';
+      onTrack(key);
+    }
+    if (np.artwork && np.artwork !== music.artKey) loadArt(np.artwork, key);
+    music.playing = !!np.playing;
+  } else music.playing = false;
+  cap.dirty = true;
+}
+let demoI = 0;
+const demoArt = [];
+const DEMO = [
+  { title: 'Standing Waves', artist: 'Nodal Lines', album: 'Chladni Sessions', c: ['#1b3a63', '#e8b860', '#0a1428'] },
+  { title: 'Fifths', artist: 'The Resonants', album: 'Circle', c: ['#6b2a40', '#f0a07a', '#220c18'] },
+  { title: 'Brass & Sand', artist: 'Plate Theory', album: 'Eigenmodes', c: ['#2c5644', '#e8dcc0', '#0d1d16'] },
+];
+function demoTrack(i) {
+  const d = DEMO[i % DEMO.length];
+  if (!demoArt[i % DEMO.length]) {
+    const c = document.createElement('canvas'); c.width = c.height = 200;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 200, 200); gr.addColorStop(0, d.c[0]); gr.addColorStop(1, d.c[2]);
+    g.fillStyle = gr; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = d.c[1]; g.beginPath(); g.arc(128, 82, 42, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.85)'; g.font = `italic 18px ${SERIF}`; g.fillText(d.album, 16, 182);
+    demoArt[i % DEMO.length] = c.toDataURL('image/png');
+  }
+  return { title: d.title, artist: d.artist, album: d.album, artwork: demoArt[i % DEMO.length], playing: true, app: 'Music' };
+}
+function media(cmd) {
+  if (LW.isHost) { LW.post({ type: 'media', cmd }); return; }
+  const np = LW.nowPlaying;
+  if (cmd === 'playpause') window.__lw('nowplaying', np ? { ...np, playing: !np.playing } : demoTrack(demoI));
+  else { demoI = (demoI + (cmd === 'next' ? 1 : DEMO.length - 1)) % DEMO.length; window.__lw('nowplaying', demoTrack(demoI)); }
+}
+
+// Dev only: a fake 122 bpm track (intro / build / drop / breakdown) fed through the host's
+// own beat entry point, so everything downstream is the real code path. Pauses itself for
+// 3s whenever someone else (the host, or __lw('beat', …) by hand) feeds frames.
+const FAKE = { on: DEV && qs.get('fake') !== '0', t: 0, lastBeat: -1, mine: -1, extUntil: -1 };
+function fakeMusic(dt, T) {
+  const M = LW.music;
+  if (FAKE.mine >= 0 && M.lastLive !== FAKE.mine && M.lastLive > FAKE.mine) FAKE.extUntil = T + 3;
+  if (!FAKE.on || !music.playing || T < FAKE.extUntil) return;
+  FAKE.t += dt;
+  const beat = FAKE.t * 122 / 60, bi = Math.floor(beat), fr = beat - bi;
+  const bar = Math.floor(bi / 4) % 32, sec = bar < 8 ? 0 : bar < 16 ? 1 : bar < 24 ? 2 : 3;
+  const prog = ((bar % 8) + ((bi % 4) + fr) / 4) / 8;
+  const kickOn = sec !== 3 && !(sec === 1 && prog > 0.92);
+  const env = Math.exp(-fr * 7), wob = 0.06 * Math.sin(FAKE.t * 1.7);
+  const base = [0.3, 0.38 + 0.22 * prog, 0.7, 0.2][sec];
+  const b = clamp(base * 0.85 + (kickOn ? 0.35 * env : 0), 0, 1);
+  const m = clamp([0.3, 0.4, 0.6, 0.32][sec] + wob, 0, 1);
+  const h = clamp([0.15, 0.22 + 0.55 * prog, 0.55, 0.38][sec] + wob, 0, 1);
+  const l = clamp(base * 0.55 + 0.2 * m + 0.15 * h + (kickOn ? 0.12 * env : 0), 0, 1);
+  let k = 0;
+  if (bi !== FAKE.lastBeat) { FAKE.lastBeat = bi; if (kickOn) k = sec === 2 ? 0.85 : 0.55; }
+  window.__lw('beat', { l, b, m, h, k });
+  FAKE.mine = M.lastLive;
+}
+
+// =====================================================================
+//  Director: music → figure, agitation, light
+// =====================================================================
+const S = {
+  pc: 9, tier: 1, tierWant: 1, bright: 0.4, energy: 0.2, pulse: 0, burst: 0,
+  strong: 0, dwell: 0, silentFor: 99, autoT: 0, changes: 0,
+  shapeWant: 0, // 0 square, 1 round (what the music asks for)
+};
+// V: smoothed visual values
+const V = {
+  hot: [1, 0.93, 0.84], cool: [0.32, 0.28, 0.24], plate: [0.03, 0.03, 0.03], light: [1, 1, 1],
+  bgBase: [6, 7, 12], bgPool: [24, 27, 38], expo: 0.9, bgA: 1, shape: 1, shapeShown: 1, fade: 1, gain: 0.3,
+};
+function plateSetting() { const p = LW.settings.plate; return p === 'square' || p === 'round' ? p : 'auto'; }
+function wantRound() {
+  const s = plateSetting();
+  if (s !== 'auto') return s === 'round';
+  return music.key ? ((hash(music.key) >>> 5) & 1) === 1 : false;
+}
+function onTrack(key) {
+  S.pc = hash(key) % 12;            // each song has a home figure
+  S.dwell = 0; S.strong = 0; S.autoT = 0;
+  S.burst = 1;                      // the sand jumps at the new song
+}
+function nextFigure() {
+  const r = Math.random();
+  S.pc = (S.pc + (r < 0.62 ? 7 : r < 0.88 ? 5 : 2)) % 12;   // ±1 step around the circle of fifths, now and then 2
+  S.tier = S.tierWant;
+  S.dwell = 0; S.strong = 0; S.autoT = 0; S.changes++;
+}
+LW.on('beat', (s) => {
+  if (!music.playing || calm.lv > 0.5) return;
+  S.pulse = Math.max(S.pulse, s);
+  if (s >= 0.5) {
+    S.strong++;
+    if (S.tier !== S.tierWant && S.dwell > 5) { S.tier = S.tierWant; S.dwell = 0; S.strong = 0; }
+  }
+});
+
+function direct(dt, T) {
+  const M = LW.music;
+  const playing = music.playing;
+  const sounding = playing && M.level > 0.04;
+  S.silentFor = sounding ? 0 : S.silentFor + dt;
+  const auto = !playing || S.silentFor > 4;
+  const cl = calm.lv;
+
+  // brightness: share of highs vs lows, slowly smoothed → complexity tier with hysteresis
+  const tot = M.bass + M.mid + M.high + 1e-3;
+  const centroid = auto ? 0.4 : (0.5 * M.mid + M.high) / tot;
+  S.bright = approach(S.bright, centroid, 2.5, dt);
+  const raw = clamp((S.bright - 0.3) / 0.22, 0, 1) * 2.6;
+  if (raw > S.tierWant + 1.15) S.tierWant++;
+  else if (raw < S.tierWant - 0.15) S.tierWant--;
+  S.tierWant = clamp(S.tierWant, 0, 2);
+  if (auto || cl > 0.5) S.tierWant = Math.min(S.tierWant, 1);
+
+  // cadence: 16 strong beats (and ≥ 7s), or 15s; autopilot walks slower; calm almost holds still
+  S.dwell += dt;
+  if (cl > 0.5) { if (S.dwell > 45) nextFigure(); }
+  else if (auto) { S.autoT += dt; if (S.autoT > (music.ever ? 16 : 20)) nextFigure(); }
+  else if ((S.strong >= 16 && S.dwell >= 7) || S.dwell >= 15) nextFigure();
+
+  // energy → agitation
+  const breathLv = cl > 0.01 ? calm.br.level : 0;
+  let eT = auto ? (playing ? 0.26 : 0.22) + 0.06 * Math.sin(T / 2.6) : clamp(1.2 * Math.pow(clamp(M.level, 0, 1), 0.75), 0, 1);
+  eT = lerp(eT, 0.08 + 0.22 * breathLv, cl);
+  S.energy = approach(S.energy, eT, eT > S.energy ? 0.08 : 0.45, dt);
+  S.pulse *= Math.exp(-dt / 0.16);
+  S.burst *= Math.exp(-dt / 0.5);
+  const bass = auto ? 0.4 : Math.max(0.35, M.bass);
+  const agitate = 0.0055 + 0.026 * Math.pow(S.energy, 1.5) + (0.03 * S.pulse * bass + 0.05 * S.burst) * (1 - cl);
+  const morph = lerp(auto ? 1.6 : 0.8, 2.6, cl);
+
+  // light: steady while playing (never on the beat); dimmer when paused/idle/calm
+  const expoT = (playing ? 1.0 : music.ever ? 0.78 : 0.86) * lerp(1, 0.5 + 0.14 * breathLv, cl) * (0.97 + 0.06 * S.energy);
+  V.expo = approach(V.expo, expoT, 1.4, dt);
+  V.bgA = approach(V.bgA, lerp(playing ? 1 : 0.88, 0.62 + 0.08 * breathLv, cl), 1.4, dt);
+  return { auto, agitate, morph };
+}
+
+// palette targets: time of day + a subtle pull toward the artwork
+function updatePalette(dt) {
+  const tod = todAt(LW.env.hour || 0);
+  const w = music.np ? (music.playing ? 1 : 0.6) : 0;
+  const ap = music.pal;
+  let hot = [1, 0.93, 0.84], cool = [0.32, 0.28, 0.24];
+  let pool = tod.pool, base = tod.base, light = toLin(tod.light);
+  if (ap && w > 0) {
+    const t = toLin(ap.tint), mx = Math.max(t[0], t[1], t[2], 1e-3);
+    const tn = t.map((v) => v / mx);
+    hot = mix3(hot, mix3(tn, [1, 1, 1], 0.45), 0.4 * w);
+    const a = toLin(ap.acc), am = Math.max(a[0], a[1], a[2], 1e-3);
+    cool = mix3(cool, a.map((v) => (v / am) * 0.34), 0.5 * w);
+    const poolLum = (pool[0] + pool[1] + pool[2]) / 3, tl = (ap.tint[0] + ap.tint[1] + ap.tint[2]) / 3 || 1;
+    pool = mix3(pool, ap.tint.map((v) => v * poolLum / tl), 0.32 * w);
+    light = mix3(light, mix3(tn, [1, 1, 1], 0.5), 0.3 * w);
+  }
+  const k = LW.envBlend ? LW.envBlend(dt, 2.5) : 1 - Math.exp(-dt / 2.5);
+  const glide = (cur, tgt) => { for (let i = 0; i < 3; i++) cur[i] += (tgt[i] - cur[i]) * k; };
+  glide(V.hot, hot); glide(V.cool, cool); glide(V.bgPool, pool); glide(V.bgBase, base); glide(V.light, light);
+  const pl = toLin(V.bgPool);
+  V.plate = pl.map((v) => v * 0.7 + 0.003);
+  const key = V.bgBase.concat(V.bgPool).map((v) => Math.round(v)).join(',') + '|' + (V.shapeShown > 0.5 ? 1 : 0);
+  if (key !== bg.key) { bg.key = key; bg.dirty = true; }
+}
+
+// =====================================================================
+//  Calm / breathing + reminders
+// =====================================================================
+const calm = { on: false, lv: 0, auto: 0, t: 0, br: { level: 0 } };
+const BR = { t0: nowS(), off: -1e9 };
+function setCalm(on, auto = 0) {
+  if (on && !calm.on && nowS() - BR.off > 3) BR.t0 = nowS();
+  if (!on && calm.on) BR.off = nowS();
+  calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
+}
+let tag = null;   // {text, kind, t}
+function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') { S.burst = 1.4; } }
+
+// =====================================================================
+//  Caption band (left area, under the plate): title / artist, figure, reminders
+// =====================================================================
+const capCv = document.getElementById('cap'), capx = capCv.getContext('2d');
+const cap = { dirty: true, x: 0, y: 0, w: 0, h: 0, a: 0, shownKey: '', key: '', lines: null, last: 0 };
+function layoutCaption() {
+  cap.x = Math.round(L.cx - L.P / 2); cap.w = Math.round(L.P);
+  cap.y = Math.round(L.cy + L.P / 2 + L.H * 0.028); cap.h = Math.max(20, Math.round(L.H - cap.y - 8));
+  capCv.style.left = cap.x + 'px'; capCv.style.top = cap.y + 'px';
+  capCv.style.width = cap.w + 'px'; capCv.style.height = cap.h + 'px';
+  const w = Math.round(cap.w * L.dpr), h = Math.round(cap.h * L.dpr);
+  if (capCv.width !== w || capCv.height !== h) { capCv.width = w; capCv.height = h; }
+  cap.dirty = true;
+}
+function figureLabel() {
+  const [n, m] = sandMode(S.pc, S.tier, sand.round);
+  return (sand.round ? 'round plate' : 'square plate') + ' · mode ' + n + ',' + m;
+}
+function captionKey() {
+  const np = music.np;
+  return np ? 'np|' + music.key : 'idle';
+}
+function drawCaption(dt) {
+  const want = captionKey();
+  // fade out → swap → fade in when the track changes
+  if (want !== cap.shownKey) { cap.a = approach(cap.a, 0, 0.25, dt); if (cap.a < 0.02) { cap.shownKey = want; cap.dirty = true; } }
+  else cap.a = approach(cap.a, 1, 0.6, dt);
+  const fig = figureLabel();
+  if (tag) {
+    tag.t += dt;
+    if (tag.t > 12) { tag = null; }
+  }
+  const fadeOn = Math.abs(cap.a - (want === cap.shownKey ? 1 : 0)) > 0.004;
+  const key = cap.shownKey + '|' + fig + '|' + (music.playing ? 1 : 0) + '|' + (music.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
+  if (!cap.dirty && !fadeOn && !tag && key === cap.key) return;
+  cap.key = key; cap.dirty = false;
+
+  const g = capx, d = L.dpr, H = L.H, w = cap.w, h = cap.h;
+  g.setTransform(d, 0, 0, d, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const A = cap.a * (1 - 0.55 * calm.lv) * (music.playing || !music.np ? 1 : 0.7);
+  const fsT = clamp(Math.round(H * 0.019), 13, 30), fsA = clamp(Math.round(H * 0.0118), 10, 18);
+  const top = clamp(H * 0.006, 2, 12);
+  let x = 0;
+  g.textBaseline = 'top'; g.textAlign = 'left';
+  const np = cap.shownKey.startsWith('np|') ? music.np : null;
+  if (np) {
+    const th = Math.round(fsT * 1.25 + fsA * 1.5 + 6);
+    if (music.art) {
+      g.globalAlpha = A * 0.9;
+      g.save(); g.beginPath(); g.roundRect(0, top, th, th, 3); g.clip();
+      g.drawImage(music.art, 0, top, th, th); g.restore();
+      g.globalAlpha = A * 0.25; g.strokeStyle = '#fff'; g.lineWidth = 0.5;
+      g.beginPath(); g.roundRect(0.25, top + 0.25, th - 0.5, th - 0.5, 3); g.stroke();
+      x = th + Math.round(fsT * 0.8);
+    }
+    g.globalAlpha = A * 0.86; g.fillStyle = '#f3ede4';
+    g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText(ellipsize(g, np.title || '', w * 0.62 - x), x, top);
+    g.globalAlpha = A * 0.5; g.fillStyle = '#e6ddd0';
+    g.font = `500 ${fsA}px ${SANS}`;
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0.14em';
+    const sub = (np.artist || '').toUpperCase() + (np.playing ? '' : '  ·  PAUSED');
+    g.fillText(ellipsize(g, sub, w * 0.62 - x), x, top + fsT * 1.3 + 4);
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0px';
+  } else {
+    g.globalAlpha = A * 0.55; g.fillStyle = '#efe8dd';
+    g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText('Chladni plate', 0, top);
+    g.globalAlpha = A * 0.3; g.font = `400 ${fsA}px ${SANS}`;
+    g.fillText('play some music, the sand will follow', 0, top + fsT * 1.3 + 4);
+  }
+  // right side of the band (still inside the left ~70% of the screen): the figure, engraved-small,
+  // or a reminder tag when one is showing
+  g.textAlign = 'right';
+  if (tag) {
+    const k = clamp(tag.t / 1.5, 0, 1) * clamp((12 - tag.t) / 2, 0, 1);
+    const ee = k * k * (3 - 2 * k);
+    g.globalAlpha = 0.75 * ee * (1 - 0.3 * calm.lv); g.fillStyle = '#f3ede4';
+    g.font = `italic 400 ${fsT * 0.92}px ${SERIF}`;
+    const tw = g.measureText(tag.text).width;
+    g.fillText(tag.text, w, top + 1);
+    if (tag.kind === 'water') {   // a tiny line-drawn glass
+      const gx = w - tw - fsT * 1.0, gy = top + 1, gh = fsT * 0.95, gw = gh * 0.62;
+      g.strokeStyle = '#f3ede4'; g.lineWidth = 1; g.globalAlpha *= 0.8;
+      g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + gw * 0.12, gy + gh); g.lineTo(gx + gw * 0.88, gy + gh); g.lineTo(gx + gw, gy); g.stroke();
+      g.globalAlpha *= 0.5; g.beginPath(); g.moveTo(gx + gw * 0.06, gy + gh * 0.42); g.lineTo(gx + gw * 0.94, gy + gh * 0.42); g.stroke();
+    }
+  } else {
+    g.globalAlpha = A * 0.28 + 0.06; g.fillStyle = '#e6ddd0';
+    g.font = `400 ${fsA}px ui-monospace, "SF Mono", Menlo, monospace`;
+    g.fillText(fig, w, top + 3);
+  }
+  g.globalAlpha = 1;
+}
+function ellipsize(g, s, maxW) {
+  if (g.measureText(s).width <= maxW) return s;
+  while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s.trimEnd() + '…';
+}
+
+// =====================================================================
+//  Frame
+// =====================================================================
+const shapeN = () => Math.exp(lerp(Math.log(2), Math.log(40), V.shape));
+const DBG = { sim: 1, plate: 1, points: 1, bloom: 1, comp: 1 };   // perf bisection (window.__cym.DBG)
+function render(dt, T, d) {
+  // plate shape: fade the sand, morph the outline, swap the mode family at the midpoint
+  const wantR = wantRound();
+  const shapeT = wantR ? 0 : 1;
+  if (Math.abs(V.shape - shapeT) > 0.001 || sand.round !== wantR) {
+    V.fade = approach(V.fade, 0, 0.25, dt);
+    V.shape = approach(V.shape, shapeT, 0.45, dt);
+    if (Math.abs(V.shape - shapeT) < 0.5 && sand.round !== wantR) { sand.setRound(wantR); V.shapeShown = shapeT; bg.dirty = true; }
+    if (Math.abs(V.shape - shapeT) < 0.002) V.shape = shapeT;
+  } else V.fade = approach(V.fade, 1, 0.9, dt);
+
+  sand.setMode(...sandMode(S.pc, S.tier, sand.round));
+  sand.morphModes(dt, d.morph);
+  const n = clamp(Math.round(dt * 60), 1, 3), sdt = dt / n;
+  const agit = d.agitate + 0.04 * (1 - V.fade);
+  if (DBG.sim) for (let i = 0; i < n; i++) simStep(sdt, agit, d.morph);
+
+  // plate texture: re-rendered only when its look changes (palette glide, shape morph, resize)
+  const px = GPU.size, platePx = px * K;
+  gl.disable(gl.BLEND);
+  const pkey = V.plate.concat(V.light).map((v) => Math.round(v * 2000)).join(',') + '|' + shapeN().toFixed(3);
+  if (pkey !== GPU.plateKey && DBG.plate) {
+    GPU.plateKey = pkey;
+    bindTarget(GPU.plateT);
+    GPU.plate.use({ uBase: V.plate, uLight: V.light, uK: K, uPx: 1.5 / platePx * 2, uBrush: platePx * 0.5, uN: shapeN() });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  // scene (HDR): grains, additively
+  bindTarget(GPU.scene);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  bindTex(0, GPU.state[GPU.cur].tex);
+  const hot = mix3(V.hot, V.light.map((v) => v * Math.max(V.hot[0], V.hot[1], V.hot[2])), 0.15);
+  GPU.draw.use({
+    uState: 0, uSide: SIDE, uSize: Math.max(1.4, platePx / 560), uK: K,
+    uHot: hot, uCool: V.cool, uGain: 0.27 * V.fade * (288 * 288 / (SIDE * SIDE)) ** 0.35,
+  });
+  if (DBG.points) gl.drawArrays(gl.POINTS, 0, SIDE * SIDE);
+  gl.disable(gl.BLEND);
+
+  // bloom
+  let src = GPU.scene;
+  if (DBG.bloom) GPU.mips.forEach((m, i) => {
+    bindTarget(m); bindTex(0, src.tex);
+    GPU.down.use({ uSrc: 0, uTexel: [1 / src.w, 1 / src.h], uThreshold: 0.7, uPrefilter: i === 0 ? 1 : 0, uSpread: i === 0 ? 1 : 0.5 });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    src = m;
+  });
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  for (let i = DBG.bloom ? GPU.mips.length - 1 : 0; i > 0; i--) {
+    const from = GPU.mips[i], to = GPU.mips[i - 1];
+    bindTarget(to); bindTex(0, from.tex);
+    GPU.up.use({ uSrc: 0, uTexel: [1 / from.w, 1 / from.h] });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  gl.disable(gl.BLEND);
+
+  bindTarget(null);
+  bindTex(0, GPU.scene.tex); bindTex(1, GPU.mips[0].tex); bindTex(2, GPU.plateT.tex);
+  GPU.comp.use({ uScene: 0, uBloom: 1, uPlate: 2, uBloomAmt: 0.75 / GPU.mips.length, uExposure: V.expo, uGlow: 0.9 });
+  if (DBG.comp) gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+const PERF = { bake: 0, bakes: 0, render: 0, cap: 0 };
+// real clock for perf counters (performance.now is virtualised under ?virtual=1)
+const rnow = LW.virtual ? () => new Event('x').timeStamp : () => performance.now();
+let tPrev = nowS(), perfAcc = 0, perfN = 0, perfMs = 0, bgOpacity = -1;
+function frame() {
+  requestAnimationFrame(frame);
+  const T = nowS(), dt = Math.min(0.1, Math.max(0, T - tPrev));
+  tPrev = T;
+  const t0 = performance.now();
+  tick(dt, T);
+  if (!LW.virtual) { perfAcc += performance.now() - t0; if (++perfN >= 60) { perfMs = perfAcc / perfN; perfAcc = 0; perfN = 0; } }
+}
+function tick(dt, T) {
+  if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
+  calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 1.2 : 1.6, dt);
+  calm.br = calm.lv > 0.01 ? LW.breathState(nowS() - BR.t0) : { level: 0 };
+  if (DEV) fakeMusic(dt, T);
+  const d = direct(dt, T);
+  updatePalette(dt);
+  if (bg.dirty && T - bg.at > 0.5) { bg.dirty = false; bg.at = T; const b0 = rnow(); bakeBg(); PERF.bake = rnow() - b0; PERF.bakes++; }
+  const op = Math.round(V.bgA * 200) / 200;
+  if (op !== bgOpacity) { bgOpacity = op; bgCv.style.opacity = op; }
+  const r0 = rnow();
+  if (gl) render(dt, T, d);
+  const c0 = rnow();
+  drawCaption(dt);
+  PERF.render = c0 - r0; PERF.cap = rnow() - c0;
+}
+
+// =====================================================================
+//  Wiring
+// =====================================================================
+function inPlate(x, y) {
+  const dx = (x - L.cx) / (L.P / 2), dy = (y - L.cy) / (L.P / 2);
+  return sand.round ? dx * dx + dy * dy < 1 : Math.abs(dx) < 1 && Math.abs(dy) < 1;
+}
+LW.on('down', (x, y) => {
+  if (inPlate(x, y)) { S.burst = Math.max(S.burst, 0.8); media('playpause'); }
+  else if (x >= cap.x && x <= cap.x + cap.w * 0.62 && y >= cap.y && y <= cap.y + cap.h && music.np) media('next');
+});
+LW.on('nowplaying', onNowPlaying);
+LW.on('env', () => { bg.dirty = true; });
+LW.on('settings', () => { cap.dirty = true; });
+LW.on('reminder', (r) => {
+  if (!r) return;
+  if (r.kind === 'water') showTag('water', r.text || 'a sip of water?');
+  else if (r.kind === 'stretch') showTag('stretch', r.text || 'roll your shoulders, unclench your jaw');
+  else if (r.kind === 'breathe') setCalm(true, 60);
+});
+LW.on('calm', (on) => setCalm(!!on));
+LW.on('action', (a) => {
+  if (a === 'water') showTag('water', 'a sip of water?');
+  else if (a === 'stretch') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
+  else if (a === 'playpause' || a === 'next' || a === 'previous') media(a);
+});
+if (DEV) addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey) return;
+  if (e.key === 'p') media('playpause');
+  if (e.key === '.') media('next');
+  if (e.key === 'k') S.pulse = 1;
+  if (e.key === 's') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  if (e.key === 'o') { const order = ['auto', 'square', 'round']; LW.set('plate', order[(order.indexOf(plateSetting()) + 1) % 3]); }
+});
+addEventListener('resize', layout);
+
+if (gl) { try { initGL(); } catch (e) { console.error('cymatics GL init failed', e); gl = null; } }
+layout();
+if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
+if (LW.calm) setCalm(true);
+requestAnimationFrame(frame);
+
+// Debug / perf: average wall-clock ms per frame for n frames, forcing a GPU sync each frame.
+window.__cym = {
+  S, V, L, music, calm, sand, DBG, PERF, get perfMs() { return perfMs; }, SIDE, CAP,
+  bench(n = 120) {
+    // performance.now is virtualised under ?virtual=1; an Event's timeStamp is the real clock.
+    const realNow = () => new Event('x').timeStamp;
+    const px = new Uint8Array(4), t0 = realNow();
+    let T = nowS();
+    for (let i = 0; i < n; i++) { T += 1 / 30; tick(1 / 30, T); if (gl) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    const total = (realNow() - t0) / n;
+    const t1 = realNow();
+    for (let i = 0; i < n; i++) { T += 1 / 30; tick(1 / 30, T); }
+    if (gl) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const js = (realNow() - t1) / n;
+    return { msPerFrameSynced: +total.toFixed(2), msPerFrameJSPipelined: +js.toFixed(2), grains: SIDE * SIDE, renderPx: GPU.size, dpr: L.dpr, view: [L.W, L.H] };
+  },
+  // True GPU time per frame (EXT_disjoint_timer_query_webgl2), averaged over n frames.
+  async gpuTime(n = 60) {
+    const ext = gl && gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (!ext) return null;
+    const qsA = []; let T = nowS();
+    for (let i = 0; i < n; i++) {
+      const q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+      T += 1 / 30; tick(1 / 30, T);
+      gl.endQuery(ext.TIME_ELAPSED_EXT); qsA.push(q);
+      if (i % 10 === 9) await new Promise((r) => setTimeout(r, 16));
+    }
+    const last = qsA[qsA.length - 1];
+    for (let k = 0; k < 100 && !gl.getQueryParameter(last, gl.QUERY_RESULT_AVAILABLE); k++) await new Promise((r) => setTimeout(r, 20));
+    const ms = qsA.map((q) => gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6).sort((x, y) => x - y);
+    qsA.forEach((q) => gl.deleteQuery(q));
+    return { medianGpuMs: +ms[ms.length >> 1].toFixed(2), p90GpuMs: +ms[Math.floor(ms.length * 0.9)].toFixed(2), renderPx: GPU.size };
+  },
+};
+</script>
+</body>
+</html>

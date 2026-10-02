@@ -55,3 +55,71 @@ Removed the music player, headphones, stand, reflected screen glow, floating mus
 ## Moving window view
 
 Replaced the mostly static night panorama with three cached, feathered landscape layers: hills, tree line and foreground fields. They scroll continuously at different speeds tied to train distance; mirrored joins avoid abrupt wraps. The moon and sky remain stationary, and nearby poles pass faster than the fields. Calm mode and tunnel visibility remain respected. Refreshed the existing in-app browser preview and visually confirmed different terrain in successive captures with a steady moon; no preview console errors.
+
+
+## Rooftop spatial correction — 2026-10-02 (local)
+
+Replaced the baked, malformed chairs with two rear three-quarter chair sprites facing the screen. The background was edited only to remove the original chairs and small projector crate. Chair alpha bounds are measured once at load so transparent atlas margins cannot lift the feet. Separate foreground rendering preserves pet occlusion; pets use the open floor and ledges instead of appearing pasted onto opaque chair backs.
+
+Moved the projector onto a four-legged AV stand behind the seating, clear of the planter. The projector body and beam now share one lens transform aimed at the screen center. Added a supported tilt bracket and power cable. Replaced the fake album-art radio display and LED meter with a cassette, printed tuning scale, needle and mechanical knobs. Cassette rotation now uses elapsed time. Removed procedural city-window overlays that did not match the painted buildings.
+
+Generated assets: `art/rooftop/bg-night.png` from exec-433d116f-d362-4cce-912c-23f0485ea22e; `art/rooftop/chairs.png` from exec-010cb75a-d614-4472-a495-4eb41c52d6e7. Originals retained in Codex generated_images.
+
+Background prompt: preserve camera, wall, blank projection screen, skyline, lamps, plants, left crate, blanket and cushions; remove only the two chairs and the small projector crate; seamlessly restore wooden floorboards.
+
+Chair prompt: transparent two-cell atlas; physically plausible wooden Adirondack chairs facing upper-left, viewed from behind/right; supported armrests, usable seats, stable connected legs; honey oak and muted teal with oatmeal cushions; warm upper-left lighting, navy ambient shadows, painterly style; no environment, pets or lettering.
+
+Verification: JavaScript syntax and diff checks; browser preview at 16:9 and ultrawide; radio play transition and projector beam inspected in motion. Running wallpaper app left untouched; changes remain local.
+
+
+## Daylight train and pet motion — 2026-10-02 (local)
+
+Added matching daylight carriage and countryside art, blended by environment daylight. Lamps dim in daylight, dusk receives a warm tint, and carriage sway/track jolts are more visible. Moving landscape bands retain separate speeds with faster nearby poles/fences and a stationary sky. Fixed the landscape cache dimensions after deferred art loading; tunnel shading now covers the finished view. The normal browser preview uses live time, without the `virtual=1` test freeze.
+
+Generated assets: `art/train/bg-day.png` from exec-36d62c25-7c59-4241-8abd-ed2bdc972f2b; `art/train/countryside-day.png` from exec-b89c63d4-2369-43c5-a7ff-6e4c99bd6e56. Original generated files remain in Codex generated_images.
+
+Interior edit prompt: preserve every camera/geometry detail of the existing Indian sleeper carriage, including blue berths, rails, fan, luggage, table and empty window. Convert to late-morning natural daylight with neutral cream and blue materials, lamps off, and a flat pale-blue window opening. No people, pets or music player.
+
+Landscape edit prompt: preserve the exact panoramic composition, terrain, horizon, hills, trees, fields and irrigation. Convert to clear late morning, removing the moon without adding a sun disk; blue sky, soft clouds, lush green and gold fields. No new objects.
+
+Added `pet-motion.js` to seven pet scenes and both packaging scripts. Cat/dog walking height now uses a common reference with scene depth retained; individual resting poses have head/body scale corrections. Walking frames maintain height despite different source dimensions. Pose changes blend premultiplied layers around the same moving ground anchor instead of abruptly cutting at the midpoint. Gait changes no longer restart an unfinished stand-up blend. Pets wait to rise before translating. Cats retain their supporting ledge on resize instead of being dropped to the floor. Panda poses similarly blend in one GPU pass with corrected adult/pose scale and cub proportions retained.
+
+Added regression tests for gait interruption, conserved blend opacity and walking-frame height. Browser checks exercise movement, identities, playback, calm and both train lighting states. A playback check also exposed the record-shop renderer accessing a procedural LED absent from painted-art mode; the LED overlay now checks its anchor before drawing.
+
+All work remains local; no running wallpaper app rebuild or reload.
+
+Final verification: all nine affected scenes passed browser checks with zero JavaScript/animation errors, including playback and calm transitions. Three shared-animation regression tests passed. Resize preserved both the bench and parapet cats. Train checks confirmed daylight at noon, darkness at 21:00, advancing landscape distance and nonzero carriage movement. Packaging scripts passed syntax checks; no build was run.
+
+
+## Time-of-day selector — 2026-10-02 (local)
+
+Standalone browser previews now have a compact View selector: Auto (local clock), Sunrise, Day, Sunset, Evening and Night. Browser choices persist across scenes; explicit URL view/hour values take precedence. Existing `hour=0` links are correctly shown as fixed midnight. Auto removes that pin, resumes minute-by-minute local time, and handles midnight rollover. Embedded scenes retain their parent controls. Selector input is isolated from scene pet/music interactions.
+
+The native menu now has the same Time of Day choices, persisted globally and applied to all wallpaper windows. Manual selection uses a shorter lighting fade in scenes with slow environmental smoothing; Auto retains gradual changes. Native sources were type-checked without building or replacing the running app; the new native menu needs a future build.
+
+Verification: browser checks passed all six choices, refresh/cross-scene persistence, explicit URL priority, fixed-view stability during environment updates, Auto clock rollover and day/night rendering for all eleven scenes. No JavaScript errors beyond expected missing optional art requests. Shared pet regression tests remain green.
+
+
+## Location-based solar and lunar timing — 2026-10-02 (local)
+
+Vendored SunCalc v1.9.0 in `scenes/astronomy.js`, with its BSD license retained in the packaged source (upstream: https://github.com/mourner/suncalc/tree/v1.9.0). Calculations run locally using the date and detected coordinates; no astronomy network request or API key is needed. Auto maps real dawn, sunrise, solar noon, sunset and twilight events onto the existing scene lighting curves. Polar-day/night cases use solar altitude when events do not occur. Clock captions retain civil time separately from the lighting clock.
+
+The host now passes its existing weather coordinates to every scene immediately after location resolves, independently of the weather fetch/Pro entitlement. Time-zone city coordinates remain marked approximate; precise location remains opt-in. Manual view selections bypass astronomy. Standalone browser previews add an optional Use location button in Auto, with explicit user activation, loading/error states and no persisted coordinates. No location prompt is triggered automatically.
+
+Moon visibility follows calculated altitude/horizon crossings. Grass and bowls use calculated moon altitude/azimuth for their illustrative arcs. Train now uses a moonless landscape plus a separate moon, with calculated phase in Auto. Its visual placement remains a scene composition, not a compass-accurate sky map.
+
+Moonless train asset: `art/train/countryside-night-sky.png`, generated from exec-b4ce1c8a-f808-43d1-a515-ddee1e45ffbe. Prompt: remove only the upper-left moon disk and local glow; fill seamlessly with dark blue sky and faint clouds; preserve exact panorama, horizon, terrain, fields, reflections, hills, palms, buildings, stars, clouds, palette and night lighting. Original source image preserved.
+
+Regression checks cover summer/winter daylight, sunrise/sunset lighting anchors, moonrise/moonset, polar conditions and invalid/zero coordinates. Native sources type-check successfully. The running app has not been rebuilt or reloaded; these changes and sprite fixes are still local source/browser changes.
+
+
+## Drawn in-between frames in every pet scene — 2026-10-02 (local)
+
+Codex generated four 5-frame transition strips (stand-sit, sit-sleep, turn, jump) for all ten sprite sets: cats orange, black, grey, calico, siamese; dogs golden, corgi; pandas mei, bao, cub. Each strip was checked by eye against its set (character, 5 frames, scale, endpoint poses); none needed regenerating. All 40 strips were cut into `scenes/art/sprites/<kind>/<name>/t/` (200 frames).
+
+Shared code in `pet-motion.js`: `LW.PET_SEQ_HAS` (which sets have sheets), `LW.petSeqLoad` / `LW.petSeqPrep` (load, then size and anchor each frame between the poses it joins; mirrored turn copies made once at load), `LW.petSeqStep` (per-pet player: family change → `LW.petPath`, turning on its feet → turn sheet, reversing mid-turn turns back), `LW.petSeqBusy` (travel waits while getting up), `LW.petJumpFrame` and `LW.petSwap` (cut into a sheet, 0.12 s fade out of one). `LW.petPoseScale` honours a frame's own size and `LW.poseState` cuts between drawn frames.
+
+Wired into cats (all five coats, via the registry; the jump is now sized by body length, which makes the orange jump ~25% larger and matching its walk), cafe, cabin, records, speakeasy, rooftop, ramen and grass. Dogs map `lie` / corgi `sleep` onto the sit-sleep ending; pandas map sit-eat / sit-leaf / tumble and back-sleep / roll; a rolling panda ball keeps its crossfade. Grass bakes the frames into each panda's own atlas once (4 columns; ~1.4–1.7 k px square) and mirrors turn frames by swapping UVs, so nothing is uploaded per frame; the only extra cost is a larger re-tint on light changes (~10 ms frame when all three re-tint at once on a snap).
+
+Verification: 14 `node --test tests/` cases pass (6 new for layout, playback, swaps and pose-state cuts). Each scene was stepped in a virtual-clock browser tab for 100–150 s with forced walks: stand-sit, sit-sleep, turn (both directions) and jump frames observed in every scene that has those motions, all positions finite, scene self-tests clean (no identity errors or teleports), no JavaScript errors; only pre-existing optional-art 404s. Stills in `shots/` (cafe-*, cabin-*, speak-*, grass-*, cats-*) checked for scale and foot anchoring. The running app was not rebuilt or reloaded.
+

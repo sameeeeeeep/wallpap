@@ -11,7 +11,9 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="pet-motion.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -220,6 +222,7 @@ function computeTarget() {
   }
   const litFrac = hr >= 18 || hr < 0.5 ? 0.5 : hr < 1.5 ? 0.42 : hr < 5 ? 0.2 : hr < 7.5 ? 0.35 : 0.05;
   const warmNight = (+env.temp || 20) > 12 ? 1 : 0;
+  moon *= LW.moonVisibility();
   Et = { hour: hr, weather: w, it, top, bot, day, lamp, warm, rain, storm, snow, fog, cloud, moon, litFrac, warmNight };
   if (!E) { E = JSON.parse(JSON.stringify(Et)); E.wet = rain > 0 ? 1 : 0.15; E.snowCover = snow > 0 ? 1 : 0; }
 }
@@ -231,7 +234,7 @@ function envAmb() {
   return mix3(a, mul(a, [1.14, 0.95, 0.8]), E.warm * E.day);
 }
 function updateEnv(dt) {
-  const k = 1 - Math.exp(-dt / 9);
+  const k = LW.envBlend(dt, 9);
   for (const key of ENV_KEYS) E[key] += (Et[key] - E[key]) * k;
   for (const key of ['top', 'bot']) for (let i = 0; i < 3; i++) E[key][i] += (Et[key][i] - E[key][i]) * k;
   E.hour = Et.hour; E.weather = Et.weather;
@@ -1786,7 +1789,7 @@ function drawCatFace(g, P, F, pal, coat) {
 const SPR = {};
 function loadSpriteSet(set, poses) {
   if (SPR[set]) return;
-  const o = SPR[set] = { pending: poses.length, img: {} };
+  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set) };
   for (const p of poses) {
     const im = new Image();
     im.onload = () => { if (im.naturalWidth > 1) o.img[p] = im; o.pending--; };
@@ -1796,10 +1799,27 @@ function loadSpriteSet(set, poses) {
 }
 const SPR_REF_W = 176;   // a walking cat (nose → tail tip) is this many world units at k = 1
 const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2;
+// a drawn in-between frame (pose change / turn / jump) stands in for the pose while it plays
 function spriteFor(c) {
+  const sp = spriteBase(c);
+  return sp && c.seqF ? { im: SPR[c.spr].seq.img[c.seqF], kind: c.seqF.startsWith('jump-') ? 'jump' : 'seq' } : sp;
+}
+// once per update: lay out the set's drawn in-between frames, then pick the one to show
+function sprSeqStep(c) {
+  const S = SPR[c.spr]; c.seqF = null;
+  const sp = spriteBase(c); if (!sp) return;
+  const T = S.seq;
+  if (!LW.petSeqPrep(T, (f) => { const im = S.img[f]; return im ? { im, k: LW.petPoseScale('cat', f, S.img.walk1, im), fa: 0.5 } : null; }) && !Object.keys(T.seq).length) return;
+  const key = sp.im.petName || Object.keys(S.img).find((k) => S.img[k] === sp.im);
+  const fam = key === 'walk2' ? 'walk1' : key.startsWith('jump-') ? 'jump' : key;
+  const f = LW.petSeqStep(c, T, fam, c.face, nowS());
+  if (f && T.img[f]) { c.seqF = f; if (f.startsWith('turn-')) c.faceS = c.face; }   // the frames do the turning
+}
+function spriteBase(c) {
   const S = SPR[c.spr];
   if (!S || S.pending > 0 || !S.img.walk1) return null;
   const I = S.img;
+  if (c.act && c.act.t === 'hop' && c.hopPh && S.seq.has('jump')) return { im: S.seq.img[LW.petJumpFrame(c.hopPh, c.hopU)], kind: 'jump' };
   if (c.act && c.act.t === 'hop') return { im: (c.air > 0.1 ? I.walk2 : I.walk1) || I.walk1, kind: 'hop' };
   if (c.walk > 0.3) return { im: (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
   let best = 'sit', bw = -1; for (const n of POSE_NAMES) if (c.w[n] > bw) { bw = c.w[n]; best = n; }
@@ -1830,11 +1850,13 @@ function tinted(c, im, sc1) {
   return e.cv;
 }
 function drawCatSprite(g, c, sp, T) {
-  const S = SPR[c.spr], sc1 = SPR_REF_W / S.img.walk1.naturalWidth, sc = sc1 * c.k;
+  const S = SPR[c.spr], sc1 = LW.petUnit('cat',S.img.walk1), sc = sc1 * c.k;
   // crossfade between poses (walk frames simply alternate)
   if (sp.im !== c.sprA) {
-    const walkSwap = c.sprA && isWalkFrame(sp.im, S) && isWalkFrame(c.sprA, S);
-    c.sprB = walkSwap ? null : c.sprA; c.sprA = sp.im; c.sprT = walkSwap || !c.sprB ? 1 : 0;
+    const sw = c.sprA ? LW.petSwap(c.sprA, sp.im, isWalkFrame(c.sprA, S), isWalkFrame(sp.im, S)) : 'cut';
+    if (sw !== 'cut') { c.sprB = c.sprA; c.sprT = 0; c.sprFd = sw === 'quick' ? 0.12 : 0.22; }
+    else if (!isWalkFrame(sp.im, S) || !isWalkFrame(c.sprA, S)) { c.sprB = null; c.sprT = 1; }
+    c.sprA = sp.im;
   }
   const awake = 1 - c.s, playing = music.np && music.np.playing;
   const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
@@ -1845,20 +1867,26 @@ function drawCatSprite(g, c, sp, T) {
   if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.06 * c.w.stretch; }
   if (sp.kind === 'sniff') rot = 0.07 * c.w.sniff;
   if (sp.kind === 'stand' && c.crouch) sy *= 1 - 0.12 * c.crouch;
-  const layer = (im, a) => {
-    const w = im.naturalWidth * sc, h = im.naturalHeight * sc;
-    g.globalAlpha = a; g.drawImage(tinted(c, im, sc1), -w / 2, -h, w, h);
-  };
   g.save(); g.translate(c.x, c.y - bob); g.scale((Math.sign(c.faceS) || c.face) * (0.78 + 0.22 * Math.abs(c.faceS)) * sx, sy); g.rotate(rot);
   const transition = LW.poseFrame(c.sprB, c.sprA, c.sprT);
-  g.scale(transition.sx, transition.sy);
-  layer(transition.pose, 1);
+  LW.petComposite(g,c,transition.layers.map(layer=>{
+    const im=layer.pose,key=Object.keys(S.img).find(k=>S.img[k]===im);
+    const pk=LW.petPoseScale(c.kind||'cat',key,S.img.walk1,im),w=im.naturalWidth*sc*pk,h=im.naturalHeight*sc*pk;
+    return {image:tinted(c,im,sc1),x:-w/2,y:-h,w,h,alpha:layer.alpha};
+  }));
   g.globalAlpha = 1; g.restore();
 }
 
 // ---- behaviour --------------------------------------------------------------
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
-function breath() { const t = calm.t % 10; return t < 4 ? smooth(t / 4) : 1 - smooth((t - 4) / 6); }
+// lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
+const guide = { on: false, t0: 0, a: 0 };
+LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
+function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
+function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
+function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
+function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
+function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
 const toW = (px) => (px / cssH) * 1000;
 function ptrW() { return { x: toW(LW.pointer.x), y: toW(LW.pointer.y) }; }
 let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
@@ -1940,7 +1968,7 @@ function updateCat(c, dt, T) {
   }
   if (!c.act && c.plan.length) { c.act = c.plan.shift(); c.act.e = 0; }
   let target = catGoal(c, T), walking = false;
-  c.air = 0;
+  c.air = 0; c.hopPh = null;
   const a = c.act;
   if (a) {
     a.e += dt;
@@ -1949,7 +1977,7 @@ function updateCat(c, dt, T) {
     else if (a.t === 'walk') {
       target = 'stand';
       if (!a.s0) a.s0 = { X: c.X, Z: c.Z };
-      if (c.w.stand > 0.7) {
+      if (c.w.stand > 0.85 && a.e > .45 && !LW.petSeqBusy(c)) {
         const span = a.X - a.s0.X;
         if (Math.abs(a.X - c.X) > 0.004) {
           c.face = Math.sign(a.X - c.X); walking = true;
@@ -1967,7 +1995,7 @@ function updateCat(c, dt, T) {
     } else if (a.t === 'walkp') {
       target = 'stand';
       const d = a.x - c.x;
-      if (c.w.stand > 0.7) {
+      if (c.w.stand > 0.85 && a.e > .45 && !LW.petSeqBusy(c)) {
         if (Math.abs(d) > 2) { c.face = Math.sign(d); walking = true; c.x += Math.sign(d) * Math.min(Math.abs(d), v * dt); c.gait += dt * (v / c.k) * 0.6 / 20; }
         else c.act = null;
       }
@@ -1980,6 +2008,7 @@ function updateCat(c, dt, T) {
         a.dur = 0.95; c.face = Math.sign(a.to.x - c.x) || c.face;
       }
       const t = a.e / a.dur;
+      c.hopPh = t < 0.25 ? 'crouch' : t < 0.85 ? 'air' : 'land'; c.hopU = (t - 0.25) / 0.6;
       if (t < 0.25) c.crouch = smooth(t / 0.25);
       else if (t < 0.85) {
         const u = (t - 0.25) / 0.6, top = Math.min(a.from.y, a.to.y) - 60 * c.k;
@@ -2008,10 +2037,11 @@ function updateCat(c, dt, T) {
   if (c.plat === 'ground' && (!a || a.t !== 'hop')) syncGround(c);
   c.walk = approach(c.walk, walking ? 1 : 0, 8, dt);
   c.faceS = approach(c.faceS, c.face, 9, dt);   // turn the body around (no flip-pop)
-  c.sprT = Math.min(1, (c.sprT == null ? 1 : c.sprT) + dt / 0.22);
+  c.sprT = Math.min(1, (c.sprT == null ? 1 : c.sprT) + dt / (c.sprFd || 0.22));
   if (Math.abs(c.faceS) < 0.12) c.faceS = c.face * 0.12;
   const rate = target === 'curl' ? 1.2 : c.act && c.act.t === 'hop' ? 9 : 3.2;
   for (const n of POSE_NAMES) c.w[n] = approach(c.w[n], n === target ? 1 : 0, rate, dt);
+  sprSeqStep(c);
   c.s = c.w.curl;
   if (c.stretchT >= 0) { c.stretchT += dt; if (c.stretchT > 4.6) { c.stretchT = -1; c.lastStim = T; } if (c.stretchT > 1.2 && c.stretchT < 1.3 && c.yawnT < 0) c.yawnT = 0; }
   c.happyT = Math.max(0, c.happyT - dt); c.earPerk = Math.max(0, c.earPerk - dt);
@@ -2081,7 +2111,7 @@ function hitCat(c, x, y) { const lx = (x - c.x) / c.k * c.face, ly = (y - c.y) /
 const steam = [], notes = [], hearts = [], drops = [], flakes = [], ripples = [], cans = [], dripsF = [];
 let steamAcc = [0, 0, 0], flash = { t: 9, next: 8 }, carT = 6, car = null;
 function updateLanterns(dt, T) {
-  const wind = (LW.env.wind || 0.3) * (E.storm ? 2.2 : 1);
+  const wind = (LW.env.wind || 0.3) * (E.storm ? 2.2 : 1) * (1 - 0.7 * calm.lv * breathHold());
   for (const [i, ln] of L.lanterns.entries()) {
     const g0 = 9.8, len = (ln.len + ln.bh * 0.5) / 160;
     const gust = Math.sin(T * 0.6 + i * 1.7) * 0.02 * wind + Math.sin(T * 1.9 + i) * 0.008 * wind;
@@ -2495,7 +2525,13 @@ function startStretch(text) {
   cats.forEach((c, i) => later(i * 0.7, () => { if (c.act && (c.act.t === 'hop' || c.act.t === 'walk' || c.act.t === 'walkp')) c.wantStretch = true; else { c.stretchT = 0; } c.lastStim = nowS(); }));
   stretchMsg = { text: text || 'roll your shoulders', until: nowS() + 14 };
 }
-function setCalm(on, auto = 0) { calm.on = on; if (on) { calm.t = 0; calm.auto = auto; } else calm.auto = 0; }
+// fromLW: echo of LW's own 'calm' event. Scene-started calm (reminder / menu action) flips LW.calm
+// so lw.js shows its breathing guide too.
+function setCalm(on, auto = 0, fromLW = false) {
+  const was = calm.on; calm.on = on;
+  if (on) { if (!was) calm.t = 0; if (!fromLW || !was) calm.auto = auto; } else calm.auto = 0;
+  if (!fromLW && LW.calm !== on) { LW.calm = on; LW.emit('calm', on); }
+}
 
 // =====================================================================
 //  audio (very soft; only when the shared context is running)
@@ -2547,11 +2583,132 @@ function sLand(c) { const a = ac(); if (!a || c.plat === 'ground' && c.k < 0.5) 
 function sDing() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02; tone(a, t, 1320, 1310, 0.6, 0.016, o); }
 function sSlide() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02; noiseHit(a, t, 1.0, 'lowpass', 900, 0.7, 0.022, o); tone(a, t + 1.05, 2900, 2850, 0.4, 0.018, o); }
 function sThunder() {
-  const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02;
+  const a = ac(); if (!a) return; outNode(a);
+  const o = LW.bus('weather'), t = a.currentTime + 0.02; if (!o) return;   // weather bus, not fx
   const s = a.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
   const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(260, t); lp.frequency.exponentialRampToValueAtTime(90, t + 3.5);
-  const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.22, t + 0.25); gn.gain.exponentialRampToValueAtTime(0.0001, t + 4);
+  const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.154, t + 0.25); gn.gain.exponentialRampToValueAtTime(0.0001, t + 4);
   s.connect(lp); lp.connect(gn); gn.connect(o); s.start(t); s.stop(t + 4.1);
+}
+
+// =====================================================================
+//  background ambience → LW.bus('ambience'), weather beds → LW.bus('weather')
+//  Cheap: a few looped noise buffers through filters + scheduled one-shots.
+//  Runs on its own timer (keeps going while the wallpaper idles), starts once
+//  the shared context is running, and goes quiet with LW.muted.
+// =====================================================================
+const AMB = { a: null, bus: null, wx: null, L: {}, bufs: {}, ev: {} };
+function ambBuf(a, color) {
+  if (AMB.bufs[color]) return AMB.bufs[color];
+  const n = a.sampleRate * 5, f = Math.floor(a.sampleRate * 0.1), x = new Float32Array(n + f);
+  let b0 = 0, b1 = 0, b2 = 0, last = 0, peak = 1e-6;
+  for (let i = 0; i < n + f; i++) {
+    const w = Math.random() * 2 - 1;
+    if (color === 'brown') { last = (last + 0.02 * w) / 1.02; x[i] = last; }
+    else if (color === 'pink') { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; x[i] = b0 + b1 + b2 + w * 0.1848; }
+    else x[i] = w;
+    peak = Math.max(peak, Math.abs(x[i]));
+  }
+  const buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (i < f ? x[i] * (i / f) + x[n + i] * (1 - i / f) : x[i]) * 0.7 / peak;   // seamless loop
+  return (AMB.bufs[color] = buf);
+}
+// a looped bed: noise → filter (→ optional tremolo) → gain; gain starts silent, ambGain eases it
+function ambLoop(name, color, type, f, q, dest, am = 0, depth = 0.35) {
+  const a = AMB.a, s = a.createBufferSource(), b = a.createBiquadFilter(), g = a.createGain();
+  s.buffer = ambBuf(a, color); s.loop = true; b.type = type; b.frequency.value = f; b.Q.value = q; g.gain.value = 0;
+  s.connect(b);
+  if (am) {
+    const m = a.createGain(), o = a.createOscillator(), og = a.createGain();
+    m.gain.value = 1; o.frequency.value = am; og.gain.value = depth; o.connect(og); og.connect(m.gain); o.start();
+    b.connect(m); m.connect(g);
+  } else b.connect(g);
+  g.connect(dest); s.start(a.currentTime, Math.random() * 4);
+  return (AMB.L[name] = { s, f: b, g });
+}
+function ambOsc(name, freq, dest, type = 'sine') {
+  const a = AMB.a, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq; g.gain.value = 0; o.connect(g); g.connect(dest); o.start();
+  return (AMB.L[name] = { s: o, f: o, g });
+}
+function ambGain(name, v, tc = 1.2) { const l = AMB.L[name]; if (l) l.g.gain.setTargetAtTime(Math.max(0, v), AMB.a.currentTime, tc); }
+function ambFreq(name, v, tc = 1.2) { const l = AMB.L[name]; if (l) l.f.frequency.setTargetAtTime(v, AMB.a.currentTime, tc); }
+// a noise swell (car passing, whoosh, sizzle): rises, falls, optional filter sweep f → f1
+function ambSwell(t, dur, type, f, q, amp, dest, f1 = f) {
+  const a = AMB.a, s = a.createBufferSource(), b = a.createBiquadFilter(), g = a.createGain();
+  s.buffer = ambBuf(a, 'pink'); s.loop = true; b.type = type; b.Q.value = q;
+  b.frequency.setValueAtTime(f, t); b.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp, t + dur * 0.45); g.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(b); b.connect(g); g.connect(dest); s.start(t, Math.random() * 3); s.stop(t + dur + 0.05);
+}
+// how many Poisson events of `rate`/s land in this tick
+function ambN(rate, dt) { const m = rate * dt; let n = Math.floor(m); if (Math.random() < m - n) n++; return n; }
+function ambStart() {
+  const a = LW._ctx;
+  if (LW.muted || !a || a.state !== 'running' || !E || !L) return false;
+  const bus = LW.bus('ambience'), wx = LW.bus('weather');
+  if (!bus || !wx) return false;
+  outNode(a);   // shared one-shot noise buffer
+  AMB.a = a; AMB.bus = bus; AMB.wx = wx;
+  ambBuild(a, bus, wx);
+  return true;
+}
+setInterval(() => {
+  try {
+    if (!AMB.a && !ambStart()) return;
+    const a = AMB.a;
+    if (LW.muted || a.state !== 'running') return;
+    ambUpdate(a, a.currentTime, 0.25, AMB.bus, AMB.wx);
+  } catch (e) { console.error(e); }
+}, 250);
+
+// the alley: broth pots bubbling, the odd sizzle, the vending machine's hum, a train crossing the
+// viaduct a few streets over, wind chimes; rain on the awnings and puddles goes to the weather bus
+function ambBuild(a, B, X) {
+  ambLoop('burner', 'pink', 'bandpass', 260, 0.6, B);      // gas rings under the stock pots
+  ambLoop('simmer', 'brown', 'lowpass', 420, 0.7, B);      // the rolling simmer
+  ambLoop('vend', 'pink', 'bandpass', 120, 7, B);          // vending machine compressor …
+  ambOsc('vendHum', 100, B); ambOsc('vendHum2', 200, B);   // … and its ballast hum
+  ambLoop('city', 'brown', 'lowpass', 300, 0.6, B);        // the city beyond the alley mouth
+  ambLoop('rain', 'pink', 'highpass', 1100, 0.5, X);       // rain hiss
+  ambLoop('rainLow', 'brown', 'lowpass', 700, 0.5, X);     // runoff, gutters
+  ambLoop('wind', 'pink', 'bandpass', 450, 1.1, X);
+}
+const CHIME = [1568, 1760, 2093, 2349, 2637, 3136];          // a small pentatonic set of glass/metal bells
+function sChime(a, t, amp, o) {
+  const f = CHIME[(Math.random() * CHIME.length) | 0];
+  tone(a, t, f, f * 0.999, rand(1.8, 2.8), amp, o); tone(a, t, f * 2.76, f * 2.758, 0.9, amp * 0.3, o);
+}
+function sDistantTrain(a, t, amp, o) {   // a commuter train on the viaduct: a long swell with soft clacks inside it
+  const dur = rand(8, 11);
+  ambSwell(t, dur, 'lowpass', 220, 0.7, amp, o, 520);
+  for (let k = 0.18; k < 0.85; k += 0.075) {
+    const env = Math.sin(Math.PI * k), tt = t + dur * k;
+    noiseHit(a, tt, 0.06, 'lowpass', 600, 0.8, amp * 0.22 * env, o); noiseHit(a, tt + 0.16, 0.06, 'lowpass', 600, 0.8, amp * 0.18 * env, o);
+  }
+}
+function ambUpdate(a, t, dt, B, X) {
+  const q = (1 - 0.3 * calm.lv) * (1 - 0.25 * E.snow), late = E.hour >= 1 && E.hour < 5 ? 1 : 0;
+  const b = calm.lv > 0.01 ? breath() : 0.5;
+  const wind = (LW.env.wind || 0.3) + E.storm * 0.6, gust = 0.65 + 0.35 * Math.sin(t * 0.23) * Math.sin(t * 0.08 + 1.3);
+  ambGain('burner', 0.006 * q); ambGain('simmer', 0.03 * q * (1 + 0.25 * calm.lv * (b - 0.5)), 0.5);
+  ambGain('vend', 0.006 * q); ambGain('vendHum', 0.0016 * q); ambGain('vendHum2', 0.0007 * q);
+  ambGain('city', 0.018 * (1 - 0.5 * late) * q * (1 + 0.4 * E.rain));
+  ambGain('rain', 0.042 * E.rain); ambGain('rainLow', 0.06 * E.rain);
+  ambGain('wind', (0.045 * E.storm + 0.016 * E.snow + 0.008 * wind) * gust); ambFreq('wind', 380 + 260 * gust);
+  // the broth: little blups from the pots, slower in calm
+  for (let i = ambN(7 * (1 - 0.4 * calm.lv), dt); i > 0; i--) { const f = rand(180, 620); tone(a, t + Math.random() * dt, f, f * rand(1.5, 2.2), rand(0.03, 0.07), rand(0.0015, 0.004) * q, B); }
+  if (ambN(1 / 26, dt)) {   // noodles hit the flat-top / something into the oil
+    const t0 = t + Math.random() * dt, d = rand(1.6, 3);
+    ambSwell(t0, d, 'highpass', 3200, 0.7, 0.012 * q, B, 5200);
+    for (let i = 0; i < 10; i++) noiseHit(a, t0 + Math.random() * d * 0.8, rand(0.004, 0.01), 'highpass', rand(3000, 7000), 0.7, rand(0.003, 0.008) * q, B);
+  }
+  if (ambN((late ? 1 / 240 : 1 / 75), dt)) sDistantTrain(a, t + 0.1, 0.022 * q, B);
+  for (let i = ambN(0.03 + 0.12 * wind * gust, dt); i > 0; i--) { const t0 = t + Math.random() * dt, n = 2 + (Math.random() * 3 | 0); for (let k = 0; k < n; k++) sChime(a, t0 + k * rand(0.12, 0.45), rand(0.0012, 0.0028) * q, B); }
+  if (E.rain > 0.03) {   // drumming on the awnings + plinks into puddles
+    for (let i = ambN(22 * E.rain, dt); i > 0; i--) noiseHit(a, t + Math.random() * dt, rand(0.012, 0.03), 'bandpass', rand(450, 1100), 2.5, rand(0.002, 0.007) * E.rain, X);
+    for (let i = ambN(5 * E.rain, dt); i > 0; i--) { const f = rand(1100, 1900); tone(a, t + Math.random() * dt, f, f * rand(1.5, 1.9), 0.03, rand(0.0015, 0.0035) * E.rain, X); }
+  }
 }
 
 // =====================================================================
@@ -2653,7 +2810,7 @@ LW.on('reminder', (r) => {
   else if (r.kind === 'stretch') startStretch(r.text);
   else if (r.kind === 'breathe') setCalm(true, 60);
 });
-LW.on('calm', (on) => setCalm(!!on));
+LW.on('calm', (on) => setCalm(!!on, 0, true));
 LW.on('action', (a) => {
   if (a === 'water') startWater();
   else if (a === 'stretch') startStretch();
@@ -2685,6 +2842,7 @@ function step(dt, T) {
   ptrSpeed *= Math.exp(-dt * 6);
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
+  stepGuide(dt);
   updateEnv(dt);
   if (music.intent && nowS() > music.intent.until) music.intent = null;
   const playing = !!(music.np && music.np.playing);
@@ -2693,7 +2851,7 @@ function step(dt, T) {
   music.swap = Math.min(1, music.swap + dt / 0.85);
   updateLanterns(dt, T);
   updateWeather(dt, T);
-  updateParticles(dt, T);
+  updateParticles(dt * calmPace(), T);
   updateWater(dt);
   for (const c of cats) updateCat(c, dt, T);
   if (stretchMsg && T > stretchMsg.until) stretchMsg = null;
@@ -2725,23 +2883,12 @@ function render(T) {
   }
   // dimming: paused/stopped → a touch darker; calm → lantern-light only
   const pausedDim = (1 - music.lv) * (music.ever ? 0.08 : 0.03) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * 0.5, 0, 0.8);
+  const dim = clamp(pausedDim + calm.lv * (0.5 - 0.1 * breath()), 0, 0.8);   // the alley breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,4,10,${dim})`; ctx.fillRect(0, 0, W, H); }
   if (calm.lv > 0.01) {
     const b = breath();
+    // lantern-light only, swelling with the breath (lw.js draws the guide)
     for (const ln of L.lanterns) if (ln.cx != null) drawSprite(ctx, GLOW_RED, ln.cx, ln.cy, ln.bw * (2.2 + 1.2 * b), (0.18 + 0.22 * b) * calm.lv);
-    const tt = calm.t % 10, inhale = tt < 4;
-    const edge = inhale ? Math.min(tt + 0.4, 4 - tt) : Math.min(tt - 4, 10 - tt);
-    const a = smooth(clamp(edge / 0.9, 0, 1)) * calm.lv * 0.5;
-    const bx = L.vx + 10, by = 330;
-    ctx.globalAlpha = 0.5 * calm.lv; ctx.drawImage(DARK, bx - 190, by - 70, 380, 150); ctx.globalAlpha = 1;
-    drawSprite(ctx, GLOW_WARM, bx, by + 4, 80 + b * 70, 0.1 * calm.lv);
-    ctx.font = `300 28px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(255,236,215,${a})`;
-    ctx.fillText(inhale ? 'breathe in' : 'breathe out', bx, by - b * 6);
-    ctx.strokeStyle = `rgba(255,236,215,${calm.lv * 0.3})`; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(bx, by + 40, 5 + b * 10, 0, TAU); ctx.stroke();
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   const fa = flashA();
   if (fa > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(150,160,200,${fa * 0.12})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }

@@ -15,8 +15,10 @@ import CoreServices
 struct Scene { let id: String; let title: String; let key: String; var pro = false; let category: String }
 
 /// Menu categories, in order. Music Mode works in every scene; it isn't a category.
-let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful"]
-let scenes: [Scene] = [
+/// "More" collects add-on scenes whose category isn't one of these (Catalog.swift).
+let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More"]
+/// Scenes shipped inside the app. `scenes` (Catalog.swift) adds the installed add-ons.
+let builtinScenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),
     Scene(id: "grass", title: "Touch Grass", key: "2", category: "Nature"),
     Scene(id: "cats", title: "Santorini Cats", key: "3", category: "Nature"),
@@ -28,6 +30,7 @@ let scenes: [Scene] = [
     Scene(id: "ramen", title: "Ramen Alley", key: "", pro: true, category: "City Nights"),
     Scene(id: "train", title: "Night Train", key: "", pro: true, category: "Journeys"),
     Scene(id: "bowls", title: "Singing Bowls", key: "5", pro: true, category: "Mindful"),
+    Scene(id: "cymatics", title: "Cymatics", key: "", pro: true, category: "Music"),
 ]
 
 final class WallWindow: NSWindow {
@@ -124,9 +127,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     // MARK: Pro
     // Free: Koi, Cats, Touch Grass + all interactions + manual weather.
-    // Pro ($9 one-time): every scene, reminders, Calm, live weather, soundscapes,
-    // Music Mode, AI companions, future scenes. Licensing TBD — for now a flag.
-    var isPro: Bool { defaults.bool(forKey: "pro") || ProcessInfo.processInfo.environment["WALLPAP_PRO"] == "1" }
+    // Pro ($5 one-time): every scene, reminders, Calm, live weather, soundscapes,
+    // Music Mode, AI companions, future scenes. Unlocked by a Dodo Payments license key (License.swift);
+    // the `pro` default / WALLPAP_PRO stay as developer overrides.
+    var isPro: Bool { licensed || defaults.bool(forKey: "pro") || ProcessInfo.processInfo.environment["WALLPAP_PRO"] == "1" }
     @objc func openPro() { NSWorkspace.shared.open(URL(string: "https://wallpap.live/#pro")!) }
     func lock(_ item: NSMenuItem) {
         guard !isPro else { return }
@@ -441,6 +445,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         buildStatusItem()
         rebuildWindows()
         installMonitors()
+        revalidateLicense()
+        refreshAddonRuntime()
+        fetchCatalog()
         startAmbient()
         startMusicMode()
         startCompanions()
@@ -481,6 +488,25 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             } else if cmd == "reload" { self.loadScene() }
             else if cmd.hasPrefix("scene:") { self.sceneID = String(cmd.dropFirst(6)); self.loadScene() }
             else if cmd.hasPrefix("reminder:") { self.sendReminder(String(cmd.dropFirst(9))) }
+            // menu-bar panel: open it, run JS in it, snapshot it, or open the native menu
+            else if cmd == "panel" { if let b = self.status.button { self.panelHost.show(from: b) } }
+            else if cmd == "panel-close" { self.panelHost.popover.performClose(nil) }
+            else if cmd.hasPrefix("pjs:") {
+                self.panelHost.web.evaluateJavaScript(String(cmd.dropFirst(4))) { r, e in
+                    let out = e.map { "error: \($0)" } ?? String(describing: r ?? "nil")
+                    try? out.write(toFile: "/tmp/livewall-dev.txt", atomically: true, encoding: .utf8)
+                }
+            } else if cmd.hasPrefix("psnap:") {
+                let path = String(cmd.dropFirst(6))
+                self.panelHost.web.takeSnapshot(with: nil) { img, _ in
+                    guard let img, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                          let png = rep.representation(using: .png, properties: [:]) else { return }
+                    try? png.write(to: URL(fileURLWithPath: path))
+                }
+            } else if cmd == "state" {
+                let d = (try? JSONSerialization.data(withJSONObject: self.panelState(), options: [.prettyPrinted])) ?? Data()
+                try? d.write(to: URL(fileURLWithPath: "/tmp/livewall-dev.txt"))
+            }
         }
     }
 
@@ -524,7 +550,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func loadScene() {
         if paused { rebuildMenu(); return }
         if !isPro, scenes.first(where: { $0.id == sceneID })?.pro == true { sceneID = "koi" }
-        let file = scenesDir.appendingPathComponent("\(sceneID).html")
+        if sceneFile(sceneID) == nil { sceneID = "koi" }   // e.g. an add-on scene that was removed
+        let (file, root) = sceneFile(sceneID) ?? (scenesDir.appendingPathComponent("koi.html"), scenesDir)
+        if root != scenesDir { installRuntime(into: root) }   // add-on: keep its lw.js etc. current
         // Resolve fully: Bundle URLs are relative to the bundle, and a relative URL
         // here makes WebKit throw (black wallpaper).
         var comps = URLComponents(url: file.absoluteURL, resolvingAgainstBaseURL: true)!
@@ -535,7 +563,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             c.queryItems?.append(URLQueryItem(name: "display", value: String(i)))
             if w.web.url != nil { w.freshWebView() }
             w.web.navigationDelegate = self
-            w.web.loadFileURL(c.url!, allowingReadAccessTo: scenesDir)
+            w.web.loadFileURL(c.url!, allowingReadAccessTo: root)
         }
         rebuildMenu()
     }
@@ -635,6 +663,11 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         get { defaults.string(forKey: "weatherOverride") }
         set { defaults.set(newValue, forKey: "weatherOverride") }
     }
+    let viewHours: [String: Double] = ["sunrise": 6.3, "day": 12, "sunset": 18.3, "evening": 19.6, "night": 0]
+    var timeView: String {
+        get { let v = defaults.string(forKey: "timeView") ?? "auto"; return v == "auto" || viewHours[v] != nil ? v : "auto" }
+        set { defaults.set(newValue, forKey: "timeView") }
+    }
     var waterMinutes: Int {
         get { defaults.integer(forKey: "waterMinutes") }
         set { defaults.set(newValue, forKey: "waterMinutes"); scheduleReminders() }
@@ -666,6 +699,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         guard let c = locs.last?.coordinate else { return }
         coord = c
         weatherPlace = "your location"
+        pushEnv()
         m.stopUpdatingLocation()
         fetchWeather()
         rebuildMenu()
@@ -690,6 +724,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
                 guard !(self.preciseLocation && self.weatherPlace == "your location") else { return }
                 self.coord = CLLocationCoordinate2D(latitude: lat, longitude: lon)
                 self.weatherPlace = city
+                self.pushEnv()
+                self.rebuildMenu()
                 NSLog("wallpap: weather location from time zone → \(city)")
                 self.fetchWeather()
             }
@@ -710,7 +746,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             loc.requestWhenInUseAuthorization()   // the macOS prompt appears now, not at launch
             loc.startUpdatingLocation()
         } else {
-            loc.stopUpdatingLocation(); coord = nil; locateByTimeZone()
+            loc.stopUpdatingLocation(); coord = nil; pushEnv(); locateByTimeZone()
         }
         rebuildMenu()
     }
@@ -750,8 +786,11 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     func pushEnv() {
         var e = env
+        e["view"] = timeView
+        if let c = coord { e["location"] = ["latitude": c.latitude, "longitude": c.longitude, "approximate": weatherPlace != "your location"] as [String: Any] }
+        else { e["location"] = NSNull() }
         let d = Calendar.current.dateComponents([.hour, .minute], from: Date())
-        e["hour"] = Double(d.hour ?? 12) + Double(d.minute ?? 0) / 60
+        e["hour"] = viewHours[timeView] ?? (Double(d.hour ?? 12) + Double(d.minute ?? 0) / 60)
         if let o = weatherOverride { e["weather"] = o; e["intensity"] = 0.75 }
         else if !isPro { e["weather"] = "clear"; e["intensity"] = 0.0 }   // live weather is Pro
         guard let data = try? JSONSerialization.data(withJSONObject: e),
@@ -831,7 +870,17 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             b.image = NSImage(systemSymbolName: "water.waves", accessibilityDescription: "wallpap")
             b.image?.isTemplate = true
         }
+        attachPanel()
         rebuildMenu()
+    }
+
+    /// Separator + small grey section title (native section header on macOS 14+).
+    func section(_ title: String, in menu: NSMenu) {
+        if menu.numberOfItems > 0 { menu.addItem(.separator()) }
+        if #available(macOS 14, *) { menu.addItem(.sectionHeader(title: title)); return }
+        let h = NSMenuItem(title: title.uppercased(), action: nil, keyEquivalent: "")
+        h.isEnabled = false
+        menu.addItem(h)
     }
 
     func rebuildMenu() {
@@ -840,13 +889,16 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         header.isEnabled = false
         menu.addItem(header)
         if !isPro {
-            let up = NSMenuItem(title: "Unlock Pro — $9 one-time…", action: #selector(openPro), keyEquivalent: "")
+            let up = NSMenuItem(title: "Unlock Pro — $5 one-time…", action: #selector(openPro), keyEquivalent: "")
             up.target = self
             menu.addItem(up)
-            menu.addItem(.separator())
+            let key = NSMenuItem(title: "Enter License Key…", action: #selector(enterLicense), keyEquivalent: "")
+            key.target = self
+            menu.addItem(key)
         }
+        section("Scene", in: menu)
         // Only offer scenes whose file is actually present.
-        let available = scenes.filter { FileManager.default.fileExists(atPath: scenesDir.appendingPathComponent("\($0.id).html").path) }
+        let available = scenes.filter { sceneFile($0.id) != nil }
         func sceneItem(_ s: Scene) -> NSMenuItem {
             let item = NSMenuItem(title: s.title, action: #selector(pickScene(_:)), keyEquivalent: s.key)
             item.representedObject = s.id
@@ -870,27 +922,30 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             menu.addItem(cItem)
         }
         addSceneItems(to: menu)
-        menu.addItem(.separator())
-        let calmItem = NSMenuItem(title: "Calm · Breathe", action: #selector(toggleCalm), keyEquivalent: "b")
-        calmItem.state = calm ? .on : .off
-        calmItem.target = self
-        lock(calmItem)
-        menu.addItem(calmItem)
-        if isPro {
-            let bp = NSMenuItem(title: "Breathing Pattern", action: nil, keyEquivalent: "")
-            let bpMenu = NSMenu()
-            for (label, v) in [("Box — in · hold · out · hold (4-4-4-4)", "box"), ("Calm — in 4 · out 6", "calm"), ("Relax — 4-7-8", "478")] {
-                let it = NSMenuItem(title: label, action: #selector(pickBreath(_:)), keyEquivalent: "")
-                it.representedObject = v
-                it.state = breathPattern == v ? .on : .off
-                it.target = self
-                bpMenu.addItem(it)
-            }
-            bp.submenu = bpMenu
-            bp.indentationLevel = 1
-            menu.addItem(bp)
+        let compItem = NSMenuItem(title: "AI Companions", action: nil, keyEquivalent: "")
+        let compMenu = NSMenu()
+        for (label, v) in [("Off", "off"), ("In the Scene", "native"), ("As Characters (Clawd & Codex)", "characters")] {
+            let it = NSMenuItem(title: label, action: #selector(pickCompanions(_:)), keyEquivalent: "")
+            it.representedObject = v
+            it.state = companionStyle == v ? .on : .off
+            it.target = self
+            compMenu.addItem(it)
         }
-
+        compItem.submenu = compMenu
+        lock(compItem)
+        menu.addItem(compItem)
+        section("Environment", in: menu)
+        let viewItem = NSMenuItem(title: "Time of Day", action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu()
+        for (label, value) in [("Auto — Local Time", "auto"), ("Sunrise", "sunrise"), ("Day", "day"), ("Sunset", "sunset"), ("Evening", "evening"), ("Night", "night")] {
+            let item = NSMenuItem(title: label, action: #selector(pickTimeView(_:)), keyEquivalent: "")
+            item.representedObject = value
+            item.state = timeView == value ? .on : .off
+            item.target = self
+            viewMenu.addItem(item)
+        }
+        viewItem.submenu = viewMenu
+        menu.addItem(viewItem)
         let wItem = NSMenuItem(title: "Weather", action: nil, keyEquivalent: "")
         let wMenu = NSMenu()
         let live = (env["weather"] as? String) ?? "clear"
@@ -918,25 +973,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         wMenu.addItem(precise)
         wItem.submenu = wMenu
         menu.addItem(wItem)
-
-        let rItem = NSMenuItem(title: "Water Reminder", action: nil, keyEquivalent: "")
-        let rMenu = NSMenu()
-        for m in [0, 30, 45, 60, 90] {
-            let it = NSMenuItem(title: m == 0 ? "Off" : "Every \(m) min", action: #selector(pickReminder(_:)), keyEquivalent: "")
-            it.tag = m
-            it.state = waterMinutes == m ? .on : .off
-            it.target = self
-            rMenu.addItem(it)
-        }
-        rMenu.addItem(.separator())
-        let now = NSMenuItem(title: "Remind Me Now", action: #selector(remindNow), keyEquivalent: "")
-        now.target = self
-        rMenu.addItem(now)
-        rItem.submenu = rMenu
-        lock(rItem)
-        menu.addItem(rItem)
-
-        let sounds = NSMenuItem(title: "Sounds", action: nil, keyEquivalent: "")
+        section("Sound & Music", in: menu)
+        let mute = NSMenuItem(title: "Sound On", action: #selector(toggleMute), keyEquivalent: "s")
+        mute.state = muted ? .off : .on
+        mute.target = self
+        menu.addItem(mute)
+        let sounds = NSMenuItem(title: "Sound Levels", action: nil, keyEquivalent: "")
         let sMenu = NSMenu()
         for (label, c) in [("Interaction Sounds", "fx"), ("Scene Ambience", "ambience"), ("Weather Sounds", "weather")] {
             let p = audioPref(c)
@@ -978,18 +1020,6 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         ssItem.submenu = ssMenu
         lock(ssItem)
         menu.addItem(ssItem)
-        let compItem = NSMenuItem(title: "AI Companions", action: nil, keyEquivalent: "")
-        let compMenu = NSMenu()
-        for (label, v) in [("Off", "off"), ("In the Scene", "native"), ("As Characters (Clawd & Codex)", "characters")] {
-            let it = NSMenuItem(title: label, action: #selector(pickCompanions(_:)), keyEquivalent: "")
-            it.representedObject = v
-            it.state = companionStyle == v ? .on : .off
-            it.target = self
-            compMenu.addItem(it)
-        }
-        compItem.submenu = compMenu
-        lock(compItem)
-        menu.addItem(compItem)
         let music = NSMenuItem(title: "Music Mode (Music / Spotify)", action: #selector(toggleMusicMode), keyEquivalent: "")
         music.state = musicMode ? .on : .off
         music.target = self
@@ -1009,12 +1039,43 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             bs.target = self
             menu.addItem(bs)
         }
-
-        menu.addItem(.separator())
-        let mute = NSMenuItem(title: "Sound", action: #selector(toggleMute), keyEquivalent: "s")
-        mute.state = muted ? .off : .on
-        mute.target = self
-        menu.addItem(mute)
+        section("Wellbeing", in: menu)
+        let calmItem = NSMenuItem(title: "Calm · Breathe", action: #selector(toggleCalm), keyEquivalent: "b")
+        calmItem.state = calm ? .on : .off
+        calmItem.target = self
+        lock(calmItem)
+        menu.addItem(calmItem)
+        if isPro {
+            let bp = NSMenuItem(title: "Breathing Pattern", action: nil, keyEquivalent: "")
+            let bpMenu = NSMenu()
+            for (label, v) in [("Box — in · hold · out · hold (4-4-4-4)", "box"), ("Calm — in 4 · out 6", "calm"), ("Relax — 4-7-8", "478")] {
+                let it = NSMenuItem(title: label, action: #selector(pickBreath(_:)), keyEquivalent: "")
+                it.representedObject = v
+                it.state = breathPattern == v ? .on : .off
+                it.target = self
+                bpMenu.addItem(it)
+            }
+            bp.submenu = bpMenu
+            bp.indentationLevel = 1
+            menu.addItem(bp)
+        }
+        let rItem = NSMenuItem(title: "Water Reminder", action: nil, keyEquivalent: "")
+        let rMenu = NSMenu()
+        for m in [0, 30, 45, 60, 90] {
+            let it = NSMenuItem(title: m == 0 ? "Off" : "Every \(m) min", action: #selector(pickReminder(_:)), keyEquivalent: "")
+            it.tag = m
+            it.state = waterMinutes == m ? .on : .off
+            it.target = self
+            rMenu.addItem(it)
+        }
+        rMenu.addItem(.separator())
+        let now = NSMenuItem(title: "Remind Me Now", action: #selector(remindNow), keyEquivalent: "")
+        now.target = self
+        rMenu.addItem(now)
+        rItem.submenu = rMenu
+        lock(rItem)
+        menu.addItem(rItem)
+        section("Performance", in: menu)
         let pause = NSMenuItem(title: paused && !userPaused ? "Paused (on battery)" : "Pause Animation", action: #selector(togglePause), keyEquivalent: "p")
         pause.state = paused ? .on : .off
         pause.target = self
@@ -1039,17 +1100,35 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         }
         fpsItem.submenu = fpsMenu
         menu.addItem(fpsItem)
+        for e in catalogOffers() {
+            let busy = installingScenes.contains(e.id)
+            let it = NSMenuItem(title: busy ? "Downloading \(e.title)…" : "Get New Scene: \(e.title)", action: busy ? nil : #selector(installScene(_:)), keyEquivalent: "")
+            it.representedObject = e.id; it.target = self
+            menu.addItem(it)
+        }
+        let addF = NSMenuItem(title: "Add Scene Folder…", action: #selector(addSceneFolder), keyEquivalent: "")
+        addF.target = self
+        menu.addItem(addF)
+        let openF = NSMenuItem(title: "Open Scenes Folder", action: #selector(openScenesFolder), keyEquivalent: "")
+        openF.target = self
+        menu.addItem(openF)
         let reload = NSMenuItem(title: "Reload Scene", action: #selector(reloadScene), keyEquivalent: "r")
         reload.target = self
         menu.addItem(reload)
+        menu.addItem(.separator())
+        if licensed {
+            let lic = NSMenuItem(title: "Deactivate License on This Mac", action: #selector(deactivateLicense), keyEquivalent: "")
+            lic.target = self
+            menu.addItem(lic)
+        }
         let login = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         if #available(macOS 13, *) { login.state = SMAppService.mainApp.status == .enabled ? .on : .off }
         menu.addItem(login)
-        menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit wallpap", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
-        status.menu = menu
+        panelHost.nativeMenu = menu   // shown on right-click / ⌥-click (see Panel.swift)
+        panelHost.push()
     }
 
     /// Scene-specific controls, shown under the scene list for the active scene.
@@ -1159,6 +1238,14 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         guard isPro else { openPro(); return }
         calm.toggle()
         windows.forEach { $0.js("__lw('calm',\(calm))") }
+        rebuildMenu()
+    }
+
+    @objc func pickTimeView(_ item: NSMenuItem) {
+        let value = item.representedObject as? String ?? "auto"
+        guard value == "auto" || viewHours[value] != nil else { return }
+        timeView = value
+        pushEnv()
         rebuildMenu()
     }
 

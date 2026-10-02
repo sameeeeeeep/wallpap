@@ -14,3 +14,23 @@ Walk = alternate walk1 / walk2 (two-frame gait) with a small vertical bob.
 | dogs/corgi | walk1, walk2, sit, sleep, play-bow |
 
 Sources (full sheets): livewall/art-src/*.jpg
+
+## Drawn in-between frames (`<kind>/<name>/t/`)
+
+Every set above also has `t/<seq>-1..5.png`: five drawn frames per transition (Codex image
+generation from `art-src/transitions/<kind>-<name>-<seq>.png` strips, cut with
+`swift tools/cutout.swift <strip> <out> <prefix> strip`, installed with `art-src/transitions/install.sh`).
+Same facing (RIGHT), tightly cropped, transparent.
+
+| seq | frame 1 → frame 5 | played |
+|---|---|---|
+| stand-sit | walk1 → the set's sit pose (sit / sit-eat / sit-leaf / tumble) | walk→sit, reversed for sit→walk |
+| sit-sleep | sit pose → the set's sleep pose (sleep / lie / back-sleep / roll); frame 3 ≈ loaf | sit→sleep, reversed to wake; chained after stand-sit for walk↔sleep |
+| turn | facing right → facing viewer → facing left | turning round while walking (mirrored copy when turning left) |
+| jump | crouch → spring → apex → reach → landing crouch | hops between surfaces |
+
+Which sets have them is listed once in `LW.PET_SEQ_HAS` (`scenes/pet-motion.js`); a missing sheet just
+falls back to the crossfade. Frame size and foot anchor are not stored in the art: `LW.petSeqPrep`
+interpolates them at load between the poses each sheet joins (the jump crouch is sized to the walking
+body length).
+

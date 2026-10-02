@@ -6,3 +6,5 @@ shots/
 site/scenes/
 .DS_Store
 __pycache__/
+art-src/transitions/cut/
+art-src/transitions/*.log

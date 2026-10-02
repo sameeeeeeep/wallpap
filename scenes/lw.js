@@ -96,29 +96,89 @@
     LW.emit(type, x, y);
   }
 
-  const now = new Date();
+  const viewHours = {sunrise:6.3, day:12, sunset:18.3, evening:19.6, night:0};
+  const viewLabels = {auto:'Auto · local time', sunrise:'Sunrise', day:'Day', sunset:'Sunset', evening:'Evening', night:'Night'};
+  const standalone = !LW.isHost && window.self === window.top;
+  const localHour = () => { const d=new Date(); return d.getHours()+d.getMinutes()/60; };
+  let savedView='auto';
+  if(standalone)try{savedView=localStorage.getItem('lw.view')||'auto';}catch(e){}
+  const validView = v => v==='auto'||Object.prototype.hasOwnProperty.call(viewHours,v);
+  const queryHour=qs.has('hour')&&qs.get('hour').trim()!==''?Number(qs.get('hour')):NaN;
+  let pinnedHour=Number.isFinite(queryHour)?((queryHour%24)+24)%24:null;
+  let viewMode=LW.isHost?'auto':validView(qs.get('view'))?qs.get('view'):pinnedHour!==null?'custom':validView(savedView)?savedView:'auto';
+  LW.view = viewMode;
+  let viewTransitionUntil=0;
+  LW.envBlend=(dt,seconds)=>1-Math.exp(-dt/(performance.now()<viewTransitionUntil?0.65:seconds));
   LW.env = {
     weather: qs.get('weather') || 'clear',
-    intensity: +(qs.get('intensity') || 0.7),
-    temp: 20,
-    wind: 0.3,
-    hour: qs.has('hour') ? +qs.get('hour') : now.getHours() + now.getMinutes() / 60,
-    isDay: true,
+    intensity: +(qs.get('intensity') || 0.7), temp:20, wind:0.3,
+    hour: viewMode==='custom'?pinnedHour:viewMode==='auto'?localHour():viewHours[viewMode], isDay:true,
   };
   LW.env.isDay = LW.env.hour > 6.5 && LW.env.hour < 19.5;
   LW.calm = qs.get('calm') === '1';
   LW.setEnv = function (patch) {
+    if(LW.isHost&&validView(patch.view)&&patch.view!==LW.view){LW.view=patch.view;viewTransitionUntil=performance.now()+6000;}
+    const clockHour=Number.isFinite(patch.hour)?patch.hour:(LW.env.clockHour??localHour());
     Object.assign(LW.env, patch);
-    if (!('isDay' in patch)) LW.env.isDay = LW.env.hour > 6.5 && LW.env.hour < 19.5;
+    LW.env.clockHour=clockHour;LW.env.hour=clockHour;
+    if(standalone && viewMode!=='auto')LW.env.hour=viewMode==='custom'?pinnedHour:viewHours[viewMode];
+    const sky=LW.view==='auto'&&window.LWAstronomy?LWAstronomy.calculate(new Date(),LW.env.location):null;
+    LW.env.astronomy=sky;
+    if(sky)LW.env.hour=sky.hour;
+    LW.env.isDay=sky?sky.isDay:LW.env.hour>6.5&&LW.env.hour<19.5;
     LW.emit('env', LW.env);
   };
-  // Keep the clock moving when no host is feeding us.
-  setInterval(() => {
-    if (qs.has('hour')) return;
-    const d = new Date();
-    LW.setEnv({ hour: d.getHours() + d.getMinutes() / 60 });
-  }, 60000);
+  LW.moonVisibility=()=>LW.env.astronomy?LW.env.astronomy.moon.visibility:1;
+  LW.setView = function (mode, hour) {
+    if(LW.isHost||(!validView(mode)&&!(mode==='custom'&&Number.isFinite(hour))))return;
+    viewTransitionUntil=performance.now()+6000;
+    viewMode=mode;LW.view=mode;pinnedHour=mode==='custom'?((hour%24)+24)%24:null;
+    if(standalone){
+      try{localStorage.setItem('lw.view',mode==='custom'?'auto':mode);}catch(e){}
+      const url=new URL(location.href);url.searchParams.delete('hour');url.searchParams.delete('view');
+      if(mode==='custom')url.searchParams.set('hour',String(pinnedHour));
+      else url.searchParams.set('view',mode);
+      history.replaceState(null,'',url);
+    }
+    LW.setEnv({hour:mode==='auto'?localHour():mode==='custom'?pinnedHour:viewHours[mode]});
+    LW.emit('view',mode);
+  };
+  // Only Auto follows wall-clock time. Native windows receive the host clock.
+  setInterval(() => { if(!LW.isHost&&viewMode==='auto')LW.setEnv({hour:localHour()}); },60000);
   addEventListener('load', () => { LW.emit('env', LW.env); if (LW.calm) LW.emit('calm', true); });
+  // Compact browser-only control; embeds and the desktop use their own menus.
+  if(standalone && qs.get('virtual')!=='1'){
+    const mount=()=>{
+      const box=document.createElement('label');box.dataset.lwControls='';
+      box.style.cssText='position:fixed;z-index:2147483646;top:16px;right:16px;display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #ffffff30;border-radius:12px;background:#18232bcb;color:#f7f3ea;box-shadow:0 3px 16px #0002;backdrop-filter:blur(12px);font:12px/1.4 system-ui,sans-serif;';
+      const caption=document.createElement('span');caption.textContent='View';box.append(caption);
+      const select=document.createElement('select');select.setAttribute('aria-label','Time of day');
+      select.style.cssText='font:inherit;color:inherit;background:#26353d;border:1px solid #ffffff30;border-radius:7px;padding:5px 7px;cursor:pointer;max-width:170px;';
+      for(const [value,label] of Object.entries(viewLabels)){const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);}
+      const sync=()=>{
+        let custom=select.querySelector('option[value="custom"]');
+        if(viewMode==='custom'){if(!custom){custom=document.createElement('option');custom.value='custom';select.append(custom);}custom.textContent='Fixed · '+String(Math.floor(pinnedHour)).padStart(2,'0')+':'+String(Math.floor((pinnedHour%1)*60)).padStart(2,'0');}
+        else if(custom)custom.remove();
+        select.value=viewMode;box.title=viewMode==='auto'?'Follows your local clock':'Fixed lighting; choose Auto to follow your local clock';
+      };
+      select.addEventListener('change',()=>LW.setView(select.value));
+      for(const type of ['pointerdown','pointerup','pointermove','click','keydown'])box.addEventListener(type,e=>e.stopPropagation());
+      const locate=document.createElement('button');locate.type='button';locate.textContent='Use location';
+      locate.style.cssText='font:inherit;color:inherit;background:transparent;border:0;padding:5px;cursor:pointer;';
+      locate.title='Use your location to sync sunrise, sunset and moonrise in Auto. Calculated on this device.';
+      locate.addEventListener('click',()=>{
+        if(!navigator.geolocation){locate.textContent='Location unavailable';return;}
+        locate.disabled=true;locate.textContent='Locating…';
+        navigator.geolocation.getCurrentPosition(pos=>{
+          LW.setEnv({location:{latitude:pos.coords.latitude,longitude:pos.coords.longitude,approximate:pos.coords.accuracy>5000}});
+          locate.textContent='Location synced';locate.disabled=false;
+        },()=>{locate.textContent='Retry location';locate.disabled=false;},{enableHighAccuracy:false,timeout:12000,maximumAge:900000});
+      });
+      const showLocate=()=>{locate.hidden=viewMode!=='auto';};LW.on('view',showLocate);showLocate();
+      box.append(select,locate);document.body.append(box);LW.on('view',sync);sync();
+    };
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount);else mount();
+  }
 
   const REMINDER_TEXT = {
     water: 'a sip of water?',
@@ -559,7 +619,7 @@
     addEventListener('keydown', (e) => {
       if (e.key === 'm') window.__lw('mute', 0, 0, !LW.muted);
       if (e.key === 'w') LW.setEnv({ weather: W[(W.indexOf(LW.env.weather) + 1) % W.length] });
-      if (e.key === 't') LW.setEnv({ hour: (LW.env.hour + 3) % 24 });
+      if (e.key === 't') LW.setView('custom', (LW.env.hour + 3) % 24);
       if (e.key === 'r') window.__lw('reminder', 'water');
       if (e.key === 'b') window.__lw('calm', !LW.calm);
       if (e.key === 'a') window.__lw('agents', CO.bots.size ? { style: LW.agents.style, list: [] } :

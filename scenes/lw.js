@@ -25,6 +25,17 @@
 // Music mode (host reads Apple Music / Spotify "now playing"):
 //   LW.nowPlaying  {title, artist, album, artwork (data/https URL or ''), playing, app} | null
 //   LW.on('nowplaying', np => ...)    fires on track/play-state change
+// Audio categories (each has its own on/off + volume, set from the menu):
+//   LW.bus('fx')       interaction sounds (clicks, purrs, plops, strikes)   ← default
+//   LW.bus('ambience') the scene's own background bed (train rumble, fire, café hiss…)
+//   LW.bus('weather')  rain, thunder, wind
+//   (music-reactive scenes don't play music themselves; soundscapes have their own bus)
+//   Anything a scene connects straight to ctx.destination lands on 'fx' automatically,
+//   so scenes only need LW.bus() for ambience/weather.
+// Breathing (calm mode): LW.breathState(t) → {phase:'in'|'hold'|'out'|'rest', k, level, label}
+//   pattern from settings: 'box' (4-4-4-4, default) | 'calm' (4 in / 6 out) | '478'.
+//   lw.js draws the guide (a dot tracing a square for box, a ring otherwise) — scenes just
+//   dim/slow and may use .level (0 empty … 1 full lungs) to breathe their world.
 // Beat sync (opt-in host feature: passive system-audio analysis while music plays):
 //   LW.music      {level, bass, mid, high} 0..1, smoothed — live when LW.music.live
 //   LW.on('beat', strength => ...)   fires on detected beats (strength 0..1)
@@ -142,6 +153,110 @@
     if (changed) LW.emit('nowplaying', LW.nowPlaying);
   }
 
+  // ─── Audio buses ──────────────────────────────────────────────────────────
+  LW.audioPrefs = { fx: { on: true, vol: 1 }, ambience: { on: true, vol: 1 }, weather: { on: true, vol: 1 } };
+  const BUS = {};
+  LW.bus = function (cat) {
+    const ctx = LW.audio();
+    if (!ctx) return null;
+    if (!BUS[cat]) {
+      const g = ctx.createGain();
+      g.__lwBus = true;
+      __rawConnect.call(g, ctx.destination);
+      BUS[cat] = g;
+      applyBus(cat);
+    }
+    return BUS[cat];
+  };
+  function applyBus(cat) {
+    const g = BUS[cat], p = LW.audioPrefs[cat];
+    if (!g || !p || !LW._ctx) return;
+    g.gain.setTargetAtTime(p.on ? p.vol : 0, LW._ctx.currentTime, 0.25);
+  }
+  // Route anything connected straight to the speakers through the 'fx' bus.
+  const __rawConnect = AudioNode.prototype.connect;
+  AudioNode.prototype.connect = function (target, ...rest) {
+    if (target && this.context && target === this.context.destination && !this.__lwBus) {
+      const fx = LW.bus('fx');
+      if (fx) return __rawConnect.call(this, fx, ...rest);
+    }
+    return __rawConnect.call(this, target, ...rest);
+  };
+
+  // ─── Breathing patterns + guide ───────────────────────────────────────────
+  const PATTERNS = {
+    box:  [['in', 4, 'breathe in'], ['hold', 4, 'hold'], ['out', 4, 'breathe out'], ['rest', 4, 'hold']],
+    calm: [['in', 4, 'breathe in'], ['out', 6, 'breathe out']],
+    '478': [['in', 4, 'breathe in'], ['hold', 7, 'hold'], ['out', 8, 'breathe out']],
+  };
+  LW.breathPattern = function () { return PATTERNS[LW.settings.breath] ? LW.settings.breath : (PATTERNS[LW.globalBreath] ? LW.globalBreath : 'box'); };
+  LW.breathState = function (t) {
+    const P = PATTERNS[LW.breathPattern()], total = P.reduce((a, p) => a + p[1], 0);
+    let x = ((t % total) + total) % total;
+    for (const [phase, dur, label] of P) {
+      if (x < dur) {
+        const k = x / dur, e = 0.5 - 0.5 * Math.cos(Math.PI * k);
+        const level = phase === 'in' ? e : phase === 'out' ? 1 - e : phase === 'hold' ? 1 : 0;
+        return { phase, k, level, label, dur, cycle: total };
+      }
+      x -= dur;
+    }
+    return { phase: 'in', k: 0, level: 0, label: 'breathe in', dur: 4, cycle: total };
+  };
+  const BG = { cv: null, on: false, a: 0, t0: 0, last: 0 };
+  function breathGuide(ts) {
+    const want = LW.calm;
+    if (!want && BG.a < 0.01) { BG.on = false; if (BG.cv) BG.cv.getContext('2d').clearRect(0, 0, BG.cv.width, BG.cv.height); return; }
+    requestAnimationFrame(breathGuide);
+    const t = ts / 1000, dt = Math.min(0.1, BG.last ? t - BG.last : 0.016); BG.last = t;
+    BG.a += ((want ? 1 : 0) - BG.a) * Math.min(1, dt * 1.5);
+    if (!BG.cv) {
+      BG.cv = document.createElement('canvas');
+      BG.cv.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:40';
+      document.documentElement.appendChild(BG.cv);
+    }
+    const dpr = Math.min(2, devicePixelRatio || 1), W = innerWidth, H = innerHeight, cv = BG.cv;
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+    const st = LW.breathState(t - BG.t0), a = BG.a;
+    // Centre of the calm zone: left/middle of the screen (the right side is for widgets).
+    const cx = W * 0.36, cy = H * 0.46, R = Math.min(W, H) * 0.11;
+    c.globalAlpha = a;
+    // soft glow that fills with the breath
+    const g = c.createRadialGradient(cx, cy, 0, cx, cy, R * 2.2);
+    g.addColorStop(0, `rgba(255,244,228,${0.10 + 0.14 * st.level})`); g.addColorStop(1, 'rgba(255,244,228,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R * 2.2, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(255,248,236,0.35)'; c.lineWidth = 1.5;
+    let dot;
+    if (LW.breathPattern() === 'box') {
+      const s = R * 1.5, x0 = cx - s / 2, y0 = cy - s / 2;
+      c.beginPath(); c.roundRect(x0, y0, s, s, s * 0.08); c.stroke();
+      // dot travels the square: up the left (in), across the top (hold), down the right (out), along the bottom (hold)
+      const k = st.k, side = { in: 0, hold: 1, out: 2, rest: 3 }[st.phase];
+      dot = [[x0, y0 + s * (1 - k)], [x0 + s * k, y0], [x0 + s, y0 + s * k], [x0 + s * (1 - k), y0 + s]][side];
+    } else {
+      const r = R * (0.55 + 0.45 * st.level);
+      c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
+      const ang = -Math.PI / 2 + (st.phase === 'in' ? st.k : st.phase === 'out' ? 1 - st.k : 1) * Math.PI * 2 * 0.999;
+      dot = [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r];
+    }
+    c.fillStyle = 'rgba(255,250,240,0.95)'; c.shadowColor = 'rgba(255,240,220,0.9)'; c.shadowBlur = 14;
+    c.beginPath(); c.arc(dot[0], dot[1], 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+    const txtA = Math.sin(Math.PI * Math.min(1, st.k * 1.4 + 0.15));
+    c.globalAlpha = a * (0.55 + 0.4 * txtA);
+    c.fillStyle = '#fbf3e6'; c.font = '300 ' + Math.round(Math.min(W, H) * 0.024) + 'px ui-serif, "New York", Georgia, serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(st.label, cx, cy);
+    c.font = '400 ' + Math.round(Math.min(W, H) * 0.012) + 'px -apple-system, system-ui, sans-serif';
+    c.globalAlpha = a * 0.45;
+    c.fillText(Math.max(1, Math.ceil(st.dur * (1 - st.k))) + '', cx, cy + Math.min(W, H) * 0.035);
+    c.globalAlpha = 1;
+  }
+  function startBreathGuide() { if (!BG.on) { BG.on = true; BG.t0 = performance.now() / 1000; requestAnimationFrame(breathGuide); } }
+  LW.on('calm', (on) => { if (on) startBreathGuide(); });
+  addEventListener('load', () => { if (LW.calm) startBreathGuide(); });
+
   // ─── Music levels + beats ─────────────────────────────────────────────────
   LW.music = { level: 0, bass: 0, mid: 0, high: 0, live: false, lastLive: 0 };
   function onBeatFrame(m) {
@@ -201,7 +316,7 @@
     if (kind === 'off') return;
     const ctx = LW.audio();
     if (!ctx) return;
-    const out = ctx.createGain(); out.gain.value = 0; out.connect(ctx.destination);
+    const out = ctx.createGain(); out.gain.value = 0; out.__lwBus = true; out.connect(ctx.destination);
     out.gain.setTargetAtTime(volume * 0.5, ctx.currentTime, 1.2);
     SS.gain = out; SS.kind = kind;
     const src = (color) => { const s = ctx.createBufferSource(); s.buffer = noiseBuffer(ctx, color); s.loop = true; s.start(); SS.nodes.push(s); return s; };
@@ -417,6 +532,8 @@
   // Native host entry point.
   window.__lw = function (type, x, y, flag) {
     if (type === 'agents') { setAgents(x); return; }
+    if (type === 'audio') { for (const k in x || {}) { LW.audioPrefs[k] = Object.assign(LW.audioPrefs[k] || {}, x[k]); applyBus(k); } LW.emit('audioprefs', LW.audioPrefs); return; }
+    if (type === 'breath') { LW.globalBreath = x; return; }
     if (type === 'beat') { onBeatFrame(x); return; }
     if (type === 'focus') { setFocused(!!x); return; }
     if (type === 'perf') { if (x && x.fps) LW.fps = x.fps; LW._resumeFrames(); return; }

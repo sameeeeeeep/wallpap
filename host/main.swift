@@ -12,20 +12,22 @@ import CoreLocation
 import IOKit.ps
 import CoreServices
 
-struct Scene { let id: String; let title: String; let key: String; var pro = false; var music = false }
+struct Scene { let id: String; let title: String; let key: String; var pro = false; let category: String }
 
+/// Menu categories, in order. Music Mode works in every scene; it isn't a category.
+let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful"]
 let scenes: [Scene] = [
-    Scene(id: "koi", title: "Koi Pond", key: "1"),
-    Scene(id: "bowls", title: "Singing Bowls", key: "2", pro: true),
-    Scene(id: "cats", title: "Cats", key: "3"),
-    Scene(id: "grass", title: "Touch Grass", key: "4"),
-    Scene(id: "cafe", title: "Night Café", key: "5", pro: true, music: true),
-    Scene(id: "records", title: "Record Store", key: "", pro: true, music: true),
-    Scene(id: "train", title: "Night Train", key: "", pro: true, music: true),
-    Scene(id: "speakeasy", title: "Speakeasy", key: "", pro: true, music: true),
-    Scene(id: "rooftop", title: "Rooftop", key: "", pro: true, music: true),
-    Scene(id: "ramen", title: "Ramen Alley", key: "", pro: true, music: true),
-    Scene(id: "cabin", title: "Snowy Cabin", key: "", pro: true, music: true),
+    Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),
+    Scene(id: "grass", title: "Touch Grass", key: "2", category: "Nature"),
+    Scene(id: "cats", title: "Santorini Cats", key: "3", category: "Nature"),
+    Scene(id: "cafe", title: "Night Café", key: "4", pro: true, category: "Cozy Rooms"),
+    Scene(id: "cabin", title: "Snowy Cabin", key: "", pro: true, category: "Cozy Rooms"),
+    Scene(id: "records", title: "Record Store", key: "", pro: true, category: "Cozy Rooms"),
+    Scene(id: "speakeasy", title: "Speakeasy", key: "", pro: true, category: "City Nights"),
+    Scene(id: "rooftop", title: "Rooftop", key: "", pro: true, category: "City Nights"),
+    Scene(id: "ramen", title: "Ramen Alley", key: "", pro: true, category: "City Nights"),
+    Scene(id: "train", title: "Night Train", key: "", pro: true, category: "Journeys"),
+    Scene(id: "bowls", title: "Singing Bowls", key: "5", pro: true, category: "Mindful"),
 ]
 
 final class WallWindow: NSWindow {
@@ -381,6 +383,23 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
               let json = String(data: data, encoding: .utf8), force || json != lastAgentsJSON else { return }
         lastAgentsJSON = json
         windows.forEach { $0.js("__lw('agents',\(json))") }
+    }
+
+    // Breathing pattern for Calm · Breathe (box is the default).
+    var breathPattern: String {
+        get { defaults.string(forKey: "breathPattern") ?? "box" }
+        set { defaults.set(newValue, forKey: "breathPattern") }
+    }
+    // Independent audio categories (on/off + level), mirrored into every scene.
+    func audioPref(_ cat: String) -> (on: Bool, vol: Double) {
+        (defaults.object(forKey: "audio.\(cat).on") as? Bool ?? true, defaults.object(forKey: "audio.\(cat).vol") as? Double ?? 1.0)
+    }
+    func pushAudioPrefs() {
+        let parts = ["fx", "ambience", "weather"].map { c -> String in
+            let p = audioPref(c); return "\(c):{on:\(p.on),vol:\(p.vol)}"
+        }
+        let js = "__lw('audio',{\(parts.joined(separator: ","))}); __lw('breath','\(breathPattern)')"
+        windows.forEach { $0.js(js) }
     }
 
     var userPaused = false
@@ -800,6 +819,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         pushSettings()
         webView.evaluateJavaScript("__lw('perf',{fps:\(fps)}); __lw('focus',\(engaged)); __lw('nowplaying',\(lastNowPlayingJSON.isEmpty ? "null" : lastNowPlayingJSON))", completionHandler: nil)
         pushSoundscape()
+        pushAudioPrefs()
         if !lastAgentsJSON.isEmpty { webView.evaluateJavaScript("__lw('agents',\(lastAgentsJSON))", completionHandler: nil) }
     }
 
@@ -835,15 +855,19 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             if s.pro { lock(item) }
             return item
         }
-        available.filter { !$0.music }.forEach { menu.addItem(sceneItem($0)) }
-        let musicScenes = available.filter { $0.music }
-        if !musicScenes.isEmpty {
-            let mItem = NSMenuItem(title: "Music Scenes", action: nil, keyEquivalent: "")
-            let mMenu = NSMenu()
-            musicScenes.forEach { mMenu.addItem(sceneItem($0)) }
-            mItem.submenu = mMenu
-            if musicScenes.contains(where: { $0.id == sceneID }) { mItem.state = .mixed }
-            menu.addItem(mItem)
+        // One submenu per category; the active scene's category shows a dash.
+        for cat in categories {
+            let inCat = available.filter { $0.category == cat }
+            guard !inCat.isEmpty else { continue }
+            let cItem = NSMenuItem(title: cat, action: nil, keyEquivalent: "")
+            let cMenu = NSMenu()
+            inCat.forEach { cMenu.addItem(sceneItem($0)) }
+            cItem.submenu = cMenu
+            if inCat.contains(where: { $0.id == sceneID }) {
+                cItem.state = .on
+                cItem.title = "\(cat) — \(inCat.first { $0.id == sceneID }!.title)"
+            }
+            menu.addItem(cItem)
         }
         addSceneItems(to: menu)
         menu.addItem(.separator())
@@ -852,6 +876,20 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         calmItem.target = self
         lock(calmItem)
         menu.addItem(calmItem)
+        if isPro {
+            let bp = NSMenuItem(title: "Breathing Pattern", action: nil, keyEquivalent: "")
+            let bpMenu = NSMenu()
+            for (label, v) in [("Box — in · hold · out · hold (4-4-4-4)", "box"), ("Calm — in 4 · out 6", "calm"), ("Relax — 4-7-8", "478")] {
+                let it = NSMenuItem(title: label, action: #selector(pickBreath(_:)), keyEquivalent: "")
+                it.representedObject = v
+                it.state = breathPattern == v ? .on : .off
+                it.target = self
+                bpMenu.addItem(it)
+            }
+            bp.submenu = bpMenu
+            bp.indentationLevel = 1
+            menu.addItem(bp)
+        }
 
         let wItem = NSMenuItem(title: "Weather", action: nil, keyEquivalent: "")
         let wMenu = NSMenu()
@@ -898,6 +936,26 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         lock(rItem)
         menu.addItem(rItem)
 
+        let sounds = NSMenuItem(title: "Sounds", action: nil, keyEquivalent: "")
+        let sMenu = NSMenu()
+        for (label, c) in [("Interaction Sounds", "fx"), ("Scene Ambience", "ambience"), ("Weather Sounds", "weather")] {
+            let p = audioPref(c)
+            let it = NSMenuItem(title: label, action: nil, keyEquivalent: "")
+            let sub = NSMenu()
+            let onItem = NSMenuItem(title: "On", action: #selector(toggleAudioCat(_:)), keyEquivalent: "")
+            onItem.representedObject = c; onItem.state = p.on ? .on : .off; onItem.target = self
+            sub.addItem(onItem); sub.addItem(.separator())
+            for (vl, v) in [("Quiet", 0.4), ("Medium", 0.7), ("Full", 1.0)] {
+                let vi = NSMenuItem(title: vl, action: #selector(pickAudioVol(_:)), keyEquivalent: "")
+                vi.representedObject = [c, v]; vi.state = abs(p.vol - v) < 0.01 ? .on : .off; vi.target = self
+                sub.addItem(vi)
+            }
+            it.submenu = sub
+            it.state = p.on ? .on : .off
+            sMenu.addItem(it)
+        }
+        sounds.submenu = sMenu
+        menu.addItem(sounds)
         let ssItem = NSMenuItem(title: "Soundscape", action: nil, keyEquivalent: "")
         let ssMenu = NSMenu()
         for (label, kind) in [("Off", "off"), ("White Noise", "white"), ("Pink Noise", "pink"), ("Brown Noise", "brown"),
@@ -1062,6 +1120,20 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         applyPause()
     }
     @objc func togglePauseOnBattery() { pauseOnBattery.toggle(); applyPause() }
+    @objc func pickBreath(_ item: NSMenuItem) {
+        breathPattern = item.representedObject as? String ?? "box"
+        pushAudioPrefs(); rebuildMenu()
+    }
+    @objc func toggleAudioCat(_ item: NSMenuItem) {
+        guard let c = item.representedObject as? String else { return }
+        defaults.set(!audioPref(c).on, forKey: "audio.\(c).on")
+        pushAudioPrefs(); rebuildMenu()
+    }
+    @objc func pickAudioVol(_ item: NSMenuItem) {
+        guard let kv = item.representedObject as? [Any], let c = kv.first as? String, let v = kv.last as? Double else { return }
+        defaults.set(v, forKey: "audio.\(c).vol"); defaults.set(true, forKey: "audio.\(c).on")
+        pushAudioPrefs(); rebuildMenu()
+    }
     @objc func pickSoundscape(_ item: NSMenuItem) {
         soundscape = item.representedObject as? String ?? "off"
         pushSoundscape(); rebuildMenu()

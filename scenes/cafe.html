@@ -232,7 +232,7 @@ function computeLayout() {
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
   H = 1000;
-  if (hasBg()) { W = 1600; U = Math.max(cv.width / 1600, cv.height / 1000); OX = (cv.width - 1600 * U) / 2; OY = (cv.height - 1000 * U) / 2; }
+  if (hasBg()) { W = 1600; U = cv.height / 1000; OX = (cv.width - 1600 * U) * (cssW / cssH > 1.6 ? .25 : .5); OY = 0; }
   else { W = (cssW / cssH) * 1000; U = cv.height / 1000; OX = 0; OY = 0; }
   const o = {};
   o.floor = 772; o.wain = 588;
@@ -558,10 +558,15 @@ function bakeRoom() {
     // the hit-areas / shelf / LED positions exist
     VT(g);
     const n = ART.bg.night || ART.bg.day, d = ART.bg.day || ART.bg.night;
-    g.drawImage(n, 0, 0, 1600, 1000);
-    if (d !== n && E.day > 0.01) { g.globalAlpha = clamp(E.day, 0, 1); g.drawImage(d, 0, 0, 1600, 1000); g.globalAlpha = 1; }
+    LW.roomImage(g,n,'#25332b','#291b14');
+    if (d !== n && E.day > 0.01) { g.globalAlpha = clamp(E.day, 0, 1); LW.roomImage(g,d,'#25332b','#291b14'); g.globalAlpha = 1; }
+    LW.roomGrade(g, 0, 0, 1600, 1000, E.day);
+    g.save(); g.beginPath(); g.rect(0,0,1600,1000); g.clip(); g.setTransform(1,0,0,1,0,0); g.globalCompositeOperation = 'destination-in';
+    g.drawImage(albCv,0,0); g.restore();
+    paintPendants(g); paintMug(g,L.mug.x,L.mug.y,1,'#e9e0d2','#c45c3c');
+    paintLatte(g); paintCandleJar(g);
     // the music player furniture is mode-dependent, so it's drawn over the painting
-    if (L.mode === 'jukebox') { paintJukeboxBody(g); paintCrate(g); } else { paintConsole(g); paintTurntableBase(g); paintLedge(g); }
+    if (L.mode === 'jukebox') { paintJukeboxBody(g); paintCrate(g); } else { paintTurntableBase(g); paintLedge(g); }
     paintEmissive(g, true);
   } else {
     g.drawImage(albCv, 0, 0);
@@ -2447,7 +2452,7 @@ function updatePet(p, dt, T) {
   if (calm.on && !p.act) p.plan.length = 0;
   // ---- turning around (a quick squash through edge-on) ---------------------------
   let flipK = 1;
-  if (p.flip) { p.flip += dt / 0.34; if (p.flip >= 0.5 && p.face !== p.faceT) p.face = p.faceT; if (p.flip >= 1) p.flip = 0; else flipK = Math.max(0.16, Math.abs(Math.cos(p.flip * Math.PI))); }
+  if (p.flip) { p.flip += dt / 0.34; if (p.flip >= 0.5 && p.face !== p.faceT) p.face = p.faceT; if (p.flip >= 1) p.flip = 0; else flipK = 0.78 + 0.22 * Math.abs(Math.cos(p.flip * Math.PI)); }
   // ---- current act --------------------------------------------------------------
   let walking = false, fore = 1, hop = null;
   const a = p.act;
@@ -2652,8 +2657,11 @@ function sighPuff(p) {
 function drawPetSprite(g, p) {
   if (!spritesOn(p)) return false;
   const V = p.vis;
-  if (V.fade < 1 && V.prev && SPR[p.kind].img[V.prev]) drawPose(g, p, V.prev, 1 - smooth(V.fade));
-  drawPose(g, p, V.pose, V.fade < 1 && V.prev ? smooth(V.fade) : 1);
+  const f = LW.poseFrame(V.prev, V.pose, V.fade);
+  const sx = V.sx, sy = V.sy;
+  V.sx *= f.sx; V.sy *= f.sy;
+  drawPose(g, p, f.pose, 1);
+  V.sx = sx; V.sy = sy;
   return true;
 }
 function drawPose(g, p, name, alpha) {

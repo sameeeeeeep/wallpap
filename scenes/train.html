@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Night Train</title>
+<title>Indian Night Train</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0a0d; }
   canvas { position: fixed; left: 0; top: 0; display: block; }
@@ -16,37 +16,16 @@
 /* =====================================================================
    Night Train — a quiet carriage, window seat. The world slides by in
    parallax (city lights → suburbs → countryside → bridge over water →
-   brief tunnels; fields and hills by day). Music hero: the little player
-   propped on the table shows the album art + title; headphones, a glass
-   of tea in its holder, a face-down book. A calico cat naps on the seat
-   (sits up to watch the lights); a corgi wanders the aisle and settles
-   at different seats.
+   brief tunnels; fields and hills by day). A cup of chai rests on the table.
+   The compartment is unoccupied. Small flocks pass outside the window.
 
-   Click the player = play / pause.  Click the window = next track (the
-   view skips ahead to a new landscape).  Dev keys: n (fake track),
-   p play/pause, . next, s stretch, c/d roam cat/dog, w weather, t time.
+   Click the window to skip to the next landscape.
+   Dev keys: s stretch, w weather, t time.
 
-   ART SLOTS (optional; everything is procedural until these exist)
-   Put PNGs in scenes/art/train/. Tried once with new Image(); 404s ignored.
-     bg-night.png  3200×2000  carriage interior at night (16:10), EMPTY of the
-                              player/animals/tea steam. The WINDOW GLASS must be
-                              fully transparent (alpha 0) — the landscape is live.
-     bg-day.png    3200×2000  same framing by day (crossfades with bg-night).
-       With a bg the layout locks to a 1600×1000 reference frame (cover-fit).
-       Anchors (world units):
-         window glass        x 176…1050, y 150…612 (corner radius 46)
-         table top           y 640 (back) … 704 (front), x 333…893
-         player (hero)       base centre (568, 684), 150×252, leaning on a stand
-         left seat cushion   y 744, x 83…339  (cat's home)
-         right seat cushion  y 744, x 887…1143
-         aisle (dog lane)    y ≈ 950
-       Keep x > 1120 calm (macOS widgets live there): no text, nothing bright.
-     ANIMALS — illustrated sprites from the shared library:
-       art/sprites/cats/calico/{walk1,walk2,sit,sleep}.png         (cat "Patch")
-       art/sprites/dogs/corgi/{walk1,walk2,sit,sleep,play-bow}.png (corgi "Toast")
-     transparent, facing RIGHT, bottom-centre = paw contact; scaled so walk1's
-     width = body length. Per-scene overrides win: art/train/cat-<pose>.png,
-     art/train/dog-<pose>.png (same pose names). Procedural fallback until loaded.
+   Art: art/train/bg-night.png and optional bg-day.png use a 1600×1000 stage.
+   Window opening: x480…950, y322…550. Table: x580…850, y590…626.
+   art/train/countryside-night.png supplies the moonlit moving fields.
+   art/birds/sparrow.png is a shared four-frame transparent flight atlas.
    ===================================================================== */
 'use strict';
 (() => {
@@ -141,7 +120,7 @@ const fbm = (x, seed) => vnoise(x, seed) * 0.6 + vnoise(x * 2.3, seed + 7) * 0.2
 // =====================================================================
 const ART = { dir: 'art/train/', img: {} };
 function loadArtSlots() {
-  for (const name of ['bg-night', 'bg-day']) {
+  for (const name of ['bg-night', 'bg-day', 'countryside-night']) {
     try {
       const im = new Image();
       im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); };
@@ -242,57 +221,39 @@ function computeLayout() {
   if (cssW * cssH * dpr * dpr > 9.5e6) dpr = Math.sqrt(9.5e6 / (cssW * cssH));
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
-  if (artMode()) { W = 1600; K = Math.max(cssW / 1600, cssH / 1000); OX = (cssW - 1600 * K) / 2; OY = (cssH - 1000 * K) / 2; }
+  if (artMode()) { W = 1600; K = cssH / 1000; OX = (cssW - 1600 * K) * (cssW / cssH > 1.6 ? .25 : .5); OY = 0; }
   else { K = cssH / 1000; W = cssW / K; OX = 0; OY = 0; }
   U = K * dpr;
   const o = {};
-  // RIGHT SIDE CLEAR: widgets live on the right → the window, the player and every
-  // resting animal stay left of RZ; beyond it there is only quiet carriage.
+  // Keep the right side of the carriage quiet for desktop widgets.
   const RZ = W * 0.7; o.RZ = RZ;
   o.ceil = 62; o.floor = 880;
-  const wx0 = clamp(W * 0.11, 120, 300), wx1 = Math.min(RZ - 70, wx0 + clamp(W * 0.55, 700, 1300));
-  o.win = { x0: wx0, x1: wx1, y0: 150, y1: 612, r: 46 };
+  const wx0 = artMode() ? 480 : clamp(W * 0.11, 120, 300), wx1 = artMode() ? 950 : Math.min(RZ - 70, wx0 + clamp(W * 0.55, 700, 1300));
+  o.win = { x0: wx0, x1: wx1, y0: artMode() ? 322 : 150, y1: artMode() ? 550 : 612, r: 46 };
   o.win.w = wx1 - wx0; o.win.h = o.win.y1 - o.win.y0;
   o.hz = o.win.y0 + o.win.h * 0.56;      // horizon (eye level)
   const tcx = (wx0 + wx1) / 2, tw = clamp(o.win.w * 0.64, 440, 780);
-  o.table = { cx: tcx, x0: tcx - tw / 2, x1: tcx + tw / 2, w: tw, back: 640, front: 704, th: 14 };
+  o.table = artMode() ? { cx:713,x0:580,x1:850,w:270,back:590,front:626,th:12 } : { cx: tcx, x0: tcx - tw / 2, x1: tcx + tw / 2, w: tw, back: 640, front: 704, th: 14 };
   o.seatL = { b0: o.table.x0 - 250, b1: o.table.x0 - 128, c0: o.table.x0 - 250, c1: o.table.x0 + 6, top: 744, head: 330, dir: 1 };
   o.seatR = { b0: o.table.x1 + 128, b1: o.table.x1 + 250, c0: o.table.x1 - 6, c1: o.table.x1 + 250, top: 744, head: 330, dir: -1 };
+  if (artMode()) {
+    Object.assign(o.seatL, {b0:70,b1:335,c0:80,c1:500,top:805,head:515});
+    Object.assign(o.seatR, {b0:1100,b1:1350,c0:1000,c1:1340,top:815,head:515});
+  }
   // on the table
   const T = o.table;
-  o.phones = { x: T.x0 + tw * 0.2, y: 688 };
-  o.dev = { cx: T.x0 + tw * 0.42, by: 684, w: 150, h: 252 };
-  o.dev.x0 = o.dev.cx - o.dev.w / 2; o.dev.y0 = o.dev.by - o.dev.h;
   o.cup = { x: T.x0 + tw * 0.63, y: 694 };
   o.glass = { x: T.x0 + tw * 0.735, y: 698 };
   o.book = { x: T.x0 + tw * 0.86, y: 676 };
+  if(artMode()){o.cup={x:794,y:614};o.glass={x:825,y:616};o.book={x:830,y:612};}
   // lamps on the window pillars
   o.lampL = { x: wx0 - 58, y: 236 };
   o.lampR = { x: wx1 + 58, y: 236 };
+  if(artMode()){o.lampL={x:374,y:398};o.lampR={x:1048,y:398};}
   // the quiet right: the next bay's seat (back-to-back with ours), a framed route map, a coat hook
   o.nextSeat = { b0: o.seatR.b1 + 14, b1: o.seatR.b1 + 136, c1: o.seatR.b1 + 400 };
   o.map = { x: Math.max(o.nextSeat.b1 + 70, W * 0.8), y: 210, w: 150, h: 104 };
   o.door = W - o.seatR.b1 > 820 ? { x0: W - 230, x1: W - 60 } : null;
-  // animal places
-  o.plats = {
-    seatL: { y: o.seatL.top, k: 0.84 },
-    seatR: { y: o.seatR.top, k: 0.84 },
-    table: { y: 670, k: 0.74 },
-    floor: { y: 950, k: 1.0 },
-    under: { y: 906, k: 0.86 },
-  };
-  o.lane = { y: 950, k: 1.0 };
-  o.catSpots = {
-    seatL: { plat: 'seatL', x: o.seatL.c1 - 92, face: -1 },
-    table: { plat: 'table', x: T.x0 + 30, face: 1 },
-    seatR: { plat: 'seatR', x: o.seatR.c0 + 92, face: 1 },
-  };
-  o.dogSpots = [
-    { id: 'under', x: tcx + 30, y: o.plats.under.y, k: o.plats.under.k, face: -1 },
-    { id: 'aisleL', x: o.seatL.c0 + 120, y: o.lane.y, k: o.lane.k, face: 1 },
-    { id: 'aisleR', x: Math.min(o.seatR.c0 + 120, RZ - 80), y: o.lane.y, k: o.lane.k, face: -1 },
-    { id: 'seatR', x: o.seatR.c0 + 104, y: o.plats.seatR.y, k: 0.8, face: -1, seat: true },
-  ];
   // interior lights (level by kind)
   o.lights = [
     { x: W / 2, y: 30, rx: W * 0.75, ry: 420, k: 0.45, c: [1.0, 0.86, 0.66], kind: 'ceil' },
@@ -357,9 +318,12 @@ function bakeRoom() {
   if (artMode()) {
     setW(g); g.translate(RM, RM);
     const n = ART.img['bg-night'], d = ART.img['bg-day'];
-    g.drawImage(n || d, 0, 0, 1600, 1000);
-    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; g.drawImage(d, 0, 0, 1600, 1000); g.globalAlpha = 1; }
-    winHole(g); paintVignette(g);
+    LW.roomImage(g,n || d);
+    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; LW.roomImage(g,d); g.globalAlpha = 1; }
+    LW.roomGrade(g, 0, 0, 1600, 1000, E.day);
+    winHole(g);
+    paintCupBody(g);
+    paintVignette(g);
     return;
   }
   albCv.width = mw; albCv.height = mh;
@@ -399,11 +363,9 @@ function moquette(g, path, base, seed) {
   // classic carriage upholstery: deep teal with a small repeating motif
   g.save(); g.clip(path);
   g.fillStyle = base; g.fillRect(-50, 0, W + 100, H);
-  const r = mulberry(seed);
-  for (let y = 250; y < 900; y += 18) for (let x = -40 + ((y / 18) % 2) * 9; x < W + 40; x += 18) {
-    g.fillStyle = r() < 0.5 ? 'rgba(214,170,90,0.16)' : 'rgba(180,60,60,0.12)';
-    g.beginPath(); g.moveTo(x, y - 3); g.lineTo(x + 3, y); g.lineTo(x, y + 3); g.lineTo(x - 3, y); g.closePath(); g.fill();
-  }
+  const gloss = g.createLinearGradient(0, 330, 0, 800);
+  gloss.addColorStop(0,'rgba(185,218,240,.12)'); gloss.addColorStop(.45,'rgba(0,0,0,0)'); gloss.addColorStop(1,'rgba(8,23,40,.2)');
+  g.fillStyle = gloss; g.fillRect(-50,0,W+100,H);
   g.restore();
 }
 function paintAlbedo(g) {
@@ -417,9 +379,19 @@ function paintAlbedo(g) {
   paintSeat(g, L.seatL);
   paintSeat(g, L.seatR);
   paintTable(g);
-  paintPhones(g);
   paintCupBody(g);
   paintBook(g);
+}
+function paintIndianBars(g) {
+  const w = L.win; g.save(); winPath(g, 1); g.clip();
+  for (let i = 1; i <= 4; i++) {
+    const y = w.y0 + w.h * i / 5;
+    g.fillStyle = 'rgba(13,24,33,.7)'; g.fillRect(w.x0, y+2, w.w, 5);
+    const steel = g.createLinearGradient(0,y-2,0,y+3);
+    steel.addColorStop(0,'#9aa9aa'); steel.addColorStop(.3,'#596a70'); steel.addColorStop(1,'#24343c');
+    g.fillStyle = steel; g.fillRect(w.x0,y-2,w.w,4);
+  }
+  g.restore();
 }
 function paintShell(g) {
   const w = L.win, X0 = -RM - 10, X1 = W + RM + 10;
@@ -524,7 +496,7 @@ function paintSeat(g, s) {
   const d = s.dir, top = s.top, cIn = d > 0 ? s.c1 : s.c0, cOut = d > 0 ? s.c0 : s.c1;
   const back = seatPath(s);
   g.fillStyle = 'rgba(0,0,0,0.3)'; g.save(); g.translate(d * 10, 8); g.fill(back); g.restore();
-  moquette(g, back, '#24585a', 11 + (d > 0 ? 0 : 5));
+  moquette(g, back, '#315f89', 11 + (d > 0 ? 0 : 5));
   // piping + shading
   g.strokeStyle = 'rgba(10,25,25,0.6)'; g.lineWidth = 3; g.stroke(back);
   g.save(); g.clip(back);
@@ -538,7 +510,7 @@ function paintSeat(g, s) {
   // cushion
   const cx0 = Math.min(cIn, cOut), cx1 = Math.max(cIn, cOut);
   const cush = new Path2D(); cush.moveTo(cx0 + 10, top - 6); cush.lineTo(cx1 - 10, top - 6); cush.quadraticCurveTo(cx1 + 4, top - 4, cx1, top + 22); cush.lineTo(cx1 - 2, top + 54); cush.lineTo(cx0 + 2, top + 54); cush.lineTo(cx0, top + 22); cush.quadraticCurveTo(cx0 - 4, top - 4, cx0 + 10, top - 6); cush.closePath();
-  moquette(g, cush, '#2a605e', 31 + d);
+  moquette(g, cush, '#386f9d', 31 + d);
   g.save(); g.clip(cush); const cg = g.createLinearGradient(0, top - 6, 0, top + 54); cg.addColorStop(0, 'rgba(255,255,255,0.08)'); cg.addColorStop(0.35, 'rgba(0,0,0,0)'); cg.addColorStop(1, 'rgba(0,0,0,0.38)'); g.fillStyle = cg; g.fillRect(cx0 - 10, top - 10, cx1 - cx0 + 20, 70); g.restore();
   g.strokeStyle = 'rgba(10,25,25,0.55)'; g.lineWidth = 2.5; g.stroke(cush);
   // frame + kick plate down to the floor
@@ -608,43 +580,17 @@ function paintTable(g) {
   g.fillStyle = '#9a7a48'; g.fillRect(t.x0, t.front, t.w, t.th);
   g.fillStyle = 'rgba(255,236,190,0.45)'; g.fillRect(t.x0, t.front, t.w, 1.6);
   g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(t.x0, t.front + t.th - 3, t.w, 3);
-  // the player's little stand + a contact shadow
-  const d = L.dev;
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(d.cx + 6, d.by + 2, d.w * 0.6, 8, 0, 0, TAU); g.fill();
-  g.fillStyle = '#1c1a1c'; g.beginPath(); g.moveTo(d.cx - 30, d.by); g.lineTo(d.cx + 30, d.by); g.lineTo(d.cx + 20, d.by - 70); g.lineTo(d.cx - 20, d.by - 70); g.closePath(); g.fill();
-}
-function paintPhones(g) {
-  // over-ear headphones lying on the table; coiled cable to the player
-  const { x, y } = L.phones, d = L.dev;
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x + 4, y + 2, 66, 10, 0, 0, TAU); g.fill();
-  g.strokeStyle = '#1d1b1c'; g.lineWidth = 9; g.lineCap = 'round';
-  g.beginPath(); g.ellipse(x, y - 6, 46, 20, 0, Math.PI * 1.05, Math.PI * 1.95); g.stroke();
-  g.strokeStyle = '#9a7a54'; g.lineWidth = 4; g.beginPath(); g.ellipse(x, y - 8, 44, 18, 0, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
-  for (const s of [-1, 1]) {
-    g.fillStyle = '#2a2426'; g.beginPath(); g.ellipse(x + s * 42, y - 4, 20, 13, s * 0.15, 0, TAU); g.fill();
-    g.fillStyle = '#4a3e3a'; g.beginPath(); g.ellipse(x + s * 42, y - 6, 15, 9, s * 0.15, 0, TAU); g.fill();
-    g.fillStyle = '#c8a060'; g.beginPath(); g.ellipse(x + s * 42, y - 6, 4, 2.4, 0, 0, TAU); g.fill();
-  }
-  g.strokeStyle = '#1a1818'; g.lineWidth = 1.8; g.beginPath(); g.moveTo(x + 58, y - 2);
-  const ex = d.cx - 20, ey = d.by - 4;
-  for (let i = 0; i <= 16; i++) { const t = i / 16; g.lineTo(lerp(x + 60, ex, t), lerp(y + 2, ey, t) + Math.sin(t * Math.PI) * 10 + Math.sin(i * 1.9) * 2); }
-  g.stroke();
 }
 function paintCupBody(g) {
-  // tea glass in a metal holder (podstakannik) on a saucer; the tea surface is live
-  const { x, y } = L.cup;
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x + 3, y + 2, 34, 6, 0, 0, TAU); g.fill();
-  g.fillStyle = '#d8d2c4'; g.beginPath(); g.ellipse(x, y - 1, 32, 6, 0, 0, TAU); g.fill();
-  // glass
-  g.fillStyle = 'rgba(150,60,20,0.85)'; g.beginPath(); g.moveTo(x - 17, y - 70); g.lineTo(x + 17, y - 70); g.lineTo(x + 15, y - 8); g.lineTo(x - 15, y - 8); g.closePath(); g.fill();
-  g.fillStyle = 'rgba(255,240,220,0.35)'; g.fillRect(x - 13, y - 68, 3, 52);
-  // ornate holder
-  const hg = g.createLinearGradient(x - 20, 0, x + 20, 0); hg.addColorStop(0, '#6a5a40'); hg.addColorStop(0.45, '#e0c890'); hg.addColorStop(1, '#5a4a30');
-  g.fillStyle = hg; g.beginPath(); g.moveTo(x - 18, y - 40); g.lineTo(x + 18, y - 40); g.lineTo(x + 16, y - 4); g.quadraticCurveTo(x, y, x - 16, y - 4); g.closePath(); g.fill();
-  g.strokeStyle = 'rgba(60,40,10,0.6)'; g.lineWidth = 1; for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(x - 10 + i * 5, y - 24, 3, 0, TAU); g.stroke(); }
-  g.strokeStyle = '#a8905c'; g.lineWidth = 4; g.beginPath(); g.moveTo(x + 18, y - 36); g.quadraticCurveTo(x + 34, y - 30, x + 30, y - 16); g.quadraticCurveTo(x + 26, y - 8, x + 16, y - 10); g.stroke();
-  // spoon
-  g.strokeStyle = '#c8c4bc'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(x - 4, y - 66); g.lineTo(x + 10, y - 96); g.stroke();
+  // A tapered terracotta kulhad; the chai surface and steam remain live.
+  const {x,y}=L.cup;
+  g.fillStyle='rgba(0,0,0,.28)';g.beginPath();g.ellipse(x+2,y+1,25,5,0,0,TAU);g.fill();
+  const clay=g.createLinearGradient(x-21,y,x+21,y);clay.addColorStop(0,'#80503b');clay.addColorStop(.4,'#c78d64');clay.addColorStop(1,'#89563d');
+  g.fillStyle=clay;g.beginPath();g.moveTo(x-21,y-63);g.lineTo(x+21,y-63);g.lineTo(x+15,y-3);g.quadraticCurveTo(x,y+3,x-15,y-3);g.closePath();g.fill();
+  g.strokeStyle='rgba(224,167,120,.3)';g.lineWidth=1;
+  for(let i=0;i<5;i++){g.beginPath();g.ellipse(x,y-12-i*9,16+i*.6,3,0,0,Math.PI);g.stroke();}
+  g.fillStyle='#bb8057';g.beginPath();g.ellipse(x,y-63,22,5,0,0,TAU);g.fill();
+  g.fillStyle='#654330';g.beginPath();g.ellipse(x,y-63,17,3.6,0,0,TAU);g.fill();
 }
 function paintBook(g) {
   // a paperback lying face-down, open (a little tent)
@@ -859,11 +805,9 @@ function outsidePalette() {
 // =====================================================================
 //  the train: speed, distance, track joints, rocking, skips
 // =====================================================================
-const train = { v: 150, d: 400, joint: 0, lampX: [], skip: null, beatLamps: [], tunnel: 0 };
+const train = { v: 150, d: 15000, joint: 0, lampX: [], skip: null, beatLamps: [], tunnel: 0 };
 function updateTrain(dt, T) {
-  const playing = music.np && music.np.playing;
-  const lvl = clamp((LW.music && LW.music.level) || 0, 0, 1);
-  let vT = playing ? 150 + 150 * lvl : music.ever ? 120 : 140;
+  let vT = 140;
   if (calm.on) vT *= 0.5;
   if (train.skip) vT *= 3;
   train.v = approach(train.v, vT, train.skip ? 3 : 0.35, dt);
@@ -1001,7 +945,47 @@ function drawOutside(g, T) {
   // NEAR: catenary masts, lamps, bushes, walls, bridge girders
   drawNear(g, T);
   if (train.tunnel > 0.001) drawTunnel(g, T);
+  drawPaintedCountryside(g,T);
   if (E.snow > 0.02) drawSnow(g, T);
+}
+// Cache mirrored, feathered panorama bands once. Their speeds follow distance,
+// so calm mode, acceleration and landscape skips affect every layer together.
+let countrysideLayers = null;
+function prepareCountryside(im) {
+  if(countrysideLayers && countrysideLayers.image === im)return countrysideLayers;
+  const iw=Math.min(1200,im.naturalWidth),ih=Math.round(iw*im.naturalHeight/im.naturalWidth);
+  const bands=[{start:.46,speed:.045},{start:.625,speed:.22},{start:.79,speed:.68}].map(spec=>{
+    const sy=Math.floor(ih*spec.start),bh=ih-sy,cv=newCanvas(iw*2,bh),c=cv.getContext('2d');
+    c.drawImage(im,0,im.naturalHeight*sy/ih,im.naturalWidth,im.naturalHeight*(1-sy/ih),0,0,iw,bh);
+    c.save();c.translate(iw*2,0);c.scale(-1,1);
+    c.drawImage(im,0,im.naturalHeight*sy/ih,im.naturalWidth,im.naturalHeight*(1-sy/ih),0,0,iw,bh);c.restore();
+    const mask=c.createLinearGradient(0,0,0,Math.max(6,ih*.035));
+    mask.addColorStop(0,'rgba(0,0,0,0)');mask.addColorStop(1,'rgba(0,0,0,1)');
+    c.globalCompositeOperation='destination-in';c.fillStyle=mask;c.fillRect(0,0,cv.width,cv.height);
+    return {...spec,start:sy/ih,cv};
+  });
+  return countrysideLayers={image:im,bands};
+}
+function drawPaintedCountryside(g,T) {
+  const im=ART.img['countryside-night'];if(!im || !artMode())return;
+  const a=(1-E.day)*(1-train.tunnel);if(a<.005)return;
+  const v=L.V,w=v.ww,h=v.wh,land=prepareCountryside(im);
+  g.save();g.globalAlpha=a;g.beginPath();g.rect(v.x0,v.y0,w,h);g.clip();
+  const cropW=Math.min(im.naturalWidth,im.naturalHeight*w/h);
+  // Moon and distant sky stay fixed as the terrain travels past the train.
+  g.drawImage(im,0,0,cropW,im.naturalHeight,v.x0,v.y0,w,h);
+  const tileW=2*h*im.naturalWidth/im.naturalHeight;
+  for(const layer of land.bands){
+    const offset=((train.d*layer.speed)%tileW+tileW)%tileW;
+    const y=v.y0+h*layer.start,dh=h*(1-layer.start);
+    for(let x=v.x0-offset;x<v.x1;x+=tileW)g.drawImage(layer.cv,x,y,tileW,dh);
+  }
+  const haze=Math.min(.65,E.fog*.5+E.rain*.18);
+  if(haze>.01){g.fillStyle=rgba(E.bot,haze);g.fillRect(v.x0,v.y0,w,h);}
+  // Nearby poles move faster than the fields and enter/leave beyond the frame.
+  const px=v.x0+w+20-((train.d*.95)%(w*3.5));
+  g.strokeStyle='rgba(12,24,29,.7)';g.lineWidth=2;g.beginPath();g.moveTo(px,v.y1);g.lineTo(px,v.y0+h*.43);g.moveTo(px-9,v.y0+h*.46);g.lineTo(px+9,v.y0+h*.46);g.stroke();
+  g.restore();
 }
 function drawHouse(g, x, base, e, s) {
   const top = base - e.h;
@@ -1132,9 +1116,7 @@ function drawGlass(g, T, dt) {
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'screen'; g.globalAlpha = Math.min(0.85, refl);
     g.drawImage(reflCv, OX * dpr + (v.x0 + rock.x) * U, OY * dpr + (v.y0 + rock.y) * U, v.ww * U, v.wh * U);
     g.restore();
-    // the player's screen glow, reflected
-    const p = music.pal || DEFAULT_PAL, bright = screenBright();
-    drawSprite(g, tintGlow || GLOW_WARM, L.dev.cx + 20, w.y1 - 70, 120, refl * 0.5 * bright, 'screen');
+
   }
   // skip transition: a quick dip into darkness
   if (train.skip) { const t = train.skip.t, a = t < 0.45 ? smooth(t / 0.45) : 1 - smooth((t - 0.45) / 0.8); g.fillStyle = `rgba(4,4,8,${0.92 * a})`; g.fillRect(v.x0, v.y0, v.ww, v.wh); }
@@ -1184,487 +1166,58 @@ function drawSweeps(g, dt) {
 }
 
 // =====================================================================
-//  music: now playing, artwork, palette, the player's screen
+//  chai
 // =====================================================================
-const music = { np: null, ever: false, playing: false, key: '', artKey: '', art: null, pal: null, lv: 0, intent: null, newTrackT: -99, pulse: 0, prog: 0, noteT: 3, lastBeat: -9 };
-const DEFAULT_PAL = { tint: [214, 170, 110], acc: [120, 150, 190], dark: [30, 26, 36] };
-let screenCv = newCanvas(1, 1), screenKey = '', tintGlow = null, note = null;
-function palFromHash(s) { const h = hash(s) % 360; return { tint: hsl2rgb(h, 0.5, 0.56), acc: hsl2rgb((h + 140) % 360, 0.42, 0.6), dark: hsl2rgb(h, 0.35, 0.16), gen: true, hue: h }; }
-function extractPalette(img) {
-  try {
-    const c = newCanvas(24, 24), g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(img, 0, 0, 24, 24);
-    const d = g.getImageData(0, 0, 24, 24).data;
-    const bins = Array.from({ length: 12 }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
-    let ar = 0, ag = 0, ab = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const [h, s, l] = rgb2hsl(d[i], d[i + 1], d[i + 2]);
-      ar += d[i]; ag += d[i + 1]; ab += d[i + 2];
-      const wgt = s * s * (1 - Math.abs(l - 0.52) * 1.6);
-      if (wgt <= 0) continue;
-      const bn = bins[Math.floor(h / 30) % 12];
-      bn.w += wgt; bn.r += d[i] * wgt; bn.g += d[i + 1] * wgt; bn.b += d[i + 2] * wgt;
-    }
-    const n = d.length / 4, avg = [ar / n, ag / n, ab / n];
-    const order = bins.map((b, i) => ({ ...b, i })).sort((a, b) => b.w - a.w);
-    const norm = (c, L2) => { const [h, s] = rgb2hsl(c[0], c[1], c[2]); return hsl2rgb(h, clamp(s, 0.3, 0.75), L2); };
-    if (order[0].w < 3) { const [h] = rgb2hsl(...avg); return { tint: norm(avg, 0.58), acc: norm(avg, 0.7), dark: avg.map((v) => v * 0.35), hue: h }; }
-    const b0 = order[0], c0 = [b0.r / b0.w, b0.g / b0.w, b0.b / b0.w];
-    const b1 = order.find((b) => b !== b0 && Math.min(Math.abs(b.i - b0.i), 12 - Math.abs(b.i - b0.i)) >= 2 && b.w > b0.w * 0.15) || b0;
-    const c1 = [b1.r / b1.w, b1.g / b1.w, b1.b / b1.w];
-    return { tint: norm(c0, 0.58), acc: norm(c1, 0.66), dark: avg.map((v) => v * 0.35), hue: rgb2hsl(...c0)[0] };
-  } catch (e) { return null; }
-}
-function onNowPlaying(np) {
-  const prevKey = music.key;
-  music.np = np || null;
-  if (np) {
-    music.ever = true;
-    const key = (np.title || '') + '\n' + (np.artist || '') + '\n' + (np.album || '');
-    if (key !== prevKey) {
-      music.key = key; music.prog = 0; music.newTrackT = nowS();
-      music.title = np.title || ''; music.artist = np.artist || ''; music.album = np.album || '';
-      if (!np.artwork) { music.art = null; music.artKey = ''; music.pal = palFromHash(key); rebuildArt(); }
-      if (prevKey) { cat.watchUntil = Math.max(cat.watchUntil, nowS() + rand(12, 22)); dog.excite = 2.2; }
-    }
-    if (np.artwork && np.artwork !== music.artKey) loadArt(np.artwork, key);
-    if (np.playing && !music.playing) { cat.lastStim = dog.lastStim = nowS(); }
-    music.playing = !!np.playing;
-  } else music.playing = false;
-  music.intent = null;
-  screenKey = '';
-}
-function loadArt(src, key, retry) {
-  music.artKey = src;
-  const img = new Image();
-  if (!retry && /^https?:/i.test(src)) img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    if (music.artKey !== src) return;
-    const c = newCanvas(400, 400), g = c.getContext('2d');
-    const s = Math.min(img.naturalWidth, img.naturalHeight) || 1;
-    g.imageSmoothingQuality = 'high';
-    g.drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, 400, 400);
-    music.art = c;
-    music.pal = extractPalette(c) || palFromHash(key);
-    rebuildArt();
-  };
-  img.onerror = () => { if (!retry && img.crossOrigin) loadArt(src, key, true); else { music.art = null; music.pal = palFromHash(key); rebuildArt(); } };
-  img.src = src;
-}
-function rebuildArt() {
-  const p = music.pal || DEFAULT_PAL;
-  tintGlow = sprite(96, [[0, rgba(p.tint, 0.9)], [0.4, rgba(p.tint, 0.3)], [1, rgba(p.tint, 0)]]);
-  screenKey = '';
-}
-function screenState() {
-  if (calm.on) return 'calm';
-  const np = music.np;
-  if (np && (music.intent ? music.intent.play : np.playing)) return 'play';
-  if (np) return 'pause';
-  return music.ever ? 'pause' : 'idle';
-}
-function screenBright() { const s = screenState(); return s === 'play' ? 1 : s === 'pause' ? 0.62 : s === 'calm' ? 0.4 : 0.55; }
-function clockStr() { const h = E.hour, hh = Math.floor(h), mm = Math.floor((h - hh) * 60); return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0'); }
-function buildScreen() {
-  const d = L.dev, sw = d.w - 20, sh = d.h - 34, S = Math.min(4, U * 1.25);
-  const st = screenState(), key = [st, E.day > 0.5 ? 'd' : 'n', music.key, music.artKey, music.art ? 1 : 0, note ? note.text : '', clockStr(), S, music.pal ? music.pal.hue : ''].join('|');
-  if (key === screenKey) return;
-  screenKey = key;
-  screenCv.width = Math.round(sw * S); screenCv.height = Math.round(sh * S);
-  const g = screenCv.getContext('2d'); g.setTransform(S, 0, 0, S, 0, 0);
-  const p = music.pal || DEFAULT_PAL;
-  if (st === 'idle' || st === 'calm') {
-    const gr = g.createLinearGradient(0, 0, 0, sh); gr.addColorStop(0, '#16203c'); gr.addColorStop(1, '#2c2240'); g.fillStyle = gr; g.fillRect(0, 0, sw, sh);
-    if (E.day > 0.5) { g.fillStyle = 'rgba(255,214,120,0.95)'; g.beginPath(); g.arc(sw - 26, 26, 7, 0, TAU); g.fill(); g.strokeStyle = 'rgba(255,214,120,0.8)'; g.lineWidth = 1.4; for (let k = 0; k < 8; k++) { const a = k * TAU / 8; g.beginPath(); g.moveTo(sw - 26 + Math.cos(a) * 10, 26 + Math.sin(a) * 10); g.lineTo(sw - 26 + Math.cos(a) * 13, 26 + Math.sin(a) * 13); g.stroke(); } }
-    else { g.fillStyle = 'rgba(255,240,210,0.9)'; g.beginPath(); g.arc(sw - 26, 26, 9, 0, TAU); g.fill(); g.fillStyle = '#16203c'; g.beginPath(); g.arc(sw - 22, 23, 8, 0, TAU); g.fill(); }
-    g.fillStyle = 'rgba(240,236,250,0.95)'; g.font = `200 30px ${SANS}`; g.textAlign = 'center'; g.fillText(st === 'calm' ? 'breathe' : clockStr(), sw / 2, 72);
-    g.font = `500 8px ${SANS}`; g.fillStyle = 'rgba(220,214,240,0.7)'; g.fillText(st === 'calm' ? 'in for 4 · out for 6' : 'night train · car 7 · seat 42', sw / 2, 88);
-    if (st === 'idle') {
-      g.fillStyle = 'rgba(255,255,255,0.1)'; rr(g, 8, sh - 64, sw - 16, 50, 9); g.fill();
-      g.fillStyle = '#c86a5a'; rr(g, 15, sh - 57, 36, 36, 5); g.fill(); g.fillStyle = '#f4d8a0'; g.beginPath(); g.arc(37, sh - 45, 9, 0, TAU); g.fill();
-      g.textAlign = 'left'; g.fillStyle = 'rgba(255,255,255,0.92)'; g.font = `600 8.5px ${SANS}`; g.fillText('Night Train mix', 57, sh - 42);
-      g.fillStyle = 'rgba(255,255,255,0.6)'; g.font = `500 7.5px ${SANS}`; g.fillText('tap to play', 57, sh - 30);
-      g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.moveTo(sw - 26, sh - 47); g.lineTo(sw - 26, sh - 31); g.lineTo(sw - 14, sh - 39); g.closePath(); g.fill();
-    }
-  } else {
-    const gr = g.createLinearGradient(0, 0, 0, sh); gr.addColorStop(0, rgba(mix3(p.dark, p.tint, 0.35))); gr.addColorStop(1, rgba(p.dark)); g.fillStyle = gr; g.fillRect(0, 0, sw, sh);
-    const as = sw - 16;
-    g.save(); rr(g, 8, 10, as, as, 7); g.clip();
-    if (music.art) g.drawImage(music.art, 8, 10, as, as);
-    else { g.fillStyle = rgba(p.tint); g.fillRect(8, 10, as, as); g.fillStyle = rgba(p.acc, 0.9); g.beginPath(); g.arc(8 + as * 0.62, 10 + as * 0.4, as * 0.22, 0, TAU); g.fill(); g.fillStyle = 'rgba(255,250,240,0.92)'; g.font = `italic 600 11px ${SERIF}`; g.fillText(fitText(g, music.album || music.title, as - 14), 15, 10 + as - 10); }
-    g.restore();
-    g.textAlign = 'left';
-    g.fillStyle = 'rgba(255,255,255,0.96)'; g.font = `700 10px ${SANS}`; g.fillText(fitText(g, music.title, as), 8, as + 28);
-    g.fillStyle = 'rgba(255,255,255,0.68)'; g.font = `500 8.5px ${SANS}`; g.fillText(fitText(g, music.artist, as), 8, as + 40);
-    // controls
-    const cy = sh - 16, cx = sw / 2;
-    g.fillStyle = 'rgba(255,255,255,0.9)';
-    if (st === 'play') { g.fillRect(cx - 5, cy - 7, 3.5, 14); g.fillRect(cx + 1.5, cy - 7, 3.5, 14); }
-    else { g.beginPath(); g.moveTo(cx - 4, cy - 8); g.lineTo(cx - 4, cy + 8); g.lineTo(cx + 8, cy); g.closePath(); g.fill(); }
-    g.fillStyle = 'rgba(255,255,255,0.6)';
-    for (const s of [-1, 1]) { const x = cx + s * 32; g.beginPath(); g.moveTo(x - s * 4, cy - 6); g.lineTo(x - s * 4, cy + 6); g.lineTo(x + s * 4, cy); g.closePath(); g.fill(); g.fillRect(x + s * 4 - (s > 0 ? 0 : 2), cy - 6, 2, 12); }
-  }
-  if (note) {
-    g.fillStyle = 'rgba(250,246,238,0.94)'; rr(g, 6, 6, sw - 12, 30, 8); g.fill();
-    g.fillStyle = '#3a3030'; g.textAlign = 'left'; g.font = `700 7.5px ${SANS}`; g.fillText(note.head, 13, 18);
-    g.font = `500 7.5px ${SANS}`; g.fillText(fitText(g, note.text, sw - 28), 13, 29);
-  }
-  g.textAlign = 'left';
-}
-function drawPlayer(g, T) {
-  const d = L.dev, x0 = d.x0, y0 = d.y0, lt = lightAt(d.cx, d.y0 + d.h * 0.5);
-  setWR(g);
-  buildScreen();
-  const bright = screenBright() * (1 - calm.lv * 0.3);
-  // body
-  g.fillStyle = 'rgba(0,0,0,0.35)'; rr(g, x0 + 5, y0 + 6, d.w, d.h, 18); g.fill();
-  g.fillStyle = rgba(mul([40, 38, 44], lt)); rr(g, x0, y0, d.w, d.h, 18); g.fill();
-  g.strokeStyle = rgba(mul([150, 140, 130], lt), 0.8); g.lineWidth = 1.4; rr(g, x0 + 0.7, y0 + 0.7, d.w - 1.4, d.h - 1.4, 17); g.stroke();
-  // screen
-  const sx = x0 + 10, sy = y0 + 12, sw = d.w - 20, sh = d.h - 34;
-  g.save(); rr(g, sx, sy, sw, sh, 10); g.clip();
-  g.drawImage(screenCv, sx, sy, sw, sh);
-  if (bright < 1) { g.fillStyle = `rgba(4,4,8,${(1 - bright) * 0.7})`; g.fillRect(sx, sy, sw, sh); }
-  // live progress bar
-  if (music.np && screenState() !== 'calm') {
-    const py = sy + (sw - 16) + 10 + 52, pw = sw - 16;
-    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(sx + 8, py, pw, 2.4);
-    g.fillStyle = 'rgba(255,255,255,0.85)'; g.fillRect(sx + 8, py, pw * music.prog, 2.4);
-    g.beginPath(); g.arc(sx + 8 + pw * music.prog, py + 1.2, 3, 0, TAU); g.fill();
-  }
-  // glass sheen
-  const sg = g.createLinearGradient(sx, sy, sx + sw, sy + sh); sg.addColorStop(0, 'rgba(255,255,255,0.1)'); sg.addColorStop(0.4, 'rgba(255,255,255,0)'); g.fillStyle = sg; g.fillRect(sx, sy, sw, sh);
-  g.restore();
-  // speaker slot + the screen's light spilling onto the table / wall
-  g.fillStyle = rgba(mul([20, 18, 22], lt)); rr(g, d.cx - 16, y0 + d.h - 15, 32, 5, 2.5); g.fill();
-  const p = music.pal || DEFAULT_PAL, glow = (0.1 + 0.08 * music.lv + 0.05 * music.pulse * music.lv) * bright;
-  drawSprite(g, tintGlow || GLOW_WARM, d.cx, y0 + d.h * 0.45, d.w * 1.3, glow * 0.9, 'screen');
-  drawSprite(g, tintGlow || GLOW_WARM, d.cx, d.by + 8, d.w * 0.9, glow * 1.6, 'screen');
-  d.lt = lt;
-}
 function drawTea(g, T) {
   const { x, y } = L.cup, lt = lightAt(x, y - 60);
   setWR(g);
   // tea surface sloshing with the rocking
   const tilt = clamp(rock.x * 0.08 + rock.jv * 0.004, -0.2, 0.2);
-  g.fillStyle = rgba(mul([170, 80, 30], lt)); g.beginPath(); g.ellipse(x, y - 62 + rock.y * 0.3, 15.5, 3.2, tilt, 0, TAU); g.fill();
+  g.fillStyle = rgba(mul([181, 119, 66], lt)); g.beginPath(); g.ellipse(x, y - 62 + rock.y * 0.3, 15.5, 3.2, tilt, 0, TAU); g.fill();
   g.fillStyle = rgba(mul([255, 220, 170], lt), 0.4); g.beginPath(); g.ellipse(x - 4, y - 63 + rock.y * 0.3, 6, 1, tilt, 0, TAU); g.fill();
 }
 
 // =====================================================================
-//  animals: Patch the calico cat, Toast the corgi — illustrated sprites
+//  calm breathing and birds passing outside the glass
 // =====================================================================
-const CAT_COAT = Object.freeze({ name: 'Patch', base: '#f2e8d8', patch1: '#d9873e', patch2: '#2e2626', outline: '#3a2a22', eye: '#5a7a3a', nose: '#e48a8a' });
-const DOG_COAT = Object.freeze({ name: 'Toast', base: '#d98a46', cream: '#fbf1e2', outline: '#4a2a14', ear: '#e8a070', nose: '#2b1d19' });
-const SPR = {
-  cat: { shared: 'art/sprites/cats/calico/', names: ['walk1', 'walk2', 'sit', 'sleep'], len: 138, img: {}, n: 0 },
-  dog: { shared: 'art/sprites/dogs/corgi/', names: ['walk1', 'walk2', 'sit', 'sleep', 'play-bow'], len: 136, img: {}, n: 0 },
-};
-function loadSprites() {
-  for (const kind in SPR) {
-    const S = SPR[kind];
-    for (const name of S.names) {
-      const tryLoad = (src, fallback) => {
-        const im = new Image();
-        im.onload = () => { if (!im.naturalWidth || S.img[name]) return; S.img[name] = im; S.n++; };
-        im.onerror = () => { if (fallback) tryLoad(fallback, null); };
-        im.src = src;
-      };
-      tryLoad(ART.dir + kind + '-' + name + '.png', S.shared + name + '.png');
-    }
-  }
-}
-const sprReady = (S) => S.n === S.names.length;
-function makePet(kind, coat, extra) {
-  const a = {
-    x: 0, y: 0, k: 1, face: 1, plat: '', plan: [], act: null, travelling: false, walk: 0, gait: 0, air: 0, crouch: 0,
-    light: [1, 1, 1], breathP: rand(0, 6), nod: 0, nodV: 0, happyT: 0, lastStim: nowS(), wakeUntil: 0, roamT: rand(40, 80),
-    stretchT: -1, dest: '', spr: null, tint: null, box: [0, 0, 0, 0], sprDt: 0, pose: 'sleep',
-  };
-  Object.defineProperty(a, 'kind', { value: kind, enumerable: true });
-  Object.defineProperty(a, 'coat', { value: coat, enumerable: true });
-  return Object.assign(a, extra || {});
-}
-const cat = makePet('cat', CAT_COAT, { watchUntil: 0, spot: 'seatL' });
-const dog = makePet('dog', DOG_COAT, { mode: 'rest', spot: 'under', path: [], seg: null, excite: 0, s: 1 });
-const animals = Object.freeze([cat, dog]);   // never reordered
-
-function tintedFor(a, name, im) {
-  // each animal tints its OWN canvases (one per pose), only when the light changes
-  const lt = a.light.map((v) => clamp(lerp(v, 1, 0.14), 0, 1));
-  const key = lt.map((v) => Math.round(v * 48)).join(',');
-  const own = a.tint || (a.tint = {});
-  let e = own[name];
-  if (!e) e = own[name] = { cv: newCanvas(im.naturalWidth, im.naturalHeight), key: '' };
-  if (e.key !== key) {
-    const g = e.cv.getContext('2d');
-    g.globalCompositeOperation = 'copy'; g.drawImage(im, 0, 0);
-    g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => v * 255)); g.fillRect(0, 0, e.cv.width, e.cv.height);
-    g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0);
-    g.globalCompositeOperation = 'source-over';
-    e.key = key;
-  }
-  return e.cv;
-}
-const isWalk = (n) => n === 'walk1' || n === 'walk2';
-function sprPick(a, name) {
-  const st = a.spr || (a.spr = { cur: name, prev: null, t: 1 });
-  if (name !== st.cur) { if (isWalk(name) && isWalk(st.cur)) st.cur = name; else { st.prev = st.cur; st.cur = name; st.t = 0; } }
-  st.t = Math.min(1, st.t + a.sprDt / 0.4);
-  return st;
-}
-function drawPet(g, a, name, sx, sy, dy) {
-  const S = SPR[a.kind];
-  if (!sprReady(S)) { drawPetFallback(g, a, name); return; }
-  const st = sprPick(a, name), unit = (S.len * a.k) / S.img.walk1.naturalWidth;
-  const one = (nm, alpha) => {
-    const im = S.img[nm]; if (!im || alpha <= 0.01) return;
-    const c = tintedFor(a, nm, im), w = im.naturalWidth * unit, h = im.naturalHeight * unit;
-    g.save(); g.globalAlpha = alpha; g.translate(a.x, a.y + dy); g.scale(a.face * sx, sy);
-    g.drawImage(c, -w / 2, -h + 2 * a.k, w, h);
-    g.restore();
-    if (alpha > 0.5) a.box = [a.x - w / 2, a.y - h, w, h];
-  };
-  const f = smooth(st.t);
-  if (st.prev && f < 1) one(st.prev, 1 - f);
-  one(st.cur, st.prev && f < 1 ? f : 1);
-}
-function drawPetFallback(g, a, name) {
-  // simple vector stand-in until the illustrated sprites arrive
-  const c = a.coat, k = a.k, lt = a.light, col = (h) => rgba(mul(hex(h), lt));
-  g.save(); g.translate(a.x, a.y); g.scale(k * a.face, k);
-  const base = a.kind === 'cat' ? c.base : c.base;
-  g.fillStyle = col(base); g.strokeStyle = col(c.outline); g.lineWidth = 2.4;
-  if (name === 'sleep') { g.beginPath(); g.ellipse(0, -20, 46, 22, 0, 0, TAU); g.fill(); g.stroke(); g.beginPath(); g.arc(30, -18, 15, 0, TAU); g.fill(); g.stroke(); }
-  else if (name === 'sit') { g.beginPath(); g.ellipse(0, -36, 24, 34, 0, 0, TAU); g.fill(); g.stroke(); g.beginPath(); g.arc(0, -82, 19, 0, TAU); g.fill(); g.stroke(); for (const s of [-1, 1]) { g.beginPath(); g.moveTo(s * 6, -96); g.lineTo(s * 16, -112); g.lineTo(s * 18, -90); g.closePath(); g.fill(); g.stroke(); } }
-  else { g.beginPath(); g.ellipse(0, -40, 44, 20, 0, 0, TAU); g.fill(); g.stroke(); g.beginPath(); g.arc(44, -62, 17, 0, TAU); g.fill(); g.stroke(); for (const x of [-30, -18, 22, 34]) g.fillRect(x - 3, -26, 6, 26); }
-  if (a.kind === 'cat') { g.fillStyle = col(c.patch1); g.beginPath(); g.ellipse(-12, -40, 14, 9, 0, 0, TAU); g.fill(); g.fillStyle = col(c.patch2); g.beginPath(); g.ellipse(8, -36, 9, 6, 0, 0, TAU); g.fill(); }
-  g.restore();
-  a.box = [a.x - 50 * k, a.y - 110 * k, 100 * k, 110 * k];
-}
-
-// ---- shared movement: walk (optionally with a depth arc) / hop / pose / face ----
-function stepMover(a, dt, speed) {
-  if (!a.act && a.plan.length) { a.act = a.plan.shift(); a.act.e = 0; a.travelling = true; }
-  let walking = false;
-  a.air = 0;
-  const s = a.act;
-  if (s) {
-    s.e += dt;
-    if (s.t === 'pose') { if (s.e > s.dur) a.act = null; }
-    else if (s.t === 'face') { a.face = Math.sign(s.to - a.x) || a.face; a.act = null; }
-    else if (s.t === 'walk') {
-      if (!s.from) s.from = { x: a.x, y: a.y, k: a.k };
-      const d = s.x - a.x;
-      if (Math.abs(d) > 0.6) {
-        a.face = Math.sign(d); walking = true;
-        const v = speed * a.k, step = Math.sign(d) * Math.min(Math.abs(d), v * dt);
-        a.x += step; a.gait += Math.abs(step) / (a.k * (a.kind === 'cat' ? 40 : 52));
-        if (s.y != null) { const span = Math.abs(s.x - s.from.x) || 1, u0 = 1 - Math.abs(s.x - a.x) / span, u = 0.4 * u0 + 0.6 * smooth(u0); a.y = lerp(s.from.y, s.y, u); a.k = lerp(s.from.k, s.k, u); }
-      } else { a.x = s.x; if (s.y != null) { a.y = s.y; a.k = s.k; } a.act = null; }
-    } else if (s.t === 'hop') {
-      if (!s.from) { s.from = { x: a.x, y: a.y, k: a.k }; const p = L.plats[s.plat]; s.to = { x: s.x, y: p.y, k: s.k || p.k }; s.dur = 0.85; if (Math.abs(s.x - a.x) > 12) a.face = Math.sign(s.x - a.x); }
-      const t = s.e / s.dur;
-      if (t < 0.25) a.crouch = smooth(t / 0.25);
-      else if (t < 0.85) {
-        const u = (t - 0.25) / 0.6, top = Math.min(s.from.y, s.to.y) - 60;
-        const e0 = (1 - u) * (1 - u), m = 2 * u * (1 - u), e1 = u * u;
-        a.x = e0 * s.from.x + m * (s.from.x + s.to.x) / 2 + e1 * s.to.x; a.y = e0 * s.from.y + m * top + e1 * s.to.y;
-        a.k = lerp(s.from.k, s.to.k, u); a.air = Math.sin(u * Math.PI); a.crouch = 0;
-      } else if (t < 1) { a.x = s.to.x; a.y = s.to.y; a.k = s.to.k; a.crouch = 1 - smooth((t - 0.85) / 0.15); }
-      else { a.plat = s.plat; a.x = s.to.x; a.y = s.to.y; a.k = s.to.k; a.crouch = 0; a.act = null; }
-    }
-  } else a.crouch = 0;
-  a.walk = approach(a.walk, walking ? 1 : 0, 8, dt);
-  const arrived = a.travelling && !a.act && !a.plan.length;
-  if (arrived) a.travelling = false;
-  return arrived;
-}
-
-// ---- the cat: naps on the seat, sits up to watch the lights, hops to the table ----
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
 function breath() { const t = calm.t % 10; return t < 4 ? smooth(t / 4) : 1 - smooth((t - 4) / 6); }
-function placeCat(spot) { const s = L.catSpots[spot], p = L.plats[s.plat]; Object.assign(cat, { x: s.x, y: p.y, k: p.k, face: s.face, plat: s.plat, spot, dest: spot, plan: [], act: null }); }
-function catRoute(to) {
-  const SL = L.seatL, SR = L.seatR, Tb = L.table, P = L.plats, steps = [{ t: 'pose', pose: 'walk1', dur: 0.9 }];
-  const from = cat.spot;
-  // every route goes through the left seat (home)
-  if (from === 'table') steps.push({ t: 'hop', plat: 'seatL', x: SL.c1 - 40 });
-  if (from === 'seatR') steps.push({ t: 'walk', x: SR.c0 + 40 }, { t: 'hop', plat: 'floor', x: SR.c0 - 30, k: 1.0 }, { t: 'walk', x: SL.c1 + 20 }, { t: 'hop', plat: 'seatL', x: SL.c1 - 40 });
-  if (to === 'seatL') steps.push({ t: 'walk', x: L.catSpots.seatL.x }, { t: 'face', to: L.catSpots.seatL.x + L.catSpots.seatL.face * 100 });
-  else if (to === 'table') steps.push({ t: 'walk', x: SL.c1 - 30 }, { t: 'hop', plat: 'table', x: L.catSpots.table.x }, { t: 'face', to: L.win.x1 });
-  else if (to === 'seatR') steps.push({ t: 'walk', x: SL.c1 - 30 }, { t: 'hop', plat: 'floor', x: SL.c1 + 24, k: 1.0 }, { t: 'walk', x: SR.c0 - 30 }, { t: 'hop', plat: 'seatR', x: SR.c0 + 40 }, { t: 'walk', x: L.catSpots.seatR.x }, { t: 'face', to: L.catSpots.seatR.x + 100 });
-  return steps;
-}
-function planCat(to) {
-  if (!to) {
-    const playing = music.np && music.np.playing;
-    const opts = ['seatL', 'table', 'seatR'].filter((s) => s !== cat.spot && !(s === 'seatR' && (dog.dest === 'seatR' || dog.spot === 'seatR')));
-    const wt = (s) => (s === 'seatL' ? 1.6 : s === 'table' ? (playing ? 1.8 : 1.2) : 0.8);
-    let tot = 0; opts.forEach((s) => (tot += wt(s))); let r = Math.random() * tot; to = opts[0];
-    for (const s of opts) { r -= wt(s); if (r <= 0) { to = s; break; } }
+const outsideBirds = [], birdAtlas = new Image();
+birdAtlas.src = 'art/birds/sparrow.png';
+let birdWait = 4;
+function updateOutsideBirds(dt) {
+  const pace = 1 - calm.lv * .35;
+  birdWait -= dt * pace;
+  if (birdWait <= 0 && !outsideBirds.length && E.storm < .3 && E.rain < .5 && train.tunnel < .1) {
+    const dir = Math.random() < .5 ? -1 : 1;
+    for (let i=0;i<3;i++) outsideBirds.push({t:-i*.65,life:10+i*.6,y:.22+i*.06,dir,phase:i*1.7,size:17-i*2});
+    birdWait=rand(28,48);
   }
-  if (!to || to === cat.spot) return;
-  cat.plan = catRoute(to); cat.act = null; cat.dest = to;
+  for(let i=outsideBirds.length-1;i>=0;i--){const b=outsideBirds[i];b.t+=dt*pace;if(b.t>b.life)outsideBirds.splice(i,1);}
 }
-function catPose(T) {
-  const c = cat;
-  if (c.act || c.plan.length) {
-    if (c.act && c.act.t === 'hop') return 'walk2';
-    return c.walk > 0.4 ? (Math.floor(c.gait * 2.6) % 2 ? 'walk2' : 'walk1') : 'walk1';
+function drawOutsideBirds(g) {
+  if(!birdAtlas.complete || !birdAtlas.naturalWidth || !outsideBirds.length)return;
+  const w=L.win,fw=birdAtlas.naturalWidth/4,fh=birdAtlas.naturalHeight;
+  g.save();setW(g);winPath(g);g.clip();
+  for(const b of outsideBirds){
+    if(b.t<0)continue;
+    const p=b.t/b.life,x=w.x0+w.w*(b.dir>0?-.12+1.24*p:1.12-1.24*p);
+    const y=w.y0+w.h*(b.y+.025*Math.sin(p*Math.PI*2+b.phase));
+    const frame=[1,2,3,2][Math.floor(b.t*7+b.phase)%4],h=b.size*fh/fw;
+    g.save();g.translate(x,y);g.scale(b.dir,1);
+    g.globalAlpha=.85*(1-train.tunnel)*(1-E.fog*.7)*(1-E.rain*.6);
+    g.drawImage(birdAtlas,frame*fw,0,fw,fh,-b.size/2,-h/2,b.size,h);g.restore();
   }
-  if (calm.on) return 'sleep';
-  if (c.stretchT >= 0) return 'walk1';
-  if (c.happyT > 0 || T < c.wakeUntil || T < c.watchUntil) return 'sit';
-  if (c.spot === 'table') return T - c.lastStim > 70 ? 'sleep' : 'sit';
-  return 'sleep';
-}
-function updateCat(c, dt, T) {
-  const playing = music.np && music.np.playing;
-  c.roamT -= dt * (playing ? 1.3 : 1);
-  if (!c.plan.length && !c.act && c.roamT <= 0 && !calm.on && c.stretchT < 0) { c.roamT = rand(70, 160); if (Math.random() < 0.7) planCat(); }
-  if (calm.on && c.plan.length && (!c.act || c.act.t !== 'hop')) { c.plan = []; c.act = null; }
-  // sits up to watch the lights: city glow, the river, tunnels, a new song
-  c.watchT = (c.watchT == null ? rand(40, 90) : c.watchT) - dt;
-  if (c.watchT <= 0 && !calm.on) { c.watchT = rand(45, 120); const w = biomeAt(train.d); if (w.city > 0.5 || w.water > 0.5 || train.tunnel > 0.3 || Math.random() < 0.35) c.watchUntil = T + rand(12, 26); }
-  if (stepMover(c, dt, 42)) { c.spot = c.dest; c.lastStim = T; c.roamT = rand(60, 150); }
-  if (c.stretchT >= 0) { c.stretchT += dt; if (c.stretchT > 4.6) { c.stretchT = -1; c.lastStim = T; } }
-  c.happyT = Math.max(0, c.happyT - dt);
-  c.breathP += dt * TAU * (calm.lv > 0.5 ? 0.1 : 0.24);
-  c.nodV += (-c.nod * 70 - c.nodV * 10) * dt; c.nod += c.nodV * dt;
-  c.pose = catPose(T);
-  c.light = lightAt(c.x, c.y - 40 * c.k);
-  c.sprDt = dt;
-}
-function drawCat(g, T) {
-  const c = cat, name = c.pose;
-  const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
-  const vibe = music.np && music.np.playing && name === 'sit' ? music.lv : 0;
-  let sy = 1 + (name === 'sleep' ? 0.022 : 0.008) * br - 0.03 * c.nod * vibe - c.crouch * 0.12, sx = 1 / Math.sqrt(Math.max(0.5, sy));
-  if (c.stretchT >= 0) { const s = Math.sin(clamp(c.stretchT / 4.6, 0, 1) * Math.PI); sx *= 1 + 0.14 * s; sy *= 1 - 0.1 * s; }
-  const dy = c.walk > 0.4 ? -Math.abs(Math.sin(c.gait * Math.PI * 2.6)) * 2 * c.k : 0;
-  drawPet(g, c, name, sx, sy, dy);
-}
-
-// ---- the corgi: wanders the aisle, settles under the table / by a seat / on a seat ----
-const dogSpot = (id) => L.dogSpots.find((q) => q.id === id) || L.dogSpots[0];
-function placeDog(id) { const sp = dogSpot(id); Object.assign(dog, { x: sp.x, y: sp.y, k: sp.k, face: sp.face, mode: 'rest', spot: sp.id, dest: sp.id, plan: [], act: null, plat: sp.seat ? 'seatR' : 'floor' }); }
-function planDog(to) {
-  const d = dog, Ln = L.lane, SR = L.seatR;
-  if (!to) {
-    const playing = music.np && music.np.playing;
-    const opts = L.dogSpots.filter((q) => q.id !== d.spot && !(q.id === 'seatR' && (cat.dest === 'seatR' || cat.spot === 'seatR')));
-    // now and then a wander down the carriage (passing through, never resting on the right)
-    if (Math.random() < 0.22) opts.push({ id: 'explore' });
-    const wt = (q) => (q.id === 'under' ? 1.6 : q.id === 'seatR' ? (playing ? 0.8 : 1.2) : 1);
-    let tot = 0; opts.forEach((q) => (tot += wt(q))); let r = Math.random() * tot; to = opts[0].id;
-    for (const q of opts) { r -= wt(q); if (r <= 0) { to = q.id; break; } }
-  }
-  const steps = [{ t: 'pose', pose: 'stand', dur: 1.0 }];
-  // leave the current spot onto the aisle lane
-  let x = d.x;
-  if (d.spot === 'seatR') { steps.push({ t: 'hop', plat: 'floor', x: SR.c0 - 40, k: Ln.k }); x = SR.c0 - 40; }
-  else if (d.spot === 'under') { const ox = x + (to === 'aisleL' ? -170 : 170); steps.push({ t: 'walk', x: ox, y: Ln.y, k: Ln.k }); x = ox; }
-  const arrive = (sp) => {
-    if (sp.id === 'under') { const ix = sp.x + (x < sp.x ? -170 : 170); steps.push({ t: 'walk', x: ix }, { t: 'walk', x: sp.x, y: sp.y, k: sp.k }); }
-    else if (sp.seat) steps.push({ t: 'walk', x: SR.c0 - 40 }, { t: 'hop', plat: 'seatR', x: sp.x, k: sp.k });
-    else steps.push({ t: 'walk', x: sp.x });
-  };
-  if (to === 'explore') {
-    const far = Math.min(W - 120, L.RZ + rand(160, 360));
-    steps.push({ t: 'walk', x: far }, { t: 'pose', pose: 'sniff', dur: rand(2.5, 4) });
-    x = far;
-    const back = L.dogSpots.filter((q) => q.id !== 'seatR' || (cat.dest !== 'seatR' && cat.spot !== 'seatR'));
-    const sp = back[Math.floor(Math.random() * back.length)];
-    arrive(sp); to = sp.id;
-  } else arrive(dogSpot(to));
-  steps.push({ t: 'face', to: dogSpot(to).x + dogSpot(to).face * 100 });
-  d.plan = steps; d.act = null; d.dest = to; d.spot = null; d.mode = 'walk';
-}
-function dogPose(T) {
-  const d = dog;
-  if (d.act || d.plan.length) {
-    if (d.act && d.act.t === 'hop') return 'walk2';
-    if (d.act && d.act.t === 'pose' && d.act.pose === 'sniff') return 'walk1';
-    return d.walk > 0.3 ? (Math.floor(d.gait * 2) % 2 ? 'walk2' : 'walk1') : 'walk1';
-  }
-  if (d.stretchT >= 0 || d.excite > 0 || d.happyT > 0) return 'play-bow';
-  return d.s > 0.5 ? 'sleep' : 'sit';
-}
-function updateDog(d, dt, T) {
-  const playing = music.np && music.np.playing;
-  d.roamT -= dt * (playing ? 1.25 : 1);
-  if (d.mode === 'rest' && d.roamT <= 0 && !calm.on && d.stretchT < 0) { d.roamT = rand(55, 140); planDog(); }
-  if (calm.on && d.plan.length && (!d.act || d.act.t !== 'hop')) {
-    // calm: settle wherever is nearest on the lane
-    d.plan = []; d.act = null; d.spot = d.y < L.lane.y - 20 && d.plat === 'seatR' ? 'seatR' : 'lane'; d.dest = d.spot; d.mode = 'rest';
-  }
-  if (stepMover(d, dt, 64)) { d.spot = d.dest; d.mode = 'rest'; d.lastStim = T - 8; d.roamT = rand(55, 140); }
-  // awake / asleep
-  let want = 0;
-  if (d.mode === 'rest' && d.stretchT < 0 && d.happyT <= 0) want = calm.on ? 1 : T - d.lastStim > 22 ? 1 : 0;
-  d.s = approach(d.s, want, want > d.s ? 0.3 : 2, dt);
-  d.excite = Math.max(0, d.excite - dt);
-  if (d.stretchT >= 0) { d.stretchT += dt; if (d.stretchT > 4.4) { d.stretchT = -1; d.lastStim = T; } }
-  d.happyT = Math.max(0, d.happyT - dt);
-  d.breathP += dt * TAU * (calm.lv > 0.5 ? 0.1 : d.s > 0.5 ? 0.22 : 0.33);
-  d.nodV += (-d.nod * 60 - d.nodV * 9) * dt; d.nod += d.nodV * dt;
-  d.pose = dogPose(T);
-  d.light = lightAt(d.x, d.y - 40 * d.k);
-  d.sprDt = dt;
-}
-function drawDog(g, T) {
-  const d = dog, name = d.pose;
-  const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(d.breathP);
-  const vibe = music.np && music.np.playing && name === 'sit' ? music.lv : 0;
-  const sy0 = 1 + (name === 'sleep' ? 0.024 : 0.008) * br - 0.03 * d.nod * vibe - d.crouch * 0.12, sx = 1 / Math.sqrt(Math.max(0.5, sy0));
-  const dy = d.walk > 0.3 ? -Math.abs(Math.sin(d.gait * Math.PI * 2)) * 2.4 * d.k : 0;
-  drawPet(g, d, name, sx, sy0, dy);
-}
-function onBeat(s) {
-  music.pulse = Math.max(music.pulse, s); music.lastBeat = nowS();
-  const playing = music.np && music.np.playing;
-  if (!playing) return;
-  cat.nodV += 8 * s; dog.nodV += 6 * s;
-  // passing-lamp light sweeps, loosely on the beat (never strobe-y)
-  const T = nowS();
-  if (T - lastSweep > 0.9 && music.lv > 0.6 && !calm.on && train.tunnel < 0.5 && !train.skip && Math.random() < 0.3 + 0.4 * s) {
-    const p = music.pal || DEFAULT_PAL, col = mix3([255, 214, 160], p.tint, 0.35);
-    train.beatLamps.push({ d: train.d + L.V.ww / 2 + 60, col });
-    spawnSweep(col, 0.028 + 0.03 * s);
-  }
-}
-
-// ---- particles: steam, notes from the headphones, hearts, z's ----
-const steam = [], notes = [], hearts = [];
-function heartPath(g, x, y, s) {
-  g.beginPath(); g.moveTo(x, y + 4 * s);
-  g.bezierCurveTo(x - 9 * s, y - 2 * s, x - 5 * s, y - 9 * s, x, y - 4 * s);
-  g.bezierCurveTo(x + 5 * s, y - 9 * s, x + 9 * s, y - 2 * s, x, y + 4 * s); g.closePath();
-}
-function noteGlyph(g, x, y, s, kind) {
-  g.save(); g.translate(x, y); g.scale(s, s);
-  g.beginPath(); g.ellipse(0, 0, 6, 4.4, -0.4, 0, TAU); g.fill();
-  g.lineWidth = 2; g.lineCap = 'round';
-  g.beginPath(); g.moveTo(5.2, -1.5); g.lineTo(5.2, -24); g.stroke();
-  if (kind === 2) { g.beginPath(); g.ellipse(18, -4, 6, 4.4, -0.4, 0, TAU); g.fill(); g.beginPath(); g.moveTo(23.2, -5.5); g.lineTo(23.2, -28); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(5.2, -23); g.lineTo(23.2, -27); g.stroke(); }
-  else { g.beginPath(); g.moveTo(5.2, -24); g.quadraticCurveTo(14, -18, 11, -9); g.stroke(); }
   g.restore();
 }
+
+// ---- tea steam ----
+const steam = [];
 function updateParticles(dt, T) {
   // tea steam (wavers when the carriage jolts)
   if (steam.length < 7 && Math.random() < dt * 2.4) steam.push({ x: L.cup.x + rand(-6, 6), y: L.cup.y - 70, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
   for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 1.1 + s.ph + s.t) * 5 - rock.jv * 0.3) * dt; s.y -= dt * (14 + s.t * 4); s.r += dt * 4; if (s.t > s.life) steam.splice(i, 1); }
-  music.noteT -= dt;
-  if (music.np && music.np.playing && music.lv > 0.85 && !calm.on && music.noteT <= 0 && notes.length < 2) { notes.push({ x: L.phones.x + rand(-30, 30), y: L.phones.y - 26, t: 0, life: rand(4, 5.5), vx: rand(-8, 6), kind: Math.random() < 0.4 ? 2 : 1, s: rand(0.6, 0.85), ph: rand(0, 6) }); music.noteT = rand(4, 8); }
-  for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t += dt; n.y -= dt * 16; n.x += (n.vx + Math.sin(n.t * 1.6 + n.ph) * 8) * dt; if (n.t > n.life) notes.splice(i, 1); }
-  for (const p of animals) {
-    const asleep = p.pose === 'sleep' && !p.plan.length;
-    p.zT = (p.zT == null ? rand(2, 6) : p.zT) - dt;
-    if (asleep && p.zT <= 0 && !calm.on) { p.zT = rand(6, 10); hearts.push({ z: true, x: p.x + 24 * p.k * p.face, y: p.y - 50 * p.k, t: 0, life: 3.2, s: rand(0.8, 1), ph: rand(0, 6) }); }
-    else if (!asleep && p.zT < 1) p.zT = rand(2, 5);
-  }
-  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= dt * 30; h.x += Math.sin(h.t * 3 + h.ph) * dt * 12; if (h.t > h.life) hearts.splice(i, 1); }
+
 }
 function drawParticles(g) {
   setWR(g);
@@ -1672,19 +1225,13 @@ function drawParticles(g) {
   const sb = 0.55 + 0.45 * (1 - E.day * 0.6);
   for (const s of steam) { const k = s.t / s.life, a = s.a * Math.sin(Math.min(1, k * 1.25) * Math.PI) * sb; if (a < 0.004) continue; g.globalAlpha = a; g.drawImage(BLOB, s.x - s.r, s.y - s.r, s.r * 2, s.r * 2); }
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  const p = music.pal || DEFAULT_PAL, nc = mix3(p.tint, [255, 244, 225], 0.55);
-  for (const n of notes) { const a = Math.min(1, n.t / 0.8) * (1 - smooth((n.t - n.life + 1.6) / 1.6)) * 0.6; g.fillStyle = rgba(nc, a); g.strokeStyle = rgba(nc, a); noteGlyph(g, n.x, n.y, n.s, n.kind); }
-  for (const h of hearts) {
-    if (h.z) { const a = Math.min(1, h.t / 0.6) * (1 - smooth((h.t - h.life + 1.2) / 1.2)) * 0.55; g.font = `italic 600 ${Math.round(13 * h.s + h.t * 3)}px ${SERIF}`; g.fillStyle = `rgba(236,228,255,${a})`; g.fillText('z', h.x + h.t * 6, h.y + h.t * 10); continue; }
-    const a = Math.min(1, h.t / 0.25) * (1 - smooth((h.t - h.life + 0.8) / 0.8));
-    g.fillStyle = `rgba(236,128,152,${a})`; heartPath(g, h.x, h.y, h.s); g.fill();
-  }
+
 }
 
 // =====================================================================
 //  wellbeing: a glass of water, stretch, calm
 // =====================================================================
-let water = null;
+let water = null, note = null;
 function startWater(text) { water = { t: 0, text: text || 'a sip of water?', out: -1 }; sSlide(); showNote('a sip of water?', 'stay hydrated · tap the glass', 10); }
 function updateWater(dt) { if (!water) return; water.t += dt; if (water.out < 0 && water.t > 12.5) water.out = 0; if (water.out >= 0) { water.out += dt; if (water.out > 1.4) water = null; } }
 function drawWater(g) {
@@ -1721,13 +1268,11 @@ function drawWater(g) {
   g.restore();
   g.restore();
 }
-function showNote(head, text, secs) { note = { head, text, until: nowS() + secs }; screenKey = ''; }
+function showNote(head, text, secs) { note = { head, text, until: nowS() + secs }; }
 function startStretch(text) {
-  cat.stretchT = 0; later(0.7, () => { if (dog.mode === 'rest') dog.stretchT = 0; });
-  cat.lastStim = dog.lastStim = nowS();
   showNote('stretch break', text && text.length < 32 ? text : 'roll your shoulders', 12);
 }
-function setCalm(on, auto = 0) { calm.on = on; if (on) { calm.t = 0; calm.auto = auto; } else calm.auto = 0; screenKey = ''; }
+function setCalm(on, auto = 0) { calm.on = on; if (on) { calm.t = 0; calm.auto = auto; } else calm.auto = 0; }
 
 // =====================================================================
 //  audio: soft track clacks + small UI sounds (only when the context runs)
@@ -1762,18 +1307,6 @@ function sClack(v) {
 }
 function sClick() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.01; noiseHit(a, t, 0.025, 'bandpass', 2600, 2, 0.04, o); }
 function sSlide() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02; noiseHit(a, t, 1.0, 'lowpass', 900, 0.7, 0.02, o); tone(a, t + 1.1, 2900, 2850, 0.4, 0.016, o); }
-function sPurr(dur = 2.4) {
-  const a = ac(); if (!a) return;
-  const out = outNode(a), t0 = a.currentTime + 0.02;
-  const src = a.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
-  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 380;
-  const am = a.createGain(); am.gain.value = 0.5;
-  const lfo = a.createOscillator(); lfo.type = 'triangle'; lfo.frequency.value = 25; const lg = a.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain);
-  const env = a.createGain(); env.gain.setValueAtTime(0.0001, t0); env.gain.linearRampToValueAtTime(0.22, t0 + 0.3); env.gain.linearRampToValueAtTime(0.0001, t0 + dur);
-  src.connect(lp); lp.connect(am); am.connect(env); env.connect(out);
-  for (const n of [src, lfo]) { n.start(t0); n.stop(t0 + dur + 0.1); }
-}
-function sBoof() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.01; noiseHit(a, t, 0.12, 'bandpass', 600, 1.2, 0.05, o); tone(a, t, 260, 150, 0.12, 0.04, o, 'triangle'); }
 function sThunder() {
   const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02;
   const s = a.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
@@ -1785,65 +1318,18 @@ function sThunder() {
 // =====================================================================
 //  interaction
 // =====================================================================
-function media(cmd) { LW.post({ type: 'media', cmd }); if (!LW.isHost) devMedia(cmd); }
-let demoI = 0;
-const demoArt = [];
-const DEMO = [
-  { title: 'Last Train Home', artist: 'Platform Nine', album: 'Overnight', c: ['#1d3b6b', '#f0b860', '#0b1630'] },
-  { title: 'Sodium Lights', artist: 'The Quiet Hours', album: 'Window Seat', c: ['#7a3048', '#f0a07a', '#2a0f1c'] },
-  { title: 'River Crossing', artist: 'Velvet Room', album: 'Slow Coaches', c: ['#2f5a46', '#e8dcc0', '#0f2018'] },
-];
-function demoTrack(i) {
-  const d = DEMO[i % DEMO.length];
-  if (!demoArt[i % DEMO.length]) {
-    const c = newCanvas(400, 400), g = c.getContext('2d');
-    const gr = g.createLinearGradient(0, 0, 400, 400); gr.addColorStop(0, d.c[0]); gr.addColorStop(1, d.c[2]);
-    g.fillStyle = gr; g.fillRect(0, 0, 400, 400);
-    g.fillStyle = d.c[1]; g.beginPath(); g.arc(270, 150, 80, 0, TAU); g.fill();
-    g.globalAlpha = 0.55; g.strokeStyle = d.c[1]; g.lineWidth = 3; for (let k = 0; k < 7; k++) { g.beginPath(); g.moveTo(0, 270 + k * 14); g.lineTo(400, 250 + k * 18); g.stroke(); } g.globalAlpha = 1;
-    g.fillStyle = 'rgba(255,255,255,0.88)'; g.font = `italic 34px ${SERIF}`; g.fillText(d.album, 28, 370);
-    g.font = `600 13px ${SANS}`; g.fillText(d.artist.toUpperCase(), 30, 46);
-    demoArt[i % DEMO.length] = c.toDataURL('image/png');
-  }
-  return { title: d.title, artist: d.artist, album: d.album, artwork: demoArt[i % DEMO.length], playing: true, app: 'Music' };
-}
-function devMedia(cmd) {
-  const np = LW.nowPlaying;
-  if (cmd === 'playpause') { if (np) window.__lw('nowplaying', { ...np, playing: !np.playing }); else window.__lw('nowplaying', demoTrack(demoI)); }
-  else if (cmd === 'next' || cmd === 'previous') { demoI = (demoI + (cmd === 'next' ? 1 : DEMO.length - 1)) % DEMO.length; window.__lw('nowplaying', demoTrack(demoI)); }
-}
-const inBox = (a, x, y, pad = 6) => x > a.box[0] - pad && x < a.box[0] + a.box[2] + pad && y > a.box[1] - pad && y < a.box[1] + a.box[3] + pad;
 function onDown(px, py) {
   if (!L) return;
   let [x, y] = toWorld(px, py); x -= rock.x; y -= rock.y;
   const T = nowS();
   if (water && Math.abs(x - L.glass.x) < 60 && y > L.glass.y - 110 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
-  if (inBox(cat, x, y)) {
-    cat.happyT = 2.6; cat.wakeUntil = T + 20; cat.lastStim = T; sPurr(2.4);
-    for (let i = 0; i < 3; i++) later(i * 0.26, () => hearts.push({ x: cat.x + rand(-14, 14), y: cat.box[1] - 6, t: 0, life: 1.8, s: rand(0.9, 1.2), ph: rand(0, 6) }));
-    return;
-  }
-  if (inBox(dog, x, y)) {
-    dog.happyT = 2.2; dog.lastStim = T; sBoof();
-    for (let i = 0; i < 2; i++) later(i * 0.3, () => hearts.push({ x: dog.x + rand(-12, 12), y: dog.box[1] - 6, t: 0, life: 1.6, s: rand(0.8, 1.1), ph: rand(0, 6) }));
-    return;
-  }
-  const d = L.dev;
-  if (x > d.x0 - 10 && x < d.x0 + d.w + 10 && y > d.y0 - 10 && y < d.by + 10) {
-    const playing = music.intent ? music.intent.play : !!(music.np && music.np.playing);
-    music.intent = { play: !playing, until: T + 3 }; screenKey = '';
-    sClick(); media('playpause');
-    return;
-  }
   const w = L.win;
   if (x > w.x0 && x < w.x1 && y > w.y0 && y < w.y1) {
-    if (!train.skip) { train.skip = { t: 0, jumped: false }; sClick(); media('next'); cat.watchUntil = Math.max(cat.watchUntil, T + 10); }
+    if (!train.skip) { train.skip = { t: 0, jumped: false }; sClick(); }
   }
 }
 LW.on('down', onDown);
 LW.on('env', () => { computeTarget(); });
-LW.on('nowplaying', onNowPlaying);
-LW.on('beat', onBeat);
 LW.on('reminder', (r) => {
   if (!r) return;
   if (r.kind === 'water') startWater(r.text);
@@ -1855,15 +1341,9 @@ LW.on('action', (a) => {
   if (a === 'water') startWater();
   else if (a === 'stretch') startStretch();
   else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
-  else if (a === 'playpause' || a === 'next' || a === 'previous') media(a);
-  else if (a === 'pet') { cat.happyT = 2.6; cat.wakeUntil = nowS() + 20; sPurr(2.4); }
 });
 if (!LW.isHost) addEventListener('keydown', (e) => {
   if (e.key === 's') startStretch('roll your shoulders');
-  if (e.key === '.') media('next');
-  if (e.key === 'p') media('playpause');
-  if (e.key === 'c') planCat();
-  if (e.key === 'd') planDog();
 });
 
 // =====================================================================
@@ -1884,50 +1364,42 @@ function step(dt, T) {
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
   updateEnv(dt);
-  if (music.intent && T > music.intent.until) { music.intent = null; screenKey = ''; }
-  const playing = music.np && music.np.playing;
-  music.lv = approach(music.lv, playing ? 1 : 0, playing ? 1.2 : 0.7, dt);
-  if (playing) music.prog = Math.min(1, music.prog + dt / 215);
-  music.pulse = Math.max(0, music.pulse - dt * 2.5);
-  if (note && T > note.until) { note = null; screenKey = ''; }
+  if (note && T > note.until) note = null;
   updateTrain(dt, T);
   // storms: the odd flash over the fields
   flash.t += dt;
   if (E.storm > 0.5 && flash.t > flash.next) { flash.t = 0; flash.next = rand(9, 26); later(rand(1.5, 4), sThunder); }
   updateParticles(dt, T);
   updateWater(dt);
-  updateCat(cat, dt, T);
-  updateDog(dog, dt, T);
+  updateOutsideBirds(dt);
 }
 function render(T, dt) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#0b0a0d'; ctx.fillRect(0, 0, cv.width, cv.height);
   drawOutside(ctx, T);
+  drawOutsideBirds(ctx);
   drawGlass(ctx, T, dt);
   // the carriage (crossfading bake), rocking gently
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const rx = (OX + (rock.x - RM) * K) * dpr, ry = (OY + (rock.y - RM) * K) * dpr;
+  const rx = (rock.x - RM) * K * dpr, ry = (rock.y - RM) * K * dpr;
   if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, rx, ry);
   ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, rx, ry); ctx.globalAlpha = 1;
   setWR(ctx);
   const lv = E.lamp * (1 - 0.6 * calm.lv);
   if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60, 0.4 * lv);
-  // music tint: the carriage leans toward the album's colours (subtle)
-  const tintLv = music.lv * (1 - calm.lv);
-  if (tintLv > 0.01 && tintGlow) { drawSprite(ctx, tintGlow, L.dev.cx, 720, 520, 0.07 * tintLv, 'screen'); drawSprite(ctx, tintGlow, L.table.cx, 420, 700, 0.035 * tintLv, 'screen'); }
   drawTea(ctx, T);
-  drawPlayer(ctx, T);
   drawWater(ctx);
-  // animals back-to-front (the animals array never reorders)
-  setWR(ctx);
-  const ord = [[cat.y, () => drawShadow(cat), () => drawCat(ctx, T)], [dog.y, () => drawShadow(dog), () => drawDog(ctx, T)]].sort((a, b) => a[0] - b[0]);
-  for (const o of ord) { o[1](); o[2](); }
+  if(note && !water){
+    ctx.save();setWR(ctx);ctx.font=`400 15px ${SERIF}`;ctx.textAlign='center';
+    const tw=ctx.measureText(note.text).width+32,x=L.table.cx,y=900;
+    ctx.fillStyle='rgba(18,25,31,.8)';rr(ctx,x-tw/2,y-22,tw,36,10);ctx.fill();
+    ctx.fillStyle='rgba(242,230,210,.88)';ctx.fillText(note.text,x,y);ctx.restore();
+  }
   drawParticles(ctx);
   drawSweeps(ctx, dt);
-  // dimming: paused → a touch darker; calm → much darker; the breathing glow on the glass
+  // Quiet night shading and the breathing glow on the glass
   setW(ctx);
-  const pausedDim = (1 - music.lv) * (music.ever ? 0.08 : 0.04) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * 0.48, 0, 0.8);
+  const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * .48, 0, .8);
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,4,8,${dim})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); }
   if (calm.lv > 0.01) {
     const b = breath(), tt = calm.t % 10, inhale = tt < 4, w = L.win;
@@ -1941,24 +1413,16 @@ function render(T, dt) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
 }
-function drawShadow(a) {
-  const sw = 56 * a.k * (1 - a.air * 0.6), gr = ctx.createRadialGradient(a.x, a.y, 2, a.x, a.y, sw);
-  gr.addColorStop(0, `rgba(10,6,6,${0.34 * (1 - a.air)})`); gr.addColorStop(1, 'rgba(10,6,6,0)');
-  ctx.save(); ctx.translate(a.x, a.y); ctx.scale(1, 0.18); ctx.translate(-a.x, -a.y); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(a.x, a.y, sw, 0, TAU); ctx.fill(); ctx.restore();
-}
-
 // =====================================================================
 //  boot
 // =====================================================================
 function rebuild() {
-  const cs = cat.spot && !cat.plan.length ? cat.spot : 'seatL', ds = dog.spot && dog.spot !== 'lane' && !dog.plan.length ? dog.spot : 'under';
   computeLayout();
   if (!E) computeTarget();
   E.amb = envAmb();
   bake(false);
   bakeBeads();
-  rebuildArt();
-  placeCat(L.catSpots[cs] ? cs : 'seatL'); placeDog(ds);
+  render(nowS(),0);
 }
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
@@ -1966,8 +1430,6 @@ computeTarget();
 E.amb = envAmb();
 rebuild();
 loadArtSlots();
-loadSprites();
-if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
 
@@ -1979,12 +1441,14 @@ function benchRaw(n = 120) {
   return { perFrameTotal: +((performance.now() - t0) / n).toFixed(2), jsOnly: +(js / n).toFixed(2) };
 }
 function selfTest(secs = 60) {
-  const ids = animals.map((p) => p.kind + ':' + p.coat.name);
-  let err = 0;
-  for (let f = 0; f < secs * 30; f++) { LW.advance(1 / 30); animals.forEach((p, i) => { if (p.kind + ':' + p.coat.name !== ids[i] || animals[i] !== p) err++; }); }
-  return { err, ids };
+  let err=0,maxBirds=0;
+  for(let f=0;f<secs*30;f++){
+    LW.advance(1/30);maxBirds=Math.max(maxBirds,outsideBirds.length);
+    if(outsideBirds.some(b=>![b.t,b.life,b.y,b.size].every(Number.isFinite)))err++;
+  }
+  return {err,maxBirds};
 }
-window.__train = { get E() { return E; }, get L() { return L; }, get W() { return W; }, cat, dog, music, train, calm, setCalm, startWater, startStretch, planCat, planDog, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, SPR, bake };
+window.__train = { get E() { return E; }, get L() { return L; }, get W() { return W; }, outsideBirds, train, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

@@ -1216,10 +1216,9 @@ function sprLayer(g, c, s, p, v, bob, a) {
   g.restore();
 }
 function drawSpriteCat(g, c, s) {
-  const v = c.sv;
-  const fp = c.spPrev && c.spFadeT < 0.15 ? c.spFadeT / 0.15 : 1;
-  if (fp < 1 && s.ok[c.spPrev.p]) sprLayer(g, c, s, c.spPrev.p, c.spPrev, c.spPrev.bob, Math.min(1, 2 * (1 - fp)));
-  sprLayer(g, c, s, c.spP, v, c.spBob || 0, fp < 1 ? Math.min(1, 2 * fp) : 1);
+  const f = LW.poseFrame(c.spPrev && c.spPrev.p, c.spP, (c.spFadeT || 0) / 0.36);
+  const v = { ...c.sv, sx: c.sv.sx * f.sx, sy: c.sv.sy * f.sy };
+  sprLayer(g, c, s, s.ok[f.pose] ? f.pose : c.spP, v, c.spBob || 0, 1);
 }
 // soft contact shadow, stamped from one pre-rendered blob
 const SHADOW = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(40,28,40,1)'); gr.addColorStop(0.5, 'rgba(40,28,40,0.55)'); gr.addColorStop(1, 'rgba(40,28,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })();

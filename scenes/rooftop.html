@@ -429,6 +429,7 @@ function bakeRoom() {
   VT(g);
   paintRoofEmissive(g);
   if (hasBg()) paintBgArt(g);
+  if (hasBg()) LW.roomGrade(g, -180, 0, 2400, 1000, E.day);
   // the front layer (chairs, crates, the big pot)
   const fy = L.fgY, fh = Math.ceil((1000 - fy) * U);
   fgCv.width = cv.width; fgCv.height = fh;
@@ -442,6 +443,11 @@ function bakeRoom() {
   f.globalCompositeOperation = 'destination-in'; f.drawImage(albCv, 0, 0);
   f.globalCompositeOperation = 'source-over';
   f.setTransform(U, 0, 0, U, OX, -fy * U);
+  if (hasBg()) {
+    f.globalCompositeOperation = 'source-in';
+    f.drawImage(ART.bg.night || ART.bg.day, -180, 0, 2400, 1000);
+    f.globalCompositeOperation = 'source-over';
+  }
   paintFrontSnow(f);
   albCv.width = albCv.height = 1; lmCv.width = lmCv.height = 1;
 }
@@ -459,8 +465,8 @@ function composeLit(g, alb, lm) {
 }
 function paintBgArt(g) {
   const n = ART.bg.night || ART.bg.day, d = ART.bg.day || ART.bg.night;
-  g.drawImage(n, 0, 0, 2400, 1000);
-  if (d !== n && E.day > 0.02) { g.globalAlpha = E.day; g.drawImage(d, 0, 0, 2400, 1000); g.globalAlpha = 1; }
+  g.drawImage(n, -180, 0, 2400, 1000);
+  if (d !== n && E.day > 0.02) { g.globalAlpha = E.day; g.drawImage(d, -180, 0, 2400, 1000); g.globalAlpha = 1; }
 }
 
 // ----- sky ------------------------------------------------------------------------
@@ -1068,6 +1074,11 @@ function drawRadio(g, T) {
 }
 // ---- string lights ---------------------------------------------------------------------------
 function drawBulbs(g, T) {
+  if (hasBg()) {
+    // The painting contains the bulbs; animate only their soft pools of light.
+    for (const x of [620,1030,1440,1800]) drawSprite(g,GLOW_WARM,x,220,110,0.035*E.night*(1+music.beatEnv*0.18));
+    return;
+  }
   const night = E.night, p = music.pal || DEFAULT_PAL, playing = music.np && music.np.playing;
   const col = mix3([255, 214, 150], mix3(p.tint, [255, 230, 190], 0.5), 0.35 * music.lv);
   const b0 = calm.lv > 0.01 ? lerp(1, 0.45 + 0.35 * breath(), calm.lv) : 1;
@@ -1113,6 +1124,10 @@ function maybeFirework(s) {
 function drawSky(g, T) {
   const night = E.night;
   g.save(); g.beginPath(); g.rect(L.wall.x1 + 4, -10, vx1 - L.wall.x1 + 30, L.horizon - 8); g.clip();
+  if(hasBg() && night>.1){
+    g.save();g.globalAlpha=night*(1-E.cloud*.75);g.fillStyle='#efe4be';g.beginPath();g.arc(1420,125,21,0,TAU);g.fill();
+    drawSprite(g,GLOW_WARM,1420,125,75,.12);g.restore();
+  }
   // twinkling windows (a few lights switching on and off across the city)
   if (night > 0.05) for (const w of CITY.tw) {
     if (!w.on || w.x < L.wall.x1 || w.x > vx0 + W * 0.7) continue;
@@ -1726,11 +1741,11 @@ function drawAnimalSprites(g, a, layers) {
   const nod = 1 - (a.nod || 0) * 0.02;
   g.save(); g.translate(a.x, a.y + bob * a.k); g.scale(a.k * a.face * a.xs * sc, a.k * sc * br * nod);
   if (a.air > 0.01) g.rotate(-a.air * 0.12 * Math.sign(a.act && a.act.to ? a.act.from.y - a.act.to.y : 1));
-  layers.forEach(([f, w], i) => {
-    const im = A[f], cv = spriteCanvas(a, f, im), p = 6;
-    g.globalAlpha = i === 0 ? 1 : clamp((w - 0.3) * 3.5, 0, 1);   // a quick dissolve, no lingering double
-    g.drawImage(cv, -im.naturalWidth / 2 - p, -im.naturalHeight - p + (S2.sink || 0) / sc);
-  });
+  const pose = LW.poseState(a, layers[0][0]);
+  const im = A[pose.pose] || A[layers[0][0]], cv = spriteCanvas(a, pose.pose, im), p = 6;
+  g.scale(pose.sx, pose.sy);
+  g.globalAlpha = 1;
+  g.drawImage(cv, -im.naturalWidth / 2 - p, -im.naturalHeight - p + (S2.sink || 0) / sc);
   g.globalAlpha = 1;
   g.restore();
 }

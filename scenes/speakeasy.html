@@ -452,6 +452,7 @@ function bakeRoom() {
   g.globalCompositeOperation = 'source-over';
   VT(g);
   if (hasBg()) paintBgArt(g);
+  if (hasBg()) { LW.roomGrade(g, -180, 0, 2400, 1000, E.day); paintWindowFrame(g); }
   paintEmissive(g);
   // the front layer (booths + their tables): its own albedo x the same light map
   const fy = L.fgY, fh = Math.ceil((1000 - fy) * U);
@@ -473,8 +474,8 @@ function paintBgArt(g) {
   // painted room (already lit) over the procedural one; the window stays open
   const n = ART.bg.night || ART.bg.day, d = ART.bg.day || ART.bg.night;
   g.save();
-  g.drawImage(n, 0, 0, DW, 1000);
-  if (d !== n && E.day > 0.02) { g.globalAlpha = E.day; g.drawImage(d, 0, 0, DW, 1000); g.globalAlpha = 1; }
+  g.drawImage(n, -180, 0, 2400, 1000);
+  if (d !== n && E.day > 0.02) { g.globalAlpha = E.day; g.drawImage(d, -180, 0, 2400, 1000); g.globalAlpha = 1; }
   g.restore();
 }
 
@@ -1815,11 +1816,11 @@ function drawAnimalSprites(g, a, layers) {
   const nod = 1 - (a.nod || 0) * 0.02;
   g.save(); g.translate(a.x, a.y + bob * a.k); g.scale(a.k * a.face * a.xs * sc, a.k * sc * br * nod);
   if (a.air > 0.01) g.rotate(-a.air * 0.12 * Math.sign(a.act && a.act.to ? a.act.from.y - a.act.to.y : 1));
-  layers.forEach(([f, w], i) => {
-    const im = A[f], cv = spriteCanvas(a, f, im), p = 6;
-    g.globalAlpha = i === 0 ? 1 : clamp((w - 0.3) * 3.5, 0, 1);   // a quick dissolve, no lingering double
-    g.drawImage(cv, -im.naturalWidth / 2 - p, -im.naturalHeight - p + (S2.sink || 0) / sc);
-  });
+  const pose = LW.poseState(a, layers[0][0]);
+  const im = A[pose.pose] || A[layers[0][0]], cv = spriteCanvas(a, pose.pose, im), p = 6;
+  g.scale(pose.sx, pose.sy);
+  g.globalAlpha = 1;
+  g.drawImage(cv, -im.naturalWidth / 2 - p, -im.naturalHeight - p + (S2.sink || 0) / sc);
   g.globalAlpha = 1;
   g.restore();
 }

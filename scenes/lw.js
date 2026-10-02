@@ -375,6 +375,45 @@
     for (const b of CO.bots.values()) if (Math.abs(b.x - x) < 26 && y > innerHeight - 70) { b.wave = 1.2; b.bubble = 4; }
   });
 
+  // Shared illustrated-pose timing. Never dissolve two animal silhouettes.
+  // The old pose tucks, changes at the lowest point, then settles into the new pose.
+  LW.poseFrame = function (from, to, progress) {
+    const t = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 1));
+    if (!from || from === to || t >= 1) return { pose: to, sx: 1, sy: 1 };
+    const tuck = Math.pow(Math.sin(Math.PI * t), 2);
+    return { pose: t < 0.5 ? from : to, sx: 1 + 0.025 * tuck, sy: 1 - 0.085 * tuck };
+  };
+  LW.poseState = function (owner, target, duration = 0.42) {
+    const now = performance.now() / 1000;
+    const s = owner._illustratedPose || (owner._illustratedPose = { from: target, to: target, at: now - duration });
+    if (target !== s.to) {
+      const shown = LW.poseFrame(s.from, s.to, (now - s.at) / duration).pose;
+      const walking = /^walk[12]$/.test(String(target)) && /^walk[12]$/.test(String(shown));
+      s.from = shown; s.to = target; s.at = walking ? now - duration : now;
+    }
+    return LW.poseFrame(s.from, s.to, (now - s.at) / duration);
+  };
+  // Keep the full stage height on wide desktops, extending quiet edge materials.
+  LW.roomImage = function(g,im,wall='#17232c',floor='#111b24') {
+    g.save();
+    const wash=g.createLinearGradient(0,0,0,1000);wash.addColorStop(0,wall);wash.addColorStop(.7,wall);wash.addColorStop(1,floor);
+    g.fillStyle=wash;g.fillRect(-1800,0,5200,1000);
+    g.drawImage(im,0,0,1600,1000);
+    // Broad quiet panels outside the original composition, without stretching furniture.
+    for(const [x,dir] of [[1600,1],[0,-1]]){
+      const shade=g.createLinearGradient(x,0,x+dir*900,0);shade.addColorStop(0,'rgba(0,0,0,0)');shade.addColorStop(1,'rgba(0,0,0,.42)');
+      g.fillStyle=shade;g.fillRect(dir>0?x:x-1800,0,1800,1000);
+    }
+    g.restore();
+  };
+  // Cached paintings are graded only during room rebakes, never per frame.
+  LW.roomGrade = function (g, x, y, w, h, day) {
+    g.save();
+    const d = Math.max(0, Math.min(1, day || 0));
+    if (d > 0.001) { g.globalCompositeOperation = 'screen'; g.fillStyle = `rgba(177,201,219,${d * 0.18})`; g.fillRect(x,y,w,h); }
+    g.restore();
+  };
+
   // Native host entry point.
   window.__lw = function (type, x, y, flag) {
     if (type === 'agents') { setAgents(x); return; }

@@ -232,7 +232,7 @@ function computeLayout() {
   if (cssW * cssH * dpr * dpr > 9.5e6) dpr = Math.sqrt(9.5e6 / (cssW * cssH));
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
-  if (artMode()) { W = 1600; K = Math.max(cssW / 1600, cssH / 1000); OX = (cssW - 1600 * K) / 2; OY = (cssH - 1000 * K) / 2; }
+  if (artMode()) { W = 1600; K = cssH / 1000; OX = (cssW - 1600 * K) * (cssW / cssH > 1.6 ? .25 : .5); OY = 0; }
   else { K = cssH / 1000; W = cssW / K; OX = 0; OY = 0; }
   U = K * dpr;
   const o = {};
@@ -480,9 +480,10 @@ function bakeRoom() {
     setW(g);
     const n = ART.img['bg-night'], d = ART.img['bg-day'];
     const first = n || d;
-    g.drawImage(first, 0, 0, 1600, 1000);
-    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; g.drawImage(d, 0, 0, 1600, 1000); g.globalAlpha = 1; }
+    LW.roomImage(g,first,'#302e32','#20191b');
+    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; LW.roomImage(g,d,'#302e32','#20191b'); g.globalAlpha = 1; }
     else if (!d && E.day > 0.01) { g.globalCompositeOperation = 'screen'; g.fillStyle = rgba([120, 120, 120], E.day * 0.5); g.fillRect(0, 0, 1600, 1000); g.globalCompositeOperation = 'source-over'; }
+    LW.roomGrade(g, 0, 0, 1600, 1000, E.day);
     // keep the glass see-through
     g.globalCompositeOperation = 'destination-out'; L.panes.forEach(([x, y, pw, ph]) => g.fillRect(x, y, pw, ph)); g.globalCompositeOperation = 'source-over';
     paintVignette(g);
@@ -2038,9 +2039,9 @@ function drawPetSprite(g, a, S, st, sx, sy, dy) {
     g.drawImage(cv, -w / 2, -h + 2 * a.k, w, h);
     g.restore();
   };
-  const f = smooth(st.t);
-  if (st.prev && f < 1) one(st.prev, 1 - f);
-  one(st.cur, st.prev && f < 1 ? f : 1);
+  const f = LW.poseFrame(st.prev, st.cur, st.t);
+  sx *= f.sx; sy *= f.sy;
+  one(f.pose, 1);
 }
 const isWalk = (n) => n === 'walk1' || n === 'walk2';
 function catSpriteName(c) {

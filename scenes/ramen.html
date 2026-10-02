@@ -490,6 +490,7 @@ function bakeRoom() {
   paintEmissiveNear(nl);
   g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(nearCv, 0, 0); g.setTransform(U, 0, 0, U, 0, 0);
   paintArtBg(g);
+  if(ART['bg-night'] || ART['bg-day']) { LW.roomGrade(g,L.sx,0,1600,1000,E.day); paintRadio(g); }
   albCv.width = albCv.height = 1; nearCv.width = nearCv.height = 1; lmCv.width = lmCv.height = 1;
 }
 function paintArtBg(g) {
@@ -1848,9 +1849,10 @@ function drawCatSprite(g, c, sp, T) {
     const w = im.naturalWidth * sc, h = im.naturalHeight * sc;
     g.globalAlpha = a; g.drawImage(tinted(c, im, sc1), -w / 2, -h, w, h);
   };
-  g.save(); g.translate(c.x, c.y - bob); g.scale(c.faceS * sx, sy); g.rotate(rot);
-  if (c.sprB && c.sprT < 1) layer(c.sprB, 1 - smooth(c.sprT));
-  layer(c.sprA, c.sprB ? smooth(c.sprT) : 1);
+  g.save(); g.translate(c.x, c.y - bob); g.scale((Math.sign(c.faceS) || c.face) * (0.78 + 0.22 * Math.abs(c.faceS)) * sx, sy); g.rotate(rot);
+  const transition = LW.poseFrame(c.sprB, c.sprA, c.sprT);
+  g.scale(transition.sx, transition.sy);
+  layer(transition.pose, 1);
   g.globalAlpha = 1; g.restore();
 }
 

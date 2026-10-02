@@ -797,20 +797,18 @@ function bakeWindow(g, L) {
       cg.addColorStop(0, 'rgba(0,0,0,0)'); cg.addColorStop(1, `rgba(150,158,185,${0.3 * L.moon})`);
       g.fillStyle = cg; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill(); }
   }
-  // distant tree line / hills
+  // Layered distant ridges: broad silhouettes with atmospheric separation.
   const skyB = L.sky[1];
-  g.fillStyle = rgba(mixc(skyB, [0, 0, 0], 0.72));
-  g.beginPath(); g.moveTo(x0, bot);
-  for (let i = 0; i <= 24; i++) {
-    const t = i / 24, xx = x0 + t * w;
-    const yy = bot - (bot - top) * (0.16 + 0.05 * Math.sin(t * 9 + 1) + 0.03 * Math.sin(t * 23) + (rnd() * 0.03));
-    g.lineTo(xx, yy);
+  for (let layer = 0; layer < 3; layer++) {
+    g.fillStyle = rgba(mixc(skyB, [24, 35, 39], 0.25 + layer * 0.2), 0.78 + layer * 0.08);
+    const base = bot - wh * (0.25 - layer * 0.065), amp = wh * (0.075 - layer * 0.012);
+    g.beginPath(); g.moveTo(x0 - 4, bot + 2); g.lineTo(x0 - 4, base);
+    for (let i = 0; i < 5; i++) {
+      const xx = x0 + i * w / 4;
+      g.bezierCurveTo(xx + w / 12, base - amp * Math.sin(i * 1.9 + layer + 1), xx + w / 6, base + amp * Math.cos(i * 1.4 + layer), xx + w / 4, base + amp * 0.35 * Math.sin(i + layer));
+    }
+    g.lineTo(x1 + w / 4, bot + 2); g.closePath(); g.fill();
   }
-  g.lineTo(x1, bot); g.closePath(); g.fill();
-  g.fillStyle = rgba(mixc(skyB, [0, 0, 0], 0.55), 0.8);
-  g.beginPath(); g.moveTo(x0, bot);
-  for (let i = 0; i <= 12; i++) { const t = i / 12; g.lineTo(x0 + t * w, bot - (bot - top) * (0.1 + 0.03 * Math.sin(t * 5 + 2))); }
-  g.lineTo(x1, bot); g.closePath(); g.fill();
   if (L.haze > 0) { g.fillStyle = `rgba(170,165,160,${0.62 * L.haze})`; g.fillRect(x0, top, w, bot - top); }
   if (L.weather === 'rain' || L.weather === 'storm') { g.fillStyle = 'rgba(36,46,60,0.2)'; g.fillRect(x0, top, w, bot - top); }
   if (L.weather === 'snow') {                                   // snow drifted on the outer sill
@@ -835,7 +833,7 @@ function bakeFrameSprite(L) {
   const pad = win.ft * 2;
   const c = mk((win.w + pad * 2) * dpr, (win.bot - win.top + pad * 2) * dpr), g = c.getContext('2d');
   g.scale(dpr, dpr); g.translate(-(win.x0 - pad), -(win.top - pad));
-  const wood = mixc(L.wall[1], [16, 10, 7], 0.6);
+  const wood = mixc(L.wall[1], [40, 28, 19], 0.43);
   const ft = win.ft;
   // outer frame ring
   g.beginPath(); winPath(g, -ft); winPath(g, ft * 0.25);
@@ -847,7 +845,13 @@ function bakeFrameSprite(L) {
       else { ring.moveTo(x1 - ins, bot); ring.lineTo(x1 - ins, archY); ring.arc(win.cx, archY, r - ins, 0, Math.PI, true); ring.lineTo(x0 + ins, bot); ring.closePath(); }
     }; pth(-ft, false); pth(ft * 0.3, true); }
   g.restore();
-  g.fillStyle = rgba(wood); g.fill(ring, 'evenodd');
+  const frameWood = g.createLinearGradient(win.x0, 0, win.x1, 0);
+  frameWood.addColorStop(0, rgba(mixc(wood, L.shaft, 0.12)));
+  frameWood.addColorStop(0.45, rgba(wood));
+  frameWood.addColorStop(1, rgba(mixc(wood, [8, 6, 5], 0.25)));
+  g.fillStyle = frameWood; g.fill(ring, 'evenodd');
+  g.strokeStyle = rgba(mixc(wood, L.shaft, 0.22), 0.7); g.lineWidth = Math.max(1, ft * 0.11);
+  winPath(g, -ft * 0.65); g.stroke();
   // mullions
   const bw = Math.max(2, ft * 0.45);
   g.fillStyle = rgba(wood);

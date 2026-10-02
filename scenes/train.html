@@ -635,7 +635,7 @@ function paintVignette(g) {
 }
 
 // ----- the sky (behind every landscape layer) ------------------------------------
-function vbSize(c, sc) { const v = L.V; c.width = Math.round(v.ww * U * sc); c.height = Math.round(v.wh * U * sc); }
+function vbSize(c, sc) { const v = L.V; c.width = Math.max(1, Math.round(v.ww * U * sc)); c.height = Math.max(1, Math.round(v.wh * U * sc)); }
 function setV(g, sc) { const v = L.V; g.setTransform(U * sc, 0, 0, U * sc, -v.x0 * U * sc, -v.y0 * U * sc); }
 function bakeSky() {
   const sc = 0.5; vbSize(skyCv, sc);

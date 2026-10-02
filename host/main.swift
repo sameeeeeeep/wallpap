@@ -787,6 +787,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     func sendAction(_ name: String) { windows.forEach { $0.js("__lw('action','\(name)')") } }
 
+    // If WebKit kills the page process (memory pressure, crash), the window would stay
+    // black — reload the scene instead.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("wallpap: scene process terminated — reloading")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.loadScene() }
+    }
+
     // Page loaded → hand it the current env + its saved settings.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pushEnv()

@@ -501,5 +501,14 @@
     LW.on('down', () => setTimeout(() => LW.post('log:audio ' + (LW._ctx ? LW._ctx.state : 'none')), 400));
   }
 
+  // Self-heal: if WebKit drops a WebGL context (memory pressure, GPU process restart)
+  // the canvas goes black and never recovers on its own — reload the scene instead.
+  if (LW.isHost) {
+    document.addEventListener('webglcontextlost', (e) => {
+      LW.post('log:webgl context lost — reloading scene');
+      setTimeout(() => location.reload(), 600);
+    }, true);
+  }
+
   window.LW = LW;
 })();

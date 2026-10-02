@@ -191,14 +191,14 @@ layout(location=2) in vec4 iC;
 layout(location=3) in vec4 iD;
 ${COMMON}
 uniform vec2 uView, uShake;
-uniform float uCalmLean, uCloudSh;
+uniform float uCalmLean, uCloudSh, uSwayK;
 uniform sampler2D uField;
 uniform vec4 uFR;
 out vec4 vA; out vec4 vB; out vec4 vT;
 float bendOf(vec2 root, float h, float s, float ph, float lean, float stiff, out float fl, out float g){
   g = gustAt(root.x, s);
   float sway = sin(uTime*(1.2 + fract(ph*7.31)*0.7) + ph*6.2832 + root.x*0.011)*0.6 + sin(uTime*2.7 + ph*17.0)*0.25;
-  float b = lean + uWind*(0.12 + 0.6*g) + sway*(0.05 + 0.11*uWind) + uCalmLean;
+  float b = lean + uWind*(0.12 + 0.6*g) + sway*(0.05 + 0.11*uWind)*uSwayK + uCalmLean;
   vec2 f = texture(uField, (vec2(root.x, root.y - h*0.45) - uFR.xy)/uFR.zw).rg;
   f = vec2((f.x*255.0 - 128.0)/63.5, f.y);   // RG8: lean in ±2, flatten 0..1
   fl = clamp(f.y, 0.0, 1.0);
@@ -884,7 +884,7 @@ function flowerHead(fl, t) {
   const o = fl.i * STR, x = inst[o], y = inst[o + 1], h = inst[o + 2], s = inst[o + 4], ph = inst[o + 5], lean = inst[o + 6], stiff = inst[o + 9];
   const g = gustJS(x, s, t);
   const sway = Math.sin(t * (1.2 + ((ph * 7.31) % 1) * 0.7) + ph * TAU + x * 0.011) * 0.6 + Math.sin(t * 2.7 + ph * 17) * 0.25;
-  let b = lean + Lt.wind * (0.12 + 0.6 * g) + sway * (0.05 + 0.11 * Lt.wind) + calmLean;
+  let b = lean + windG * (0.12 + 0.6 * g) + sway * (0.05 + 0.11 * windG) * calmSway + calmLean;
   const [fL, fF] = fieldAt(x, y - h * 0.45);
   const fl2 = clamp(fF, 0, 1);
   b = b / stiff + fL * 1.7; b += (b >= 0 ? 1 : -1) * fl2 * 0.7; b = clamp(b, -1.5, 1.5);
@@ -897,7 +897,7 @@ function stalkPoint(st, f, t) {
   t %= 20000;
   const g = gustJS(st.x, st.s, t);
   const sway = Math.sin(t * 0.8 + st.ph * TAU) * 0.6 + Math.sin(t * 1.9 + st.ph * 13) * 0.25;
-  let b = st.lean + (Lt.wind * (0.05 + 0.12 * g) + sway * 0.02 * (0.4 + Lt.wind)) / st.stiff;
+  let b = st.lean + (windG * (0.05 + 0.12 * g) + sway * 0.02 * (0.4 + windG)) / st.stiff;
   const dx = (st.x - shake.x) / 12; b += shake.amp * Math.sin(t * 23) * Math.exp(-dx * dx);
   let px = 0, py = 0;
   for (let j = 0; j < 5; j++) { const seg = clamp(f * 5 - j, 0, 1); if (seg <= 0) break; const vv = (j + 0.5 * seg) * 0.2, a = b * vv * vv * 1.6; px += Math.sin(a) * st.h * 0.2 * seg; py -= Math.cos(a) * st.h * 0.2 * seg; }
@@ -1382,8 +1382,8 @@ function sprTintPass() {
   }
 }
 function sprBreathe(o, p, t) {
-  const br = p.state === 'calm' ? calmBr.level : 0.5 + 0.5 * Math.sin(t * 1.25 + p.ph0);
-  o.sy = 1 + 0.03 * br; o.sx = 1 + 0.01 * br;
+  const cb = p.state === 'calm', br = cb ? calmBr.level : 0.5 + 0.5 * Math.sin(t * 1.25 + p.ph0);
+  o.sy = 1 + (cb ? 0.055 : 0.03) * br; o.sx = 1 + (cb ? 0.018 : 0.01) * br;   // calm: deeper, on the breath clock
 }
 // Behaviour state → abstract pose + a little motion (rotation, squash, bob).
 // rot > 0 tips the nose down (sprites face right); pvx = pivot offset (fraction of width).
@@ -1563,6 +1563,11 @@ function drawPandaSprite(p) {
 
 // ─── Panda behaviour ────────────────────────────────────────────────────────
 let calmOn = LW.calm, calmFade = calmOn ? 1 : 0, calmLean = 0, breathTemp = 0, calmStill = 0;
+// Calm breathes in the meadow itself (lw.js only draws a small caption): on the in-breath a soft gust
+// bends the whole field and dandelion seeds lift out of the grass; on the hold the wind dies and
+// everything hangs still; on the out-breath the blades straighten and the seeds settle back down.
+LW.breathDiegetic = true;
+let windG = 0, calmSway = 1;   // wind + blade sway as the grass sees them (quieted in calm so the breath leads)
 let calmBr = { phase: 'in', k: 0, level: 0 };   // LW.breathState on the guide's clock (lw.js draws the guide)
 // pandas stay out of the right ~28% of the screen (macOS widgets live there)
 const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * 0.72 - PS * 36;   // centre limit ≈ right edge at 72%
@@ -2335,6 +2340,30 @@ function drawOverlay(dt, t) {
 }
 const DR = { x0: 0, y0: 0, x1: 0, y1: 0, prev: [0, 0, 1e5, 1e5] };
 function mark(x0, y0, x1, y1) { if (x0 < DR.x0) DR.x0 = x0; if (y0 < DR.y0) DR.y0 = y0; if (x1 > DR.x1) DR.x1 = x1; if (y1 > DR.y1) DR.y1 = y1; }
+// Calm: a drift of dandelion seeds that IS the breath. Their height is a pure function of the lungs'
+// level (no integrated velocity), so they rise out of the grass on the in-breath, hang exactly where they
+// are on the hold, and sink back into the meadow on the out-breath. Left ~68% only (widgets live right).
+const BSEED = (() => { const r = mulberry(4242), a = []; for (let i = 0; i < 40; i++) a.push({ fx: 0.05 + r() * 0.63, fy: 0.12 + r() * 0.5, lift: 0.55 + r() * 0.45, z: 0.55 + r() * 0.45, ph: r() * TAU, rot: (r() - 0.5) * 0.6 }); return a; })();
+function drawBreathSeeds(c, t, lit) {
+  const lv = calmBr.level, e = lv * lv * (3 - 2 * lv), sc = clamp(H / 900, 0.8, 1.6), mh = H - yH;
+  const bob = 5 * sc * (1 - 0.92 * calmStill);   // ambient float, nearly silenced in holds
+  const a = calmFade * (0.16 + 0.74 * e);
+  const r0 = Math.round(250 * lit[0] + 40 * Lt.night), g0 = Math.round(248 * lit[1] + 44 * Lt.night), b0 = Math.round(240 * lit[2] + 56 * Lt.night);
+  c.strokeStyle = `rgba(${Math.min(255, r0)},${Math.min(255, g0)},${Math.min(255, b0)},${a})`; c.lineWidth = 0.85 * sc;
+  c.beginPath();
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const s of BSEED) {
+    const x = W * s.fx + e * 46 * sc * s.z + Math.sin(t * 0.35 + s.ph) * bob;
+    const y = yH + mh * s.fy - e * s.lift * (mh * 0.44 + H * 0.05) + Math.sin(t * 0.5 + s.ph * 1.7) * bob * 0.8;
+    const r = (3.6 + 2.6 * s.z) * sc * (0.85 + 0.25 * e), rot = s.rot * 0.5 + calmLean * 0.9;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    c.moveTo(x, y); c.lineTo(x - sr * r * 1.25, y + cr * r * 1.25);   // stalk
+    for (let q = -4; q <= 4; q++) { const an = -Math.PI / 2 + q * 0.32 + rot; c.moveTo(x, y); c.lineTo(x + Math.cos(an) * r, y + Math.sin(an) * r * 0.8); }
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  c.stroke();
+  const m = 14 * sc; mark(x0 - m, y0 - m, x1 + m, y1 + m);
+}
 function drawOverlayInner(c, dt, t, wantFF) {
   const lum = clamp(0.35 + 0.75 * Lt.amb * (1 - 0.5 * Lt.night), 0.25, 1.1);
   const lit = [lum * (0.9 + 0.1 * Lt.sun[0]), lum * (0.9 + 0.1 * Lt.sun[1]), lum * (0.9 + 0.1 * Lt.sun[2])];
@@ -2386,6 +2415,7 @@ function drawOverlayInner(c, dt, t, wantFF) {
       c.font = `italic 500 ${Math.round(p.r * (1 + k * 0.6))}px ui-serif, Georgia, serif`; c.fillStyle = `rgba(225,230,245,${0.7 * fade})`; c.textAlign = 'center'; c.fillText('z', p.x, p.y);
     }
   }
+  if (calmFade > 0.01) drawBreathSeeds(c, t, lit);
   // rain + snow (stateless streams)
   const w = LW.env.weather, it = LW.env.intensity;
   if (w === 'rain' || w === 'storm' || w === 'snow' || bolt) mark(0, 0, W, H);
@@ -2576,7 +2606,7 @@ function thunder() {
 // The guide restarts its clock when calm turns on (unless it was still fading out, ~3s), so mirror it.
 const BR = { t0: performance.now() / 1000, off: -1e9 };
 LW.on('calm', (on) => { const n = performance.now() / 1000; if (on) { if (n - BR.off > 3) BR.t0 = n; } else BR.off = n; });
-function breathNow(ahead = 0) { return LW.breathState(performance.now() / 1000 - BR.t0 + ahead); }
+function breathNow(ahead = 0) { const g = LW.breathTime(); return LW.breathState((g > 0 ? g : performance.now() / 1000 - BR.t0) + ahead); }   // the guide's own clock when it runs
 
 // ─── Ambience bed (procedural, quiet) ───────────────────────────────────────
 // Continuous background on LW.bus('ambience'); weather layers on LW.bus('weather').
@@ -2779,8 +2809,8 @@ function render(t) {
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   // grass uniforms (once per frame)
   gl.useProgram(grassP.p); u = grassP.u;
-  gl.uniform2f(u.uView, W, H); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uH, H); gl.uniform1f(u.uWind, Lt.wind); gl.uniform4fv(u.uGust, gustU);
-  gl.uniform1f(u.uCalmLean, calmLean); gl.uniform1f(u.uCloudSh, Lt.cloudSh); gl.uniform2f(u.uShake, shake.x, shake.amp);
+  gl.uniform2f(u.uView, W, H); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uH, H); gl.uniform1f(u.uWind, windG); gl.uniform4fv(u.uGust, gustU);
+  gl.uniform1f(u.uCalmLean, calmLean); gl.uniform1f(u.uSwayK, calmSway); gl.uniform1f(u.uCloudSh, Lt.cloudSh); gl.uniform2f(u.uShake, shake.x, shake.amp);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, F.tex); gl.uniform1i(u.uField, 0);
   gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, atlasTex); gl.uniform1i(u.uAtlas, 1);
   gl.uniform4f(u.uFR, F.x0, F.y0, F.cols * F.cell, F.rows * F.cell);
@@ -2854,7 +2884,7 @@ function render(t) {
   gl.useProgram(postP.p); gl.bindVertexArray(emptyVao); u = postP.u;
   gl.uniform2f(u.uRes, glc.width, glc.height); gl.uniform2f(u.uView, W, H); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uH, H);
   gl.uniform1f(u.uHor, yH); gl.uniform1f(u.uFog, Lt.fog); gl.uniform1f(u.uMist, Lt.mist * 0.8); gl.uniform1f(u.uFlash, Lt.flash);
-  gl.uniform1f(u.uVig, 0.32 + Lt.night * 0.15); gl.uniform1f(u.uDim, calmFade * (0.14 - 0.08 * calmBr.level));   // the meadow brightens as the lungs fill
+  gl.uniform1f(u.uVig, 0.32 + Lt.night * 0.15); gl.uniform1f(u.uDim, calmFade * (0.17 - 0.13 * calmBr.level));   // the meadow brightens as the lungs fill
   gl.uniform3fv(u.uFogC, Lt.haze.map((v, i) => lerp(v, Lt.ambCol[i] * Lt.amb, 0.3)));
   if (dbg.post) gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.disable(gl.BLEND);
@@ -2888,7 +2918,11 @@ function frame() {
     calmBr = breathNow();
     calmStill = approach(calmStill, calmBr.phase === 'hold' || calmBr.phase === 'rest' ? 1 : 0, dt * 1.5);
   } else calmStill = 0;
-  calmLean = calmFade * 0.22 * (calmBr.level - 0.5);   // the whole meadow leans with the breath
+  // the whole meadow leans with the breath (upright-ish on empty lungs, bowed on full), with the
+  // ambient wind + sway quieted under it — almost silent in holds so the field visibly hangs still
+  calmLean = calmFade * 0.5 * (calmBr.level - 0.3);
+  windG = Lt.wind * (1 - 0.65 * calmFade);
+  calmSway = 1 - calmFade * (0.45 + 0.5 * calmStill);
   if (basin.flowT > 0) basin.flowT -= dt; else basin.flow = approach(basin.flow, 0, dt * 0.4);
   for (let i = basin.ripples.length - 1; i >= 0; i--) { basin.ripples[i].t += dt; if (basin.ripples[i].t > 1.6) basin.ripples.splice(i, 1); }
   if (basin.flow > 0.3 && Math.random() < dt * 3) basin.ripples.push({ x: -0.55, t: 0 });

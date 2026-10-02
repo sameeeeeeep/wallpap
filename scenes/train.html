@@ -1216,7 +1216,10 @@ function drawTea(g, T) {
 //  calm breathing and birds passing outside the glass
 // =====================================================================
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
-// lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
+// Diegetic breathing: the berth lamps fill and empty with the breath and the chai's steam rises with it
+// (holds: frozen at their level); lw.js only draws a quiet caption. Mirror the guide's clock.
+LW.breathDiegetic = true;
+LW.breathLabelAt = [0.49, 0.86];   // the dark aisle floor under the tea table, above the Dock
 const guide = { on: false, t0: 0, a: 0 };
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
 function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
@@ -1257,14 +1260,16 @@ function drawOutsideBirds(g) {
 const steam = [];
 function updateParticles(dt, T) {
   // tea steam (wavers when the carriage jolts)
-  if (steam.length < 7 && Math.random() < dt * 2.4) steam.push({ x: L.cup.x + rand(-6, 6), y: L.cup.y - 70, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
-  for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 1.1 + s.ph + s.t) * 5 - rock.jv * 0.3) * dt; s.y -= dt * (14 + s.t * 4); s.r += dt * 4; if (s.t > s.life) steam.splice(i, 1); }
+  // calm: the steam rises with the breath — a taller, fuller plume on the in-breath, thin and low on the out
+  const sb = calm.lv * breath(), sMax = 7 + Math.round(7 * calm.lv), up = 1 + calm.lv * (1.6 * breath() - 0.5);
+  if (steam.length < sMax && Math.random() < dt * 2.4 * (1 + calm.lv * (2 * breath() - 0.4))) steam.push({ x: L.cup.x + rand(-6, 6), y: L.cup.y - 70, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
+  for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 1.1 + s.ph + s.t) * 5 - rock.jv * 0.3) * dt; s.y -= dt * (14 + s.t * 4) * up; s.r += dt * 4 * (1 + 1.8 * sb); if (s.t > s.life) steam.splice(i, 1); }
 
 }
 function drawParticles(g) {
   setWR(g);
   g.globalCompositeOperation = 'screen';
-  const sb = 0.55 + 0.45 * (1 - E.day * 0.6);
+  const sb = (0.55 + 0.45 * (1 - E.day * 0.6)) * (1 + calm.lv * (2.8 * breath() - 0.3));   // calm: the plume fills with the breath
   for (const s of steam) { const k = s.t / s.life, a = s.a * Math.sin(Math.min(1, k * 1.25) * Math.PI) * sb; if (a < 0.004) continue; g.globalAlpha = a; g.drawImage(BLOB, s.x - s.r, s.y - s.r, s.r * 2, s.r * 2); }
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 
@@ -1560,10 +1565,14 @@ function render(T, dt) {
   if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, rx, ry);
   ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, rx, ry); ctx.globalAlpha = 1;
   setWR(ctx);
-  const lv = E.lamp * (1 - E.day) * (1 - 0.6 * calm.lv);
-  // in calm the berth lamps dim to candlelight and swell with the breath (lw.js draws the guide)
+  // in calm the berth lamps become the breath: they fill with light on the in-breath, hold, and empty on the
+  // out-breath (lit by day too, as soft candlelight, so the rhythm always reads)
   const bl = calm.lv > 0.01 ? breath() : 0;
-  if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60 + 40 * calm.lv * bl, 0.4 * lv * (1 + calm.lv * (0.9 * bl - 0.2)));
+  const lv = lerp(E.lamp * (1 - E.day), 0.12 + 0.88 * bl, calm.lv);
+  if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) {
+    drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60 + 60 * calm.lv * bl, 0.45 * lv);
+    if (calm.lv > 0.01) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 70, 150 + 200 * bl, 0.3 * calm.lv * lv);   // the pool it casts on the wall + berth
+  }
   drawTea(ctx, T);
   drawWater(ctx);
   if(note && !water){
@@ -1576,12 +1585,12 @@ function render(T, dt) {
   drawSweeps(ctx, dt);
   // Quiet night shading (+ the calm-mode breathing warmth)
   setW(ctx);
-  const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * (.48 - .1 * breath()), 0, .8);   // the carriage breathes
+  const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * (.54 - .22 * breath()), 0, .8);   // the carriage breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,4,8,${dim})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); }
   if (calm.lv > 0.01) {
     // the lamps' warmth on the tea table breathes too
     const b = breath();
-    drawSprite(ctx, GLOW_WARM, L.table.cx, L.cup.y - 30, 160 + 90 * b, 0.1 * calm.lv * (0.4 + 0.6 * b));
+    drawSprite(ctx, GLOW_WARM, L.table.cx, L.cup.y - 30, 160 + 110 * b, 0.12 * calm.lv * (0.3 + 0.7 * b));
   }
 }
 // =====================================================================
@@ -1619,7 +1628,7 @@ function selfTest(secs = 60) {
   }
   return {err,maxBirds};
 }
-window.__train = { get E() { return E; }, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
+window.__train = { get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

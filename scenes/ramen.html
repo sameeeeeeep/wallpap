@@ -1861,7 +1861,7 @@ function drawCatSprite(g, c, sp, T) {
   const awake = 1 - c.s, playing = music.np && music.np.playing;
   const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
   const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
-  let sx = 1, sy = 1 + 0.014 * br - 0.035 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;
+  let sx = 1, sy = 1 + 0.014 * (1 + 0.6 * calm.lv) * br - 0.035 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;   // calm: breaths sync to the guide
   if (sp.kind === 'walk') bob = Math.abs(Math.sin(c.gait * TAU)) * 2.2 * c.k;
   if (sp.kind === 'hop') { sy *= 1 - 0.14 * c.crouch + 0.06 * c.air; sx *= 1 + 0.06 * c.crouch; rot = (c.air > 0.05 ? -0.12 * Math.cos(c.air * Math.PI) : 0); }
   if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.06 * c.w.stretch; }
@@ -1878,12 +1878,27 @@ function drawCatSprite(g, c, sp, T) {
 }
 
 // ---- behaviour --------------------------------------------------------------
-const calm = { on: false, t: 0, lv: 0, auto: 0 };
+const calm = { on: false, t: 0, lv: 0, auto: 0, wt: 0 };
+// the alley carries the breath itself (steam from the bowl + pots, lantern light); lw.js only captions it
+LW.breathDiegetic = true;
 // lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
 const guide = { on: false, t0: 0, a: 0 };
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
 function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
-function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
+// prefer lw.js's own clock while its guide runs (it starts on window load, which can trail our script)
+function breathSt() { const g = LW.breathTime ? LW.breathTime() : 0; return LW.breathState(g > 0 ? g : guide.on ? nowS() - guide.t0 : 0); }
+// breath-driven steam: puffs + climbs on the in-breath, hangs on the hold, thins and settles on the out-breath.
+// emit = puff rate ×, move = motion clock ×, age = fade clock ×, sink = settle back (eased so the phases blend)
+const BS = { emit: 1, move: 1, age: 1, sink: 0 };
+function stepBreathSteam(dt) {
+  const lv = guide.on ? calm.lv : 0, st = breathSt(), ph = lv > 0.001 ? st.phase : '', r = Math.min(1, dt * 4);
+  const tE = ph === 'in' ? 2.4 : ph === 'out' ? 0.1 + 0.9 * st.level : 0;
+  const tM = ph === 'in' ? 1.15 : ph === 'out' ? 0.7 : 0;
+  const tA = ph === 'in' ? 0.9 : ph === 'out' ? 1.25 : 0;
+  BS.emit += (lerp(1, tE, lv) - BS.emit) * r; BS.move += (lerp(1, tM, lv) - BS.move) * r;
+  BS.age += (lerp(1, tA, lv) - BS.age) * r; BS.sink += ((ph === 'out' ? lv : 0) - BS.sink) * r;
+  calm.wt += dt * BS.move;   // the breath-plume's own clock: its sway stops dead on the holds
+}
 function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
 function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
 function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
@@ -2157,23 +2172,25 @@ function drawNoren(g) {
   g.fillStyle = rgba(mul([70, 46, 30], lightAt((s.nxl + s.nxr) / 2, s.ny0))); g.fillRect(s.nxl - 10, s.ny0 - 4, s.nxr - s.nxl + 20, 6);
 }
 function emitSteam(dt) {
-  const lv = 1 - calm.lv * 0.4, ml = 1 + 0.35 * music.lv * LW.music.level;
+  const lv = BS.emit, ml = 1 + 0.35 * music.lv * LW.music.level, bk = 1 + 0.5 * calm.lv;
   const srcs = [[L.pots[0].x, L.pots[0].y0, L.pots[0].w * 0.35, 5.5], [L.pots[1].x, L.pots[1].y0, L.pots[1].w * 0.35, 3.5], [L.bowl.x, L.bowl.y - 22, 14, 1.8]];
   srcs.forEach(([x, y, w, rate], i) => {
     steamAcc[i] += dt * rate * lv * ml;
-    while (steamAcc[i] > 1) { steamAcc[i] -= 1; steam.push({ x: x + rand(-w, w), y, vx: rand(-4, 4), vy: rand(-22, -14), t: 0, life: rand(3.2, 5), r: rand(7, 12), ph: rand(0, 6), a: i < 2 ? 0.1 : 0.09 }); }
+    while (steamAcc[i] > 1) { steamAcc[i] -= 1; steam.push({ x: x + rand(-w, w), y, vx: rand(-4, 4), vy: rand(-22, -14) * bk, t: 0, life: rand(3.2, 5), r: rand(7, 12) * bk, ph: rand(0, 6), a: (i < 2 ? 0.1 : 0.09) * (1 + 1.4 * calm.lv) }); }
   });
 }
 function puff(x, y, w) { for (let i = 0; i < 20; i++) steam.push({ x: x + rand(-w, w), y: y - rand(0, 10), vx: rand(-16, 16), vy: rand(-55, -26), t: 0, life: rand(2, 3.4), r: rand(7, 13), ph: rand(0, 6), a: 0.12 }); }
-function updateParticles(dt, T) {
-  emitSteam(dt);
-  const wind = (LW.env.wind || 0.3) * 8;
+function updateParticles(dt, T, rdt = dt) {
+  // steam runs on the breath (raw dt × BS) rather than calmPace, so it puffs, hangs and thins with the guide
+  emitSteam(rdt);
+  const wind = (LW.env.wind || 0.3) * 8, sdt = rdt * BS.move, adt = rdt * BS.age;
   for (let i = steam.length - 1; i >= 0; i--) {
-    const s = steam[i]; s.t += dt;
-    s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 6 + wind * s.t * 0.3) * dt; s.y += s.vy * dt; s.vx *= 1 - dt * 0.8; s.vy *= 1 - dt * 0.12;
+    const s = steam[i]; s.t += adt;
+    s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 6 + wind * s.t * 0.3) * sdt; s.y += s.vy * sdt; s.vx *= 1 - sdt * 0.8; s.vy *= 1 - sdt * (0.12 + 0.9 * BS.sink);
+    if (BS.sink > 0.01) s.vy += sdt * 7 * BS.sink;   // out-breath: the plume settles back
     if (s.t > s.life) steam.splice(i, 1);
   }
-  if (steam.length > 160) steam.splice(0, steam.length - 160);
+  if (steam.length > 200) steam.splice(0, steam.length - 200);
   // notes float up from the radio while playing
   if (music.np && music.np.playing && !calm.on) {
     music.notesT -= dt;
@@ -2851,7 +2868,8 @@ function step(dt, T) {
   music.swap = Math.min(1, music.swap + dt / 0.85);
   updateLanterns(dt, T);
   updateWeather(dt, T);
-  updateParticles(dt * calmPace(), T);
+  stepBreathSteam(dt);
+  updateParticles(dt * calmPace(), T, dt);
   updateWater(dt);
   for (const c of cats) updateCat(c, dt, T);
   if (stretchMsg && T > stretchMsg.until) stretchMsg = null;
@@ -2883,16 +2901,46 @@ function render(T) {
   }
   // dimming: paused/stopped → a touch darker; calm → lantern-light only
   const pausedDim = (1 - music.lv) * (music.ever ? 0.08 : 0.03) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * (0.5 - 0.1 * breath()), 0, 0.8);   // the alley breathes
+  const dim = clamp(pausedDim + calm.lv * (0.58 - 0.2 * breath()), 0, 0.8);   // the alley breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,4,10,${dim})`; ctx.fillRect(0, 0, W, H); }
   if (calm.lv > 0.01) {
     const b = breath();
-    // lantern-light only, swelling with the breath (lw.js draws the guide)
-    for (const ln of L.lanterns) if (ln.cx != null) drawSprite(ctx, GLOW_RED, ln.cx, ln.cy, ln.bw * (2.2 + 1.2 * b), (0.18 + 0.22 * b) * calm.lv);
+    // lantern-light only, swelling on the in-breath, steady on the holds, sinking on the out-breath
+    for (const ln of L.lanterns) if (ln.cx != null) {
+      drawSprite(ctx, GLOW_RED, ln.cx, ln.cy, ln.bw * (1.9 + 2.3 * b), (0.12 + 0.4 * b) * calm.lv);
+      drawSprite(ctx, GLOW_WARM, ln.cx - 4, ln.cy - 6, ln.bw * (0.7 + 0.5 * b), (0.08 + 0.22 * b) * calm.lv);
+    }
+    drawBreathPlume(ctx, b);
   }
   const fa = flashA();
   if (fa > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(150,160,200,${fa * 0.12})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   ctx.globalAlpha = 0.85 - 0.4 * E.day; ctx.drawImage(VIGNETTE, 0, 0, W, H); ctx.globalAlpha = 1;
+}
+// calm: steam plumes over the bowl and the stock pots whose height IS the breath — tall and full on full lungs,
+// hanging on the hold (own clock calm.wt stops), low and thin when empty. Lantern-lit, drawn over the calm dim.
+function drawBreathPlume(g, b) {
+  const cl = calm.lv * (guide.on ? 1 : 0); if (cl < 0.01) return;
+  const T = calm.wt, P = L.pots;
+  const srcs = [[L.bowl.x, L.bowl.y - 22, 0.8, 11], [P[0].x, P[0].y0 + 2, 1.15, P[0].w * 0.16], [P[1].x, P[1].y0 + 2, 1, P[1].w * 0.16]];
+  g.globalCompositeOperation = 'screen'; g.lineCap = 'round';
+  for (const [cx, cy, k, w] of srcs) {
+    for (let j = 0; j < 3; j++) {
+      const ph = j * 2.1 + cx * 0.013, life = 0.8 + 0.2 * Math.sin(T * 0.45 + ph * 1.7);
+      const hgt = (26 + 190 * b) * k * life * (1 - 0.12 * j), x0 = cx + (j - 1) * w, sw = 0.6 + hgt / (110 * k);
+      const a = cl * (0.05 + 0.2 * b) * life;
+      const gr = g.createLinearGradient(0, cy, 0, cy - hgt);
+      gr.addColorStop(0, 'rgba(255,236,214,0)'); gr.addColorStop(0.2, `rgba(255,236,214,${a})`); gr.addColorStop(1, 'rgba(255,236,214,0)');
+      g.strokeStyle = gr; g.lineWidth = (3 + j * 1.1) * k * (1 + 0.9 * b);
+      g.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const f = i / 12, y = cy - f * hgt;
+        const x = x0 + (Math.sin(f * 5 - T * 1.4 + ph) * (2 + 10 * f) + Math.sin(T * 0.4 + ph) * 6 * f) * k * sw;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+  }
+  g.globalCompositeOperation = 'source-over';
 }
 function drawWeatherBack() { /* reserved: far rain layer is drawn with the main pass */ }
 

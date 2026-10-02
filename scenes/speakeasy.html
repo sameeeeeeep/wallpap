@@ -1302,12 +1302,15 @@ function bakeOutside() {
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
 // lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
 const guide = { on: false, t0: 0, a: 0 };
+LW.breathDiegetic = true;   // the stage lights carry the breath (spot, footlights, marquee); lw.js only labels the phase
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
 function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
-function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
+function breathSt() { const t = LW.breathTime(); return LW.breathState(t > 0 ? t : guide.on ? nowS() - guide.t0 : 0); }   // lw.js guide clock; own clock for scene-started calm
 function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
 function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
 function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
+function breathE() { const b = breath(); return b * b * (3 - 2 * b); }   // eased level for the lights
+let hazeT = 0;   // haze drift clock: slows in calm, nearly still on the holds
 function ptrW() { return { x: toWX(LW.pointer.x), y: toWY(LW.pointer.y) }; }
 let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
 const hearts = [];
@@ -2497,14 +2500,16 @@ function drawMarquee(g, T) {
   // bulbs
   const playing = music.np && music.np.playing, n = L.bulbs.length;
   const idle = !music.ever, base = playing ? 0.55 : idle ? 0.5 : 0.36;
-  const lv = (1 - 0.6 * calm.lv) * (0.75 + 0.25 * roomLv());
+  const e = calm.lv > 0.01 ? breathE() : 0, dk = calm.lv * (1 - e) * 0.8;
+  const lv = (1 - calm.lv * (0.78 - 0.55 * e)) * (0.75 + 0.25 * roomLv()), chase = 1 - calm.lv;
   for (let i = 0; i < n; i++) {
     const [x, y] = L.bulbs[i];
     let b = base;
-    if (playing) b += 0.32 * Math.max(0, Math.sin(music.beatPh * Math.PI * 0.5 - i * 0.62)) + 0.18 * music.beatEnv;
-    else if (idle) b += 0.25 * Math.max(0, Math.sin(T * 1.1 - i * 0.45));
+    if (playing) b += (0.32 * Math.max(0, Math.sin(music.beatPh * Math.PI * 0.5 - i * 0.62)) + 0.18 * music.beatEnv) * chase;
+    else if (idle) b += 0.25 * Math.max(0, Math.sin(T * 1.1 - i * 0.45)) * chase;
     if (music.mqSwap < 1) b += 0.4 * Math.max(0, Math.sin(music.mqSwap * TAU * 2 - i * 0.5));
     b = clamp(b, 0, 1.2) * lv;
+    if (dk > 0.01) drawSprite(g, DARK, x, y, 11, dk, 'source-over');   // the painted bulbs dim with the out-breath
     g.fillStyle = rgba(mix3([120, 80, 40], [255, 240, 200], clamp(b, 0, 1))); g.beginPath(); g.arc(x, y, 3.4, 0, TAU); g.fill();
     drawSprite(g, GLOW_WARM, x, y, 14, 0.55 * b);
   }
@@ -2701,9 +2706,10 @@ function drawGramophone(g, T) {
 }
 function drawSpot(g, T) {
   const s = L.spot, p = music.pal || DEFAULT_PAL;
-  const b = calm.lv > 0.01 ? breath() : 0;
+  // calm: the spot is the breath — it rises to full on the in-breath, holds, and fades to a faint glow on the out
+  const b = calm.lv > 0.01 ? breathE() : 0;
   let lv = (music.np && music.np.playing ? 1 : music.ever ? 0.5 : 0.62) * (1 + 0.06 * (music.np && music.np.playing ? LW.music.level : 0));
-  lv = lerp(lv, 0.25 + 0.45 * b, calm.lv);
+  lv = lerp(lv, 0.06 + 0.9 * b, calm.lv);
   const col = mix3([255, 226, 180], mix3(p.tint, [255, 240, 220], 0.45), 0.5 * music.lv);
   const beam = new Path2D();
   beam.moveTo(s.x - 12, s.y + 8); beam.lineTo(s.x + 12, s.y + 8); beam.lineTo(s.px + s.rx, s.py); beam.lineTo(s.px - s.rx, s.py); beam.closePath();
@@ -2713,11 +2719,11 @@ function drawSpot(g, T) {
   g.fillStyle = gr; g.fill(beam);
   // haze drifting through the beam
   g.save(); g.clip(beam);
-  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, T * 7, T * 2.2, 0.5 * lv);
-  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, -T * 4.5 + 200, T * 1.1 + 90, 0.32 * lv);
+  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, hazeT * 7, hazeT * 2.2, 0.5 * lv);
+  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, -hazeT * 4.5 + 200, hazeT * 1.1 + 90, 0.32 * lv);
   g.restore();
   // pool on the stage floor
-  drawSpriteE(g, GLOW_SOFT, s.px, s.py - 4, s.rx * 1.25, s.ry * 1.6, 0.55 * lv);
+  drawSpriteE(g, GLOW_SOFT, s.px, s.py - 4, s.rx * (1.25 + 0.25 * b * calm.lv), s.ry * (1.6 + 0.3 * b * calm.lv), 0.55 * lv);
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 // tile the haze texture over a rect, scrolled by (ox, oy)
@@ -2787,9 +2793,17 @@ function drawBottleGlints(g) {
 }
 function drawFootlights(g, T) {
   const s = L.stage, playing = music.np && music.np.playing;
-  const lv = (playing ? 0.75 + 0.25 * LW.music.level : music.ever ? 0.4 : 0.55) * (1 - 0.6 * calm.lv);
-  for (let i = 0; i < L.foot.length; i++) {
-    const x = L.foot[i], b = lv * (1 + 0.15 * music.beatEnv * Math.sin(i * 1.7 + music.beatPh));
+  const lv = (playing ? 0.75 + 0.25 * LW.music.level : music.ever ? 0.4 : 0.55);
+  // calm: the footlights fill from centre stage outward with the in-breath and drain back on the out
+  const e = calm.lv > 0.01 ? breathE() : 0, n = L.foot.length, mid = (n - 1) / 2 || 1;
+  for (let i = 0; i < n; i++) {
+    const d = Math.abs(i - mid) / mid, u = smooth(clamp((e - d * 0.82) / 0.18, 0, 1));
+    const x = L.foot[i], b = lerp(lv * (1 + 0.15 * music.beatEnv * Math.sin(i * 1.7 + music.beatPh)), 0.07 + 0.9 * u, calm.lv);
+    // the painted room has its footlights lit: an unlit lamp is a dark socket
+    if (calm.lv > 0.01 && u < 0.99) {
+      drawSpriteE(g, DARK, x, s.edge + 6, 15, 9, calm.lv * (1 - u), 'source-over');
+      g.fillStyle = `rgba(22,11,6,${0.7 * calm.lv * (1 - u)})`; g.beginPath(); g.ellipse(x, s.edge + 6, 5.5, 3.2, 0, 0, TAU); g.fill();
+    }
     g.fillStyle = rgba([255, 228, 180], 0.9 * b); g.beginPath(); g.ellipse(x, s.edge + 6, 5, 2, 0, 0, TAU); g.fill();
     drawSpriteE(g, GLOW_WARM, x, s.edge + 2, 26, 16, 0.35 * b);
   }
@@ -3255,6 +3269,7 @@ function step(dt, T) {
   updateGhost(dt);
   updateCymbals(dt);
   updateHaze(dt, T);
+  hazeT += dt * calmPace();
   updateOutside(dt, T);
   updateParticles(dt * calmPace());
   updateWater(dt);
@@ -3312,10 +3327,10 @@ function render(T) {
   }
   // paused/stopped → a touch darker; calm → lamplight only
   const pausedDim = music.ever ? (1 - music.lv) * 0.12 : 0;
-  const dim = clamp(pausedDim + calm.lv * (0.5 - 0.1 * breath()), 0, 0.8);   // the room breathes
+  const dim = clamp(pausedDim + calm.lv * (0.56 - 0.18 * breath()), 0, 0.8);   // the room breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(6,3,4,${dim})`; ctx.fillRect(vx0, 0, W, H); }
   if (calm.lv > 0.02) {
-    // lamplight only: the table lamp and the candle swell with the breath (lw.js draws the guide)
+    // lamplight: the table lamp and the candle swell with the breath (the stage lights carry it; lw.js labels the phase)
     const b = breath();
     drawSprite(ctx, GLOW_WARM, L.tlamp.x, L.tlamp.y - 50, 80 + 60 * b, 0.35 * calm.lv * (0.55 + 0.45 * b));
     drawSprite(ctx, GLOW_WARM, L.candle.x, L.candle.y - 16, 70 + 60 * b, 0.12 * calm.lv * (0.3 + 0.7 * b));

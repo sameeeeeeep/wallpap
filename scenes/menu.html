@@ -26,10 +26,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .now .t{position:absolute;left:11px;bottom:9px;z-index:1;color:#fff}
 .now .t b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em}
 .now .t span{font-size:11px;opacity:.8}
-.now .acts{position:absolute;right:8px;bottom:8px;z-index:1;display:flex;gap:5px}
-.now .acts button{background:rgba(255,255,255,.18);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;border-radius:7px;padding:4px 8px;font-size:11px}
-.now .acts button:hover{background:rgba(255,255,255,.3)}
-.ctl{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.acts button{background:var(--card);border-radius:7px;padding:5px 9px;font-size:11.5px;font-weight:500;transition:background .15s}
+.acts button:hover{background:var(--card-2)}
+.acts button:active{background:var(--ink);color:#fff}
+.ctl{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+.ctl .row+.row{margin-top:0}
+.ctl .pick{width:212px;flex:none}
 .ctl .lbl{font-size:11px;color:var(--ink-3);margin-bottom:3px}
 /* scene picker */
 .tabs{display:flex;flex-wrap:wrap;gap:3px 4px;margin:4px 0 7px}
@@ -119,10 +122,11 @@ function render(state) {
   const cats = S.categories.filter((c) => S.scenes.some((s) => s.cat === c) || offers.some((o) => o.cat === c));
   const locked = !S.pro;
   const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
-    ? `<div><div class="lbl">${esc(c.title)}</div>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div>`
+    ? `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`
     : '').join('');
-  const sceneActs = S.sceneCtl.filter((c) => c.type === 'action').slice(0, 3)
-    .map((c) => `<button data-a="runAction" data-v='${esc(JSON.stringify(c.v))}'>${esc(c.title.replace(/^(Feed|Fill) the /, '$1 '))}</button>`).join('');
+  // Every action the current scene offers (feed, pet, toy, fireworks, play/pause…), as one row.
+  const sceneActs = S.sceneCtl.filter((c) => c.type === 'action')
+    .map((c) => `<button data-a="runAction" data-v='${esc(JSON.stringify(c.v))}'>${esc(c.title)}</button>`).join('');
 
   $('#root').innerHTML = `
   <div class="head">
@@ -132,8 +136,8 @@ function render(state) {
 
   <div class="now" style="background-image:${thumb(cur.id, cur.thumb)}">
     <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${S.paused ? ' · paused' : ''}</span></div>
-    <div class="acts">${sceneActs}</div>
   </div>
+  ${sceneActs ? `<div class="acts">${sceneActs}</div>` : ''}
   ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
 
   ${sec('scenes', 'Scenes', esc(cur.title), `
@@ -224,7 +228,7 @@ if (host) send('ready');
 else render({ // standalone design preview
   pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
   scenes: [['koi', 'Koi Pond', 'Nature'], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Night Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Night Train', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful', 1]].map(([id, title, cat, p]) => ({ id, title, cat, pro: !!p })),
-  sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }],
+  sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }],
   timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24° (Bengaluru)', precise: false, muted: false,
   audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
   soundscape: 'off', ssVol: 0.35, music: true, musicDenied: false, beat: true, companions: 'native',

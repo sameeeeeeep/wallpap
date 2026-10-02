@@ -36,6 +36,20 @@
 //   pattern from settings: 'box' (4-4-4-4, default) | 'calm' (4 in / 6 out) | '478'.
 //   lw.js draws the guide (a dot tracing a square for box, a ring otherwise) — scenes just
 //   dim/slow and may use .level (0 empty … 1 full lungs) to breathe their world.
+//   Diegetic breathing (opt-in): a scene whose own world visibly breathes sets, at load,
+//     LW.breathDiegetic = true
+//   and lw.js then drops the big glow/box overlay and keeps only a small, low-contrast
+//   phase label ("breathe in" / "hold" / "breathe out") with a thin segmented progress cue
+//   (one segment per phase, so holds read). Optional: LW.breathLabelAt = [fx, fy] moves the
+//   label (fractions of the viewport; default [0.36, 0.84], inside the left ~70%).
+//   Scenes drive their world from LW.breathState(t).level and must HOLD still during
+//   'hold'/'rest' (level is constant there). Same clock as the label:
+//     LW.breathTime()   seconds on the guide's clock; 0 while the guide isn't running (it starts on
+//                       the window load event / when calm turns on). Scenes should prefer it over their
+//                       own clock whenever it's > 0, and keep their own only for scene-started calm.
+//     LW.breathFade     0..1, how far the guide is faded in (follows calm on/off, ~2s)
+//   The label sits on a faint smoked chip so it stays readable on bright scenes; keep it above
+//   y ≈ 0.87 so the Dock and the bottom companion strip don't cover it.
 // Beat sync (opt-in host feature: passive system-audio analysis while music plays):
 //   LW.music      {level, bass, mid, high} 0..1, smoothed — live when LW.music.live
 //   LW.on('beat', strength => ...)   fires on detected beats (strength 0..1)
@@ -264,12 +278,48 @@
     return { phase: 'in', k: 0, level: 0, label: 'breathe in', dur: 4, cycle: total };
   };
   const BG = { cv: null, on: false, a: 0, t0: 0, last: 0 };
+  LW.breathDiegetic = false;
+  LW.breathLabelAt = null;
+  LW.breathFade = 0;
+  LW.breathTime = function () { return BG.on ? performance.now() / 1000 - BG.t0 : 0; };
+  // Diegetic mode: the scene's world carries the breath; this is only a quiet caption.
+  function breathLabel(c, W, H, st, a) {
+    const at = LW.breathLabelAt || [0.36, 0.84], cx = W * at[0], cy = H * at[1], m = Math.min(W, H);
+    const P = PATTERNS[LW.breathPattern()], total = st.cycle;
+    // label: fades up at the start of each phase so the change is noticed, then settles
+    const fresh = Math.min(1, st.k * st.dur / 0.6);
+    const bw = m * 0.085, gap = Math.max(4, m * 0.005), y = cy + m * 0.024, h = Math.max(1.5, m * 0.0016);
+    // a faint smoked chip behind it: invisible on dark scenes, keeps it legible on bright ones (daylight terrace)
+    const pw = bw + m * 0.05, ph = m * 0.062;
+    c.globalAlpha = a; c.fillStyle = 'rgba(14,18,24,0.26)'; c.shadowColor = 'rgba(14,18,24,0.35)'; c.shadowBlur = m * 0.02;
+    c.beginPath(); c.roundRect(cx - pw / 2, cy - ph * 0.42, pw, ph, ph / 2); c.fill();
+    c.globalAlpha = a * (0.5 + 0.22 * fresh);
+    c.font = '300 ' + Math.round(m * 0.021) + 'px ui-serif, "New York", Georgia, serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 8;
+    c.fillStyle = '#fbf3e6'; c.fillText(st.label, cx, cy);
+    // thin segmented cue: one dash per phase (length ∝ duration), current one fills
+    let x = cx - bw / 2, idx = 0;
+    const cur = P.findIndex((p) => p[0] === st.phase);
+    const usable = bw - gap * (P.length - 1);
+    c.shadowBlur = 6;
+    for (const [phase, dur] of P) {
+      const w = usable * dur / total;
+      c.globalAlpha = a * 0.22; c.fillStyle = '#fbf3e6';
+      c.beginPath(); c.roundRect(x, y - h / 2, w, h, h / 2); c.fill();
+      const fill = idx < cur ? 1 : idx === cur ? st.k : 0;
+      if (fill > 0) { c.globalAlpha = a * 0.62; c.beginPath(); c.roundRect(x, y - h / 2, Math.max(h, w * fill), h, h / 2); c.fill(); }
+      x += w + gap; idx++;
+    }
+    c.shadowBlur = 0; c.globalAlpha = 1;
+  }
   function breathGuide(ts) {
     const want = LW.calm;
-    if (!want && BG.a < 0.01) { BG.on = false; if (BG.cv) BG.cv.getContext('2d').clearRect(0, 0, BG.cv.width, BG.cv.height); return; }
+    if (!want && BG.a < 0.01) { BG.on = false; LW.breathFade = 0; if (BG.cv) BG.cv.getContext('2d').clearRect(0, 0, BG.cv.width, BG.cv.height); return; }
     requestAnimationFrame(breathGuide);
     const t = ts / 1000, dt = Math.min(0.1, BG.last ? t - BG.last : 0.016); BG.last = t;
     BG.a += ((want ? 1 : 0) - BG.a) * Math.min(1, dt * 1.5);
+    LW.breathFade = BG.a;
     if (!BG.cv) {
       BG.cv = document.createElement('canvas');
       BG.cv.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:40';
@@ -280,6 +330,7 @@
     const c = cv.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
     const st = LW.breathState(t - BG.t0), a = BG.a;
+    if (LW.breathDiegetic) { breathLabel(c, W, H, st, a); return; }
     // Centre of the calm zone: left/middle of the screen (the right side is for widgets).
     const cx = W * 0.36, cy = H * 0.46, R = Math.min(W, H) * 0.11;
     c.globalAlpha = a;

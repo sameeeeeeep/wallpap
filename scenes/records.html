@@ -2096,9 +2096,10 @@ const animals = Object.freeze([cat, dog]);   // never reordered
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
 // lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
 const guide = { on: false, t0: 0, a: 0 };
+LW.breathDiegetic = true;   // the picture light over the record of the night carries the breath; lw.js only labels the phase
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
 function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
-function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
+function breathSt() { const t = LW.breathTime(); return LW.breathState(t > 0 ? t : guide.on ? nowS() - guide.t0 : 0); }   // lw.js guide clock; own clock for scene-started calm
 function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
 function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
 function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
@@ -2636,15 +2637,13 @@ function drawNeon(g, T) {
 function heroLevel() {
   // the display light: brighter while a record plays, gentle when paused
   const base = music.ever ? lerp(0.55, 1, music.lv) : 0.8;
-  return base * (1 - calm.lv * 0.55);
+  return base * (1 - calm.lv * (0.7 - 0.45 * breath()));   // calm: the sleeve is lit by the breath (dark on empty lungs)
 }
 function drawHero(g, T) {
   const h = L.hero, s = h.s, cx = h.cx, cy = h.y + s / 2;
   const hl = heroLevel(), pulse = music.pulse * music.lv;
   // palette halo on the slats behind
   if (tintGlow && music.ever) drawSprite(g, tintGlow, cx, cy, s * 1.15, (0.14 + 0.18 * music.lv + 0.06 * pulse) * (1 - calm.lv * 0.6), 'screen');
-  // breathing glow in calm mode
-  if (calm.lv > 0.01) drawSprite(g, GLOW_WARM, cx, cy, s * (0.9 + 0.35 * breath()), 0.12 * calm.lv);
   const lt = lightAt(cx, cy);
   const m = mix3(lt, [1, 0.96, 0.9], 0.55).map((v) => clamp(v * (0.55 + 0.5 * hl), 0, 1.05));
   const drawOne = (c, a, dy) => {
@@ -2674,6 +2673,26 @@ function drawHero(g, T) {
   g.restore();
   // the light pool on the wall & ledge (live, so it can breathe with the music)
   drawSprite(g, GLOW_WARM, cx, h.y - 30, s * 0.42, (0.22 + 0.1 * pulse) * hl);
+}
+// calm: the brass picture light over the record of the night IS the breath — its cone fills the frame and
+// spills down the slats on the in-breath, holds still on the hold, drains to a faint ember on the out.
+// Driven only by breath level (constant on holds), so holds really hold.
+function drawBreathLight(g, b, a) {
+  const h = L.hero, top = h.y - 34, bot = h.y + h.s + 70, e = b * b * (3 - 2 * b);
+  const tw = h.s * 0.34, bw = h.s * (0.52 + 0.26 * e);
+  g.globalCompositeOperation = 'lighter';
+  const cg = g.createLinearGradient(0, top, 0, bot);
+  cg.addColorStop(0, `rgba(255,216,156,${0.25 * a * e})`); cg.addColorStop(0.5, `rgba(255,196,122,${0.11 * a * e})`); cg.addColorStop(1, 'rgba(255,180,110,0)');
+  g.fillStyle = cg; g.beginPath(); g.moveTo(h.cx - tw, top); g.lineTo(h.cx + tw, top); g.lineTo(h.cx + bw, bot); g.lineTo(h.cx - bw, bot); g.closePath(); g.fill();
+  g.globalCompositeOperation = 'source-over';
+  // the lamp's bar: a filament that warms up and cools down
+  g.fillStyle = `rgba(255,236,196,${a * (0.18 + 0.8 * e)})`; rr(g, h.cx - h.s * 0.34, top + 2, h.s * 0.68, 4, 2); g.fill();
+  drawSprite(g, GLOW_WARM, h.cx, top + 4, h.s * (0.3 + 0.22 * e), 0.55 * a * (0.12 + 0.88 * e));
+  // warm wash across the sleeve and a soft pool on the ledge below it
+  drawSprite(g, GLOW_WARM, h.cx, h.y + h.s * 0.42, h.s * (0.62 + 0.4 * e), 0.15 * a * (0.1 + 0.9 * e));
+  drawSprite(g, GLOW_WARM, h.cx, h.y + h.s + 40, h.s * (0.4 + 0.25 * e), 0.14 * a * e);
+  // the banker's lamp answers quietly
+  drawSprite(g, GLOW_WARM, L.lamp.x, L.lamp.y - 50, 80 + 40 * e, 0.22 * a * (0.3 + 0.7 * e));
 }
 function drawBoard(g) {
   const b = L.board, lvl = clamp(lum(lightAt((b.x0 + b.x1) / 2, b.y0 + b.h / 2)) * 1.6, 0.5, 1) * (1 - calm.lv * 0.35);
@@ -3167,14 +3186,9 @@ function render(T) {
   drawWater(ctx);
   // dimming: paused/stopped → a touch darker; calm → much darker
   const pausedDim = (1 - music.lv) * (music.ever ? 0.08 : 0.04) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * (0.5 - 0.1 * breath()), 0, 0.8);   // the room itself breathes
+  const dim = clamp(pausedDim + calm.lv * (0.56 - 0.18 * breath()), 0, 0.8);   // the room itself breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(8,4,6,${dim})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); }
-  if (calm.lv > 0.01) {
-    // candlelight through the dark: the hero light and the banker's lamp swell with the breath (lw.js draws the guide)
-    const b = breath();
-    drawSprite(ctx, GLOW_WARM, L.hero.cx, L.hero.y + L.hero.s * 0.5, L.hero.s * (0.7 + 0.5 * b), 0.2 * calm.lv * (0.3 + 0.7 * b));
-    drawSprite(ctx, GLOW_WARM, L.lamp.x, L.lamp.y - 50, 90 + 70 * b, 0.3 * calm.lv * (0.25 + 0.75 * b));
-  }
+  if (calm.lv > 0.01) drawBreathLight(ctx, breath(), calm.lv);
   const fa = flashA();
   if (fa > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(120,130,170,${fa * 0.1})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); ctx.globalCompositeOperation = 'source-over'; }
 }

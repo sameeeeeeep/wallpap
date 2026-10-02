@@ -2438,9 +2438,23 @@ function setFace(p, f) {
 }
 
 // ---- behaviour ----------------------------------------------------------------
-const calm = { on: false, t: 0, lv: 0, auto: 0, br: { phase: 'in', k: 0, level: 0 }, still: 0 };
+const calm = { on: false, t: 0, lv: 0, auto: 0, br: { phase: 'in', k: 0, level: 0 }, still: 0, wt: 0 };
 // 0 empty … 1 full lungs: LW.breathState on the same clock as lw.js's on-screen breathing guide
 function breath() { return calm.br.level; }
+// the café carries the breath itself (steam plumes, candle + lamps, the room's light); lw.js only captions it
+LW.breathDiegetic = true;
+// breath-driven steam: puffs + climbs on the in-breath, hangs on the hold, thins and settles on the out-breath.
+// emit = puff rate ×, move = motion clock ×, age = fade clock ×, sink = settle back down (eased so phases blend)
+const BS = { emit: 1, move: 1, age: 1, sink: 0 };
+function stepBreathSteam(dt) {
+  const lv = calm.lv, st = calm.br, ph = lv > 0.001 ? st.phase : '', r = Math.min(1, dt * 4);
+  const tE = ph === 'in' ? 2.6 : ph === 'out' ? 0.1 + 0.9 * st.level : 0;
+  const tM = ph === 'in' ? 1.15 : ph === 'out' ? 0.7 : 0;
+  const tA = ph === 'in' ? 0.9 : ph === 'out' ? 1.25 : 0;
+  BS.emit += (lerp(1, tE, lv) - BS.emit) * r; BS.move += (lerp(1, tM, lv) - BS.move) * r;
+  BS.age += (lerp(1, tA, lv) - BS.age) * r; BS.sink += ((ph === 'out' ? lv : 0) - BS.sink) * r;
+  calm.wt += dt * BS.move;   // the wisps' own clock: their sway stops dead on the holds
+}
 function ptrW() { return { x: toWX(LW.pointer.x), y: toWY(LW.pointer.y) }; }
 let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
 function restPose(p, T) {
@@ -2563,7 +2577,7 @@ function updatePet(p, dt, T) {
   p.bobT += dt;
   const dip = p.bobT < 0.09 ? p.bobT / 0.09 : Math.exp(-(p.bobT - 0.09) * 6.5);
   p.lean = approach(p.lean, p.bobSide * 0.035, 4, dt);
-  let sx = 1, sy = 1 + (V.pose === 'sleep' || V.pose === 'lie' ? 0.02 : 0.011) * br, rot = 0, bob = 0;
+  let sx = 1, sy = 1 + (V.pose === 'sleep' || V.pose === 'lie' ? 0.02 : 0.011) * (1 + 0.7 * calm.lv) * br, rot = 0, bob = 0;   // calm: sleeping breaths sync to the guide
   if (p.vibe > 0.01) { sy -= 0.028 * dip * (0.55 + 0.6 * p.bobS) * p.vibe; rot += p.lean * p.vibe; }
   if (p.walk > 0.01 && !hop) bob = -Math.abs(Math.sin(p.walkPh * Math.PI)) * 2.2 * p.k * p.walk;
   if (hop) {
@@ -2740,13 +2754,15 @@ function initCups() { cups = [{ x: L.mug.x, y: L.mug.y - 54, w: 18, k: 1, rate: 
 function puff(cup) { for (let i = 0; i < 22; i++) steam.push({ x: cup.x + rand(-cup.w, cup.w) * 0.7, y: cup.y - rand(0, 10), vx: rand(-16, 16), vy: rand(-50, -24), t: 0, life: rand(2, 3.4), r: rand(6, 12), ph: rand(0, 6), a: 0.13 }); }
 function updateParticles(dt, T) {
   for (const c of cups) {
-    c.acc += dt * c.rate * (1 - calm.lv * 0.4) * (1 - 0.5 * calm.still * calm.lv);   // steam all but stops while the breath is held
-    while (c.acc > 1) { c.acc -= 1; steam.push({ x: c.x + rand(-c.w, c.w) * 0.4, y: c.y, vx: rand(-3, 3), vy: rand(-18, -12) * c.k, t: 0, life: rand(3, 4.4), r: rand(5, 8) * c.k, ph: rand(0, 6), a: 0.06 }); }
+    c.acc += dt * c.rate * BS.emit;   // calm: puffs on the in-breath, none while the breath is held
+    while (c.acc > 1) { c.acc -= 1; const bk = 1 + 0.6 * calm.lv; steam.push({ x: c.x + rand(-c.w, c.w) * 0.4, y: c.y, vx: rand(-3, 3), vy: rand(-18, -12) * c.k * bk, t: 0, life: rand(3, 4.4), r: rand(5, 8) * c.k * bk, ph: rand(0, 6), a: 0.06 * (1 + 1.2 * calm.lv) }); }
   }
+  const sdt = dt * BS.move, adt = dt * BS.age;
   for (let i = steam.length - 1; i >= 0; i--) {
-    const s = steam[i]; s.t += dt;
-    s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 6) * dt; s.y += s.vy * dt; s.vx *= 1 - dt * 0.8; s.vy *= 1 - dt * 0.15;
-    s.r += dt * 4.5;
+    const s = steam[i]; s.t += adt;
+    s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 6) * sdt; s.y += s.vy * sdt; s.vx *= 1 - sdt * 0.8; s.vy *= 1 - sdt * (0.15 + 0.9 * BS.sink);
+    if (BS.sink > 0.01) s.vy += sdt * 7 * BS.sink;   // out-breath: the plume settles back
+    s.r += sdt * 4.5;
     if (s.t > s.life) steam.splice(i, 1);
   }
   // notes drift up from the record on strong beats; a slow timer covers the
@@ -2803,21 +2819,24 @@ function drawMotes(g, T) {
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 // curling steam wisps (stroked ribbons that sway, stretch and fade in and out)
-function drawWisps(g, T) {
-  const sb = (0.5 + 0.5 * (1 - E.day * 0.6)) * (1 - calm.lv * 0.3);
+function drawWisps(g, T) {   // T: calm.wt — the wisps' own clock, which stops while the breath is held
+  // calm: the plume is the breath — tall and full on full lungs, hanging on the hold, low and thin when empty
+  const cl = calm.lv, b = cl > 0.001 ? breath() : 0;
+  const sb = (0.5 + 0.5 * (1 - E.day * 0.6)) * lerp(1, 0.45 + 1.5 * b, cl);
   g.globalCompositeOperation = 'screen'; g.lineCap = 'round';
   for (const c of cups) {
     for (let k = 0; k < 3; k++) {
-      const ph = k * 2.1 + c.x * 0.01, life = 0.5 + 0.5 * Math.sin(T * 0.45 + ph * 1.7);
+      const ph = k * 2.1 + c.x * 0.01, life = lerp(0.5 + 0.5 * Math.sin(T * 0.45 + ph * 1.7), 0.8 + 0.2 * Math.sin(T * 0.45 + ph * 1.7), cl);
       if (life < 0.08) continue;
-      const hgt = (46 + 26 * life) * c.k, x0 = c.x + (k - 1) * c.w * 0.32;
+      const hgt = lerp(46 + 26 * life, (34 + 170 * b) * (0.85 + 0.15 * life) * (1 - 0.12 * k), cl) * c.k, x0 = c.x + (k - 1) * c.w * 0.32;
+      const sw = lerp(1, hgt / (72 * c.k), cl * 0.6);
       const gr = g.createLinearGradient(0, c.y, 0, c.y - hgt);
       gr.addColorStop(0, `rgba(255,248,236,0)`); gr.addColorStop(0.18, `rgba(255,248,236,${0.16 * life * sb})`); gr.addColorStop(1, 'rgba(255,248,236,0)');
-      g.strokeStyle = gr; g.lineWidth = (2.6 + k * 0.8) * c.k;
+      g.strokeStyle = gr; g.lineWidth = (2.6 + k * 0.8) * c.k * (1 + cl * (0.2 + 0.9 * b));
       g.beginPath();
       for (let j = 0; j <= 12; j++) {
         const f = j / 12, y = c.y - f * hgt;
-        const x = x0 + Math.sin(f * 5.2 - T * 1.5 + ph) * (2 + 9 * f) * c.k + Math.sin(T * 0.4 + ph) * 5 * f * c.k;
+        const x = x0 + (Math.sin(f * 5.2 - T * 1.5 + ph) * (2 + 9 * f) * c.k + Math.sin(T * 0.4 + ph) * 5 * f * c.k) * sw;
         if (j === 0) g.moveTo(x, y); else g.lineTo(x, y);
       }
       g.stroke();
@@ -2831,7 +2850,7 @@ function heartPath(g, x, y, s) {
   g.bezierCurveTo(x + 5 * s, y - 9 * s, x + 9 * s, y - 2 * s, x, y + 4 * s); g.closePath();
 }
 function drawParticles(g) {
-  drawWisps(g, nowS());
+  drawWisps(g, calm.wt);
   // steam: light against the dark; very soft
   const sb = 0.55 + 0.45 * (1 - E.day * 0.6);
   g.globalCompositeOperation = 'screen';
@@ -3275,7 +3294,8 @@ function sThunder() {
 // The guide restarts its clock when calm turns on (unless it was still fading out, ~3s), so mirror it.
 const BR = { t0: performance.now() / 1000, off: -1e9 };
 LW.on('calm', (on) => { const n = performance.now() / 1000; if (on) { if (n - BR.off > 3) BR.t0 = n; } else BR.off = n; });
-function breathNow(ahead = 0) { return LW.breathState(performance.now() / 1000 - BR.t0 + ahead); }
+// prefer lw.js's own clock while its guide runs (it starts on window load); ours covers scene-started calm
+function breathNow(ahead = 0) { const g = LW.breathTime ? LW.breathTime() : 0; return LW.breathState((g > 0 ? g : performance.now() / 1000 - BR.t0) + ahead); }
 
 // ─── Ambience bed (procedural, quiet) ───────────────────────────────────────
 // Continuous background on LW.bus('ambience'); weather layers on LW.bus('weather').
@@ -3534,6 +3554,7 @@ function step(dt, T) {
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
   if (calm.on || calm.lv > 0.01) { calm.br = breathNow(); calm.still = approach(calm.still, calm.br.phase === 'hold' || calm.br.phase === 'rest' ? 1 : 0, 1.5, dt); }
   else calm.still = 0;
+  stepBreathSteam(dt);
   updateEnv(dt);
   updateTurntable(dt);
   music.jk = approach(music.jk, L.mode === 'jukebox' ? 1 : 0, 2.6, dt);
@@ -3559,7 +3580,9 @@ function render(T) {
   if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, 0, 0);
   ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, 0, 0); ctx.globalAlpha = 1;
   VT(ctx);
-  const lv = E.lamp * (1 - 0.65 * calm.lv), fl = 1 + 0.025 * Math.sin(T * 7.3) * Math.sin(T * 2.1);
+  const bC = calm.lv > 0.001 ? breath() : 0;
+  // calm: the lamps swell on the in-breath and sink on the out-breath (steady through the holds)
+  const lv = E.lamp * (1 - 0.65 * calm.lv) * (1 + calm.lv * (1.3 * bC - 0.25)), fl = 1 + 0.025 * Math.sin(T * 7.3) * Math.sin(T * 2.1);
   // lights breathe with the music (level) and kick very slightly on beats
   const bre = 1 + 0.16 * beat.level + 0.1 * beat.pulse;
   // live glows with a little bloom: hot core, halo, wide soft bloom
@@ -3629,15 +3652,18 @@ function render(T) {
   ctx.globalAlpha = 1;
   // dimming: paused/stopped → a touch darker; calm → candlelight
   const pausedDim = (1 - music.lv) * (music.ever ? 0.07 : 0.04) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * 0.52, 0, 0.8);
+  const dim = clamp(pausedDim + calm.lv * (0.62 - 0.22 * bC), 0, 0.8);   // the room's light breathes
   if (dim > 0.002) { ctx.fillStyle = `rgba(8,4,6,${dim})`; ctx.fillRect(0, 0, W, H); }
   if (cand > 0.05) {
     const { x, y } = L.candle, b = calm.lv > 0.01 ? breath() : 0.5;
     ctx.save(); ctx.translate(x, y); ctx.scale(L.fg, L.fg); ctx.translate(-x, -y);
     ctx.fillStyle = `rgba(255,214,140,${0.95 * cand})`;
-    ctx.beginPath(); ctx.moveTo(x, y - 44 * fk); ctx.quadraticCurveTo(x + 4.5, y - 34, x, y - 29); ctx.quadraticCurveTo(x - 4.5, y - 34, x, y - 44 * fk); ctx.fill();
+    const ft = (44 + calm.lv * 7 * b) * fk;   // the flame stands a little taller on full lungs
+    ctx.beginPath(); ctx.moveTo(x, y - ft); ctx.quadraticCurveTo(x + 4.5, y - 34, x, y - 29); ctx.quadraticCurveTo(x - 4.5, y - 34, x, y - ft); ctx.fill();
     ctx.fillStyle = `rgba(255,250,230,${cand})`; ctx.beginPath(); ctx.ellipse(x, y - 33, 1.6, 3, 0, 0, TAU); ctx.fill();
-    drawSprite(ctx, GLOW_WARM, x, y - 34, (50 + calm.lv * (60 + 45 * b)) * fk, (0.45 + calm.lv * (0.35 + 0.25 * b)) * cand);
+    drawSprite(ctx, GLOW_WARM, x, y - 34, (50 + calm.lv * (40 + 110 * b)) * fk, (0.45 + calm.lv * (0.22 + 0.45 * b)) * cand);
+    // calm: a wide pool of candlelight that fills the corner on the in-breath
+    if (calm.lv > 0.01) drawSprite(ctx, GLOW_WARM, x, y - 40, 200 + 260 * b, (0.04 + 0.16 * b) * calm.lv * cand);
     ctx.restore();
     if (calm.lv > 0.02) {
       drawSprite(ctx, GLOW_WARM, cat.x, cat.y - 40, 300, 0.1 * calm.lv * (0.6 + 0.4 * b));
@@ -3659,6 +3685,9 @@ function rebuild() {
   bakeBeads();
   initCups();
   initMotes();
+  // breath caption on the floor just right of the rug: clear of the pets, the cups, the Dock along the bottom
+  // edge and the right-hand widget zone
+  LW.breathLabelAt = [clamp((OX + (L.rug.cx + L.rug.rx + 80) * U) / cv.width, 0.2, 0.66), clamp((OY + L.rug.cy * U) / cv.height, 0.5, 0.86)];
   rebuildArt(false);
   chalkKey = ''; prevChalkCv = null; chalkFade = 1; updateChalk(true);
   marqueeKey = ''; buildMarquee();

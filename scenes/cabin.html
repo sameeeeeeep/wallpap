@@ -1232,7 +1232,7 @@ function drawAnimalSprite(g, c, sp, T) {
   const awake = 1 - c.s, playing = music.np && music.np.playing;
   const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
   const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
-  let sx = 1, sy = 1 + 0.016 * br - 0.04 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;
+  let sx = 1, sy = 1 + (0.016 + 0.014 * calm.lv) * br - 0.04 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;
   if (sp.kind === 'walk') bob = Math.abs(Math.sin(c.gait * TAU)) * 2.4 * c.k;
   if (sp.kind === 'hop') { sy *= 1 - 0.14 * c.crouch + 0.06 * c.air; sx *= 1 + 0.06 * c.crouch; rot = c.air > 0.05 ? -0.12 * Math.cos(c.air * Math.PI) : 0; }
   if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.07 * c.w.stretch; }
@@ -1293,7 +1293,10 @@ const cat = makeAnimal('ember', COAT_CAT, {
 const animals = Object.freeze([dog, cat]);
 
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
-// lw.js draws the breathing guide (LW.breathState); mirror its clock so the world breathes in step with it
+// Diegetic breathing: the hearth carries the breath (fire + embers + room light swell on the in-breath,
+// hold still, ebb on the out-breath); lw.js only draws a quiet caption. Mirror the guide's clock.
+LW.breathDiegetic = true;
+LW.breathLabelAt = [0.66, 0.86];   // dark floor right of the rug, under the record cabinet: clear of the hearth, the dog and the Dock
 const guide = { on: false, t0: 0, a: 0 };
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
 function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
@@ -1511,7 +1514,7 @@ function updateFire(dt, T) {
   fire.boost = Math.max(0, fire.boost - dt * 1.6);
   const lv = fireLv();
   // embers drifting up (more with the bass)
-  const rate = (5 + 7 * music.lv * LW.music.bass) * lv;
+  const rate = (5 + 7 * music.lv * LW.music.bass) * lv * (1 + calm.lv * (2.2 * breath() - 0.6));   // calm: embers swell with the in-breath
   if (Math.random() < rate * dt) spawnEmber(false);
   for (let i = embers.length - 1; i >= 0; i--) {
     const e = embers[i]; e.t += dt;
@@ -1529,7 +1532,7 @@ function spawnEmber(pop) {
 function drawFire(g, T) {
   const B = L.fire.box, F = L.fire, lv = fireLv() * (1 + 0.12 * fire.boost + 0.08 * music.lv * LW.music.bass);
   const cb = calm.lv > 0.01 ? breath() : 0;
-  const lvB = lv * (1 + calm.lv * (0.25 * cb - 0.1));
+  const lvB = lv * (1 + calm.lv * (0.5 * cb - 0.22));   // the fire draws in with the breath: low on empty lungs, tall on full
   g.save(); g.beginPath(); g.rect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0 + 4); g.clip();
   g.globalCompositeOperation = 'lighter';
   const span = B.x1 - B.x0 - 70, x0 = B.x0 + 35;
@@ -1552,9 +1555,10 @@ function drawFire(g, T) {
   g.restore();
   // embers (can float out of the box on pops)
   g.globalCompositeOperation = 'lighter';
+  const eK = 1 + calm.lv * (0.7 * cb - 0.2);   // embers glow larger on full lungs
   for (const e of embers) {
     const k = 1 - e.t / e.life, a = Math.min(1, k * 1.6) * (0.6 + 0.4 * Math.sin(T * 20 + e.ph));
-    g.fillStyle = `rgba(255,${170 + 60 * k | 0},90,${a})`; g.beginPath(); g.arc(e.x, e.y, e.r, 0, TAU); g.fill();
+    g.fillStyle = `rgba(255,${170 + 60 * k | 0},90,${a})`; g.beginPath(); g.arc(e.x, e.y, e.r * eK, 0, TAU); g.fill();
   }
   g.globalCompositeOperation = 'source-over';
   // the fire lights the room (flicker)
@@ -1763,16 +1767,17 @@ function updateWeather(dt, T) {
   const snowN = Math.round((E.snow + E.flurry * 0.25) * (90 + 140 * E.storm) * (1 - E.summer * 0.9));
   while (flakes.length < snowN) flakes.push({ x: R.x0 + rand(-60, ww), y: R.y0 + rand(-20, wh), z: rand(0.3, 1), ph: rand(0, 6), s: rand(0.7, 1.4) });
   if (flakes.length > snowN) flakes.length = snowN;
+  const sdt = dt * (1 - calm.lv * (0.55 + 0.3 * breathHold()));   // calm: the snow slows, nearly hangs on the holds
   for (const f of flakes) {
-    f.y += (22 + 40 * f.z) * (1 + E.storm * 0.6) * dt;
-    f.x += (Math.sin(T * 0.8 + f.ph) * 10 + wind * (24 + 160 * E.storm)) * f.z * dt;
+    f.y += (22 + 40 * f.z) * (1 + E.storm * 0.6) * sdt;
+    f.x += (Math.sin(T * 0.8 + f.ph) * 10 + wind * (24 + 160 * E.storm)) * f.z * sdt;
     if (f.y > R.y1 + 4 || f.x > R.x1 + 30) { f.y = R.y0 - rand(4, 30); f.x = R.x0 + rand(-ww * (0.2 + E.storm), ww); }
   }
   const rainN = Math.round(E.rain * 110);
   while (drops.length < rainN) drops.push({ x: R.x0 + rand(-40, ww), y: R.y0 + rand(-wh, wh), z: rand(0.4, 1), v: rand(500, 800) });
   if (drops.length > rainN) drops.length = rainN;
   const sleet = E.summer < 0.5;
-  for (const d of drops) { d.y += d.v * d.z * (sleet ? 0.55 : 1) * dt; d.x += wind * 90 * d.z * dt; if (d.y > R.y1) { d.y = R.y0 - rand(10, 60); d.x = R.x0 + rand(-40, ww); } }
+  for (const d of drops) { d.y += d.v * d.z * (sleet ? 0.55 : 1) * sdt; d.x += wind * 90 * d.z * sdt; if (d.y > R.y1) { d.y = R.y0 - rand(10, 60); d.x = R.x0 + rand(-40, ww); } }
   // drops sliding down the glass
   if (E.rain > 0.15 && Math.random() < E.rain * 1.5 * dt) glassDrops.push({ x: R.x0 + rand(10, ww - 10), y: R.y0 + rand(10, wh * 0.6), v: 0, t: 0, life: rand(3, 6), r: rand(1.4, 2.4) });
   for (let i = glassDrops.length - 1; i >= 0; i--) { const d = glassDrops[i]; d.t += dt; d.v = Math.random() < 0.02 ? rand(20, 60) : d.v * (1 - dt * 2); d.y += d.v * dt; if (d.t > d.life || d.y > R.y1) glassDrops.splice(i, 1); }
@@ -2199,12 +2204,12 @@ function render(T) {
   if (tintLv > 0.01 && tintGlow) { drawSprite(ctx, tintGlow, L.frame.ax + L.frame.as / 2, 560, 520, 0.06 * tintLv, 'screen'); }
   // dimming: paused/stopped → a touch darker; calm → firelight only
   const pausedDim = (1 - music.lv) * (music.ever ? 0.07 : 0.03) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * (0.45 - 0.1 * breath()), 0, 0.8);   // the room breathes with the fire
+  const dim = clamp(pausedDim + calm.lv * (0.52 - 0.2 * breath()), 0, 0.8);   // the room breathes with the fire
   if (dim > 0.002) { ctx.fillStyle = `rgba(10,5,4,${dim})`; ctx.fillRect(0, 0, W, H); }
   if (calm.lv > 0.01) {
     const b = breath();
-    // firelight only: the hearth swells with the breath (lw.js draws the guide)
-    drawSprite(ctx, GLOW_FIRE, L.fire.cx, L.fire.fy - 30, 260 + 120 * b, (0.12 + 0.16 * b) * calm.lv);
+    // firelight only: the hearth's light pool swells into the room with the breath (holds: frozen at its level)
+    drawSprite(ctx, GLOW_FIRE, L.fire.cx, L.fire.fy - 30, 240 + 230 * b, (0.08 + 0.26 * b) * calm.lv);
   }
   ctx.globalAlpha = 0.8 - 0.35 * E.day; ctx.drawImage(VIGNETTE, 0, 0, W, H); ctx.globalAlpha = 1;
 }
@@ -2238,7 +2243,7 @@ function selfTest(secs = 30) {
   for (let f = 0; f < secs * 30; f++) { LW.advance(1 / 30); animals.forEach((p, i) => { if (p.id + ':' + p.coat.base !== ids[i] || animals[i] !== p) err++; }); }
   return { err, ids };
 }
-window.__cabin = { get E() { return E; }, get L() { return L; }, step, render, prof: { drawFire, drawOutsideLive, drawFairy, drawFrameArt, drawTurntable, drawSleeve, drawCard, drawParticles, drawAnimal, updateAnimal, updateFire, updateWeather }, get ctx() { return ctx; }, dog, cat, animals, music, calm, setCalm, startWater, startStretch, selfTest, planTrip, placeAnimal, onDown, get bakeMs() { return bakeMs; }, bake, SPR, ART };
+window.__cabin = { get E() { return E; }, breath, breathSt, get L() { return L; }, step, render, prof: { drawFire, drawOutsideLive, drawFairy, drawFrameArt, drawTurntable, drawSleeve, drawCard, drawParticles, drawAnimal, updateAnimal, updateFire, updateWeather }, get ctx() { return ctx; }, dog, cat, animals, music, calm, setCalm, startWater, startStretch, selfTest, planTrip, placeAnimal, onDown, get bakeMs() { return bakeMs; }, bake, SPR, ART };
 })();
 </script>
 </body>

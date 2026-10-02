@@ -1160,14 +1160,39 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             choice("Auto Play", key: "auto", options: [("Off", "off"), ("Focus", "focus"), ("Meditate", "meditate"), ("Sleep", "sleep")], defaultValue: "off")
             choice("Bowls", key: "set", options: [("Tibetan · 7", "tibetan7"), ("Tibetan · 9", "tibetan9"), ("Crystal", "crystal"), ("Mixed", "mixed")], defaultValue: "tibetan7")
             choice("Sleep Timer", key: "sleepMinutes", options: [("15 min", 15), ("30 min", 30), ("45 min", 45), ("60 min", 60), ("90 min", 90)], defaultValue: 45)
+        case "koi":
+            action("Drop Food", "feed")
         case "cats":
             action("Feed the Cats", "feed")
             action("Fill the Water Bowl", "water")
+            action("Toss a Toy", "toy")
         case "grass":
             action("Give Bamboo", "bamboo")
+            choice("Pandas", key: "pandas", options: [("1", 1), ("2", 2), ("3", 3)], defaultValue: 3)
+            choice("Kites", key: "kites", options: [("None", 0), ("1", 1), ("2", 2), ("3", 3)], defaultValue: 2)
+            choice("Songbirds", key: "birds", options: [("On", 1), ("Off", 0)], defaultValue: 1)
         case "cafe", "speakeasy":
+            action("Pet the Cat", "pet")
             choice("Music Player", key: "player", options: [("Record Player", "record"), ("Jukebox", "jukebox")], defaultValue: sceneID == "speakeasy" ? "jukebox" : "record")
+        case "records", "ramen":
+            action("Pet the Cat", "pet")
+        case "rooftop":
+            action("Pet the Cat", "pet")
+            action("Fireworks (night, clear sky)", "fireworks")
+        case "cabin":
+            action("Pet the Dog", "pet")
+            choice("Season", key: "season", options: [("Auto", "auto"), ("Winter", "winter"), ("Summer", "summer")], defaultValue: "auto")
+        case "bowls":
+            break
+        case "cymatics":
+            choice("Plate", key: "plate", options: [("Auto", "auto"), ("Square", "square"), ("Round", "round")], defaultValue: "auto")
         default: break
+        }
+        if sceneID == "bowls" { action("Strike a Bowl", "strike") }
+        // Scenes with a music player respond to transport actions while Music Mode is on.
+        if musicMode, ["cafe", "speakeasy", "records", "ramen", "rooftop", "cabin", "cymatics"].contains(sceneID) {
+            action("Play / Pause", "playpause")
+            action("Next Track", "next")
         }
     }
 

@@ -165,6 +165,7 @@ let hover = null;
 let lastInput = performance.now();
 let nextAuto = 0;
 let ambT = 0, ts = 1;                                 // ambient clock (slows in calm mode)
+LW.breathDiegetic = true;   // the room carries the breath (rings of light on the floor round the breathing bowl); lw.js only adds a small label
 const calm = { target: !!LW.calm, amt: 0, breath: 0, temp: 0, br: { phase: 'in', k: 0, level: 0 }, lastPh: '', cyc: 0, still: 0 };
 // Breath comes from LW.breathState on the guide's clock (lw.js draws the guide); a scene-started
 // breath (meditate auto-mode / breathe reminder, no guide on screen) restarts that clock.
@@ -214,6 +215,8 @@ function layout() {
   bowls.order = bowls.slice().sort((a, b) => b.d - a.d);
   lowB = bowls.reduce((a, b) => (b.f < a.f ? b : a));
   breathB = bowls.filter((b) => b.d > 0.5).reduce((a, b) => (Math.abs(b.o.u - 0.5) < Math.abs(a.o.u - 0.5) ? b : a));
+  // breath caption on the wall just above the breathing bowl (the default spot would sit on the front bowls)
+  LW.breathLabelAt = [clamp(breathB.x / W, 0.2, 0.62), clamp((breathB.y - breathB.ry - Rmax * 1.1) / H, 0.12, 0.8)];
 
   candles = SET.candles.map((o) => {
     const s = 1 - 0.14 * o.d;
@@ -1668,11 +1671,11 @@ function update(dt, now) {
     calm.still += ((st.phase === 'hold' || st.phase === 'rest' ? 1 : 0) - calm.still) * (1 - Math.exp(-dt * 1.5));
     const exhale = st.phase !== calm.lastPh && st.phase === 'out' && calm.lastPh !== '';
     if (st.phase !== calm.lastPh) calm.lastPh = st.phase;
-    if (calmOn && exhale) {   // each out-breath: one soft strike + a slow ring from the breathing bowl
+    if (calmOn && exhale) {   // each out-breath: one soft strike on the breathing bowl
       const cyc = calm.cyc++;
       const b = breathB;
       if (auto.mode === 'meditate') meditateExhale(cyc, now);
-      else rings.push({ x: b.x, y: b.bottom - b.R * 0.1, r0: b.R * 0.95, sp: groupW * 0.16, life: 5.5, age: 0, k: 0.34, str: 0.3, ground: true });
+      else b.ripE = Math.min(1, b.ripE + 0.25);   // the soft strike shivers the bowl's water (no outward ring: the floor rings are drawing in)
       if (auto.mode !== 'meditate') { const c = runningCtx(); if (c) playStrike(graph(c), b, 0.1, 0.8); }
     }
   } else { calm.breath = 0; calm.still = 0; calm.lastPh = ''; }
@@ -1913,7 +1916,8 @@ const vibOf = (b) => Math.min(0.9, b.ripE * 0.8 + b.sing * 0.45);
 const jitterOf = (b, t) => { const v = vibOf(b); return v > 0.04 ? (Math.sin(t * 83 + b.i) * 0.7 + Math.sin(t * 127 + b.i * 2) * 0.3) * v * 0.8 : 0; };
 function drawBowlFx(b, t, spritesDone) {
   const g = Math.min(1.3, b.glowE * 0.85 + b.sing * 0.9 + b.calmG * 1.15 + b.actG);
-  const amp = Math.min(1.4, b.ripE + 0.28 * b.glowE + b.sing * 0.8 + b.calmG * 0.45 + b.actG * 0.3);
+  const calmRip = b.calmG * (1 - 0.8 * calm.still);   // breath ripples in the bowl settle on holds
+  const amp = Math.min(1.4, b.ripE + 0.28 * b.glowE + b.sing * 0.8 + calmRip * 0.45 + b.actG * 0.3);
   if (!spritesDone && vibOf(b) > 0.04) {
     drawSprite(b.spr, jitterOf(b, t));
     for (const o of b.over) drawProp(o, t);
@@ -1954,7 +1958,7 @@ function drawRipples(b, amp, t) {
   gg.addColorStop(0, `rgba(${b.col.inner},${0.22 * Math.min(1, amp)})`); gg.addColorStop(1, `rgba(${b.col.inner},0)`);
   ctx.fillStyle = gg; ctx.fillRect(-R, -R, 2 * R, 2 * R);
   const N = 7, om = TAU * b.visHz * lerp(1, 0.45, calm.amt), ct = Math.cos(t * om);
-  const sing = Math.min(1, b.sing * 1.3 + b.calmG * 0.3 + b.actG * 0.4);
+  const sing = Math.min(1, b.sing * 1.3 + b.calmG * (1 - 0.8 * calm.still) * 0.3 + b.actG * 0.4);
   const lw = Math.max(0.7, R * 0.022);
   ctx.lineWidth = lw;
   for (let i = 1; i <= N; i++) {
@@ -2023,6 +2027,27 @@ function drawRings(passes) {
     if (pass) ctx.restore();
   }
   ctx.globalCompositeOperation = 'source-over';
+}
+
+// Calm: rings of light on the floor round the breathing bowl. They spread out across the boards on the in-breath,
+// hold their radius on the hold and draw back into the bowl on the out-breath. Driven only by calm.breath (the
+// breath level, constant during hold/rest), so a hold is a true hold. Same strokes as the strike rings.
+function drawBreathFloor() {
+  if (calm.amt <= 0.01) return;
+  const b = breathB, lv = calm.breath, a = calm.amt, N = 3;
+  const r0 = b.R * 0.95, spread = Math.max(b.R, Math.min(groupW * 0.27, W * 0.72 - b.x - r0)) * lv;
+  const x = b.x, y = b.bottom - b.R * 0.1, col = b.col.ring;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, horizonY, W, H - horizonY); ctx.clip();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < N; i++) {
+    const f = (i + 1) / N, rad = r0 + spread * f;
+    const s = a * (0.3 + 0.7 * lv) * (1 - 0.35 * f);
+    for (const [lw, k] of [[14, 0.06], [4, 0.12], [1.1, 0.3]]) {
+      ctx.lineWidth = lw; ctx.strokeStyle = `rgba(${col},${s * k})`;
+      ctx.beginPath(); ctx.ellipse(x, y, rad, rad * 0.34, 0, 0, TAU); ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function drawDust(t) {
@@ -2154,13 +2179,13 @@ function draw(now) {
     const b = breathB;
     ctx.globalCompositeOperation = 'lighter';
     ctx.save(); ctx.translate(b.x, b.y + b.ry); ctx.scale(1, 0.5);
-    const r = groupW * 0.35, g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+    const r = groupW * (0.16 + 0.22 * calm.breath), g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
     g.addColorStop(0, `rgba(255,160,85,${0.13 * calm.amt * (0.2 + calm.breath)})`); g.addColorStop(1, 'rgba(255,140,70,0)');
     ctx.fillStyle = g; ctx.fillRect(-r, -r, 2 * r, 2 * r); ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
   }
-  const ground = rings.some((r) => r.ground && r.age > 0);
-  if (ground) { drawRings([true]); for (const p of props) drawProp(p, t); }
+  const ground = rings.some((r) => r.ground && r.age > 0) || calm.amt > 0.01;
+  if (ground) { drawRings([true]); drawBreathFloor(); for (const p of props) drawProp(p, t); }
   for (const b of bowls.order) drawBowlFx(b, t, ground);
   drawDwell(now);
   drawRings([false]);

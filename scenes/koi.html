@@ -83,6 +83,7 @@ uniform vec2 uRes, uSimTx, uSunDir, uLantern;
 uniform float uTime, uAspect, uHasSim;
 uniform vec3 uLight, uSky, uDeep, uShallow, uFogCol;
 uniform float uAmb, uCaust, uSpec, uFlash, uFog, uDapple, uWind, uLanternOn, uSat;
+uniform vec4 uBreath;   // calm breath rings: centre (fp space), outer radius (fp), amplitude (0 = off)
 out vec4 o;
 
 float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -163,6 +164,16 @@ void main(){
   vec2 grad = vec2(
     texture(uSim, uv+vec2(uSimTx.x,0)).r - texture(uSim, uv-vec2(uSimTx.x,0)).r,
     texture(uSim, uv+vec2(0,uSimTx.y)).r - texture(uSim, uv-vec2(0,uSimTx.y)).r) * uHasSim;
+  // Calm: standing ripple rings whose radius follows the breath (analytic, so they hold perfectly still on a hold).
+  vec2 bd = fp - uBreath.xy; float bdl = length(bd);
+  if (uBreath.w > 0.0005 && bdl < uBreath.z + 0.06) {
+    float d = bdl, hd = 0.0;
+    for (int i = 1; i <= 5; i++) {
+      float f = float(i) / 5.0, x = (d - uBreath.z * (0.2 + 0.8 * f)) / (0.006 + 0.004 * f);
+      hd += (1.0 - 0.45 * f) * x * exp(-x * x);
+    }
+    grad += bd / max(d, 1e-4) * hd * uBreath.w;
+  }
   vec2 wp = fp*34.0;
   vec2 micro = vec2(noise(wp + uTime*vec2(1.1,0.6)) - 0.5, noise(wp.yx*1.13 - uTime*vec2(0.8,1.2)) - 0.5);
   micro += 0.5*vec2(noise(fp*9.0 + uTime*0.25) - 0.5, noise(fp.yx*9.0 - uTime*0.21) - 0.5);
@@ -883,6 +894,12 @@ function padPoke(p, x, y) {
 }
 // Press-and-hold on open water = a fingertip in the pond.
 const hand = { on: false, pending: false, x: 0, y: 0, sx: 0, sy: 0, downT: 0 };
+// Menu action: drop food on open water in the left/centre of the pond (the right side stays calm).
+LW.on('action', (a) => {
+  if (a !== 'feed') return;
+  const x = innerWidth * (0.22 + Math.random() * 0.4), y = innerHeight * (0.3 + Math.random() * 0.4);
+  LW.emit('down', x, y); LW.emit('up', x, y);
+});
 LW.on('down', (x, y) => {
   const now = performance.now() / 1000;
   lastInput = now;
@@ -912,6 +929,7 @@ LW.on('up', () => {
 });
 
 // Wellbeing state.
+LW.breathDiegetic = true;   // the pond carries the breath itself (rings on the water); lw.js only adds a small label
 let calm = LW.calm, calmFade = calm ? 1 : 0, calmStill = 0, breathPh = '';
 let br = { phase: 'in', k: 0, level: 0 }, brLead = 0;   // LW.breathState on the guide's clock, refreshed each frame
 LW.on('calm', (on) => { calm = on; lastInput = performance.now() / 1000; });
@@ -924,7 +942,7 @@ LW.on('reminder', (r) => {
   lastInput = performance.now() / 1000;
 });
 let bloom = null;
-function calmCenter() { return [W * 0.36, H * 0.46]; }   // lw.js draws the breathing guide here
+function calmCenter() { return [W * 0.36, H * 0.45]; }   // centre of the breath rings (left ~70%, clear of macOS widgets)
 
 function updateFish(dt, t) {
   const calmK = calmFade;
@@ -1002,14 +1020,14 @@ function updateFish(dt, t) {
       dx += ((f.x - fx) / d) * 4; dy += ((f.y - fy) / d) * 4;
       targetSpeed = f.L * 2.4; turn = 5;
     }
-    // Calm mode: slow orbit around the breathing guide, radius swelling with the in-breath.
+    // Calm mode: slow, loose orbit around the breath rings, radius swelling with the in-breath.
     if (calmK > 0.01) {
       const rx = f.x - ccx, ry = f.y - ccy, d = Math.hypot(rx, ry) || 1;
       const R = Math.min(W, H) * (0.19 + 0.11 * lv) + f.z * 60;
       const radial = (R - d) / R;
       const tx = -ry / d + (rx / d) * radial * 3.2, ty = rx / d + (ry / d) * radial * 3.2;
       dx = lerp(dx, tx * 2, calmK * 0.85); dy = lerp(dy, ty * 2, calmK * 0.85);
-      targetSpeed = lerp(targetSpeed, f.cruise * (0.75 - 0.35 * calmStill), calmK);
+      targetSpeed = lerp(targetSpeed, f.cruise * (0.62 - 0.3 * calmStill), calmK);
     }
     // Reminder: gather round the lotus.
     if (reminder && reminder.t < 13) {
@@ -1542,6 +1560,28 @@ function emitLife(t) {
 }
 
 // ─── Overlay: emissive things ───────────────────────────────────────────────
+// Breath rings: the water shader bends real ripple crests (uBreath, refraction + sky sheen); this adds the emissive
+// part on top — a faint crest line and a tapered sky glint per ring. Radius ∝ br.level → frozen during holds.
+function breathRout() { return Math.min(W, H) * (0.085 + 0.255 * br.level); }   // outer ring radius, px (shared with the water shader)
+function drawBreathRings(c, a) {
+  const [cx, cy] = calmCenter(), lv = br.level, Rout = breathRout(), N = 5;
+  const tint = '232,242,238';
+  // a faint pool of light the rings sit in, breathing with them
+  const g = c.createRadialGradient(cx, cy, 0, cx, cy, Rout * 1.15);
+  g.addColorStop(0, `rgba(${tint},${(0.035 + 0.05 * lv) * a})`); g.addColorStop(1, `rgba(${tint},0)`);
+  c.fillStyle = g; c.beginPath(); c.arc(cx, cy, Rout * 1.15, 0, TAU); c.fill();
+  const w = 1.1 + 1.2 * lv, A0 = -Math.PI * 0.68;   // glints sit where the sky reflects: the upper-left of each crest
+  for (let i = 0; i < N; i++) {
+    const f = (i + 1) / N, r = Rout * (0.2 + 0.8 * f);
+    const al = a * (1 - 0.45 * f) * (0.55 + 0.45 * lv);
+    c.lineWidth = w * 3; c.strokeStyle = `rgba(${tint},${0.045 * al})`;                     // soft crest all the way round
+    c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.stroke();
+    c.lineWidth = Math.max(1, w * 0.55); c.strokeStyle = `rgba(${tint},${0.07 * al})`;
+    c.stroke();
+    c.strokeStyle = `rgba(255,255,246,${0.11 * al})`;                                       // tapered sky glint (stacked arcs)
+    for (const hw of [1.1, 0.7, 0.35]) { c.beginPath(); c.arc(cx, cy, r, A0 - hw, A0 + hw); c.stroke(); }
+  }
+}
 const flies = [];
 const flakes = [];
 function drawOverlay(dt, t) {
@@ -1578,14 +1618,10 @@ function drawOverlay(dt, t) {
   }
   c.globalAlpha = 1;
 
-  // Calm: a soft pool of light on the water that fills and empties with the breath (lw.js draws the guide).
-  if (calmFade > 0.01) {
-    const [cx, cy] = calmCenter(), lv = br.level, a = calmFade;
-    const R = Math.min(W, H) * (0.2 + 0.12 * lv);
-    const g = c.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0, `rgba(236,244,238,${(0.03 + 0.07 * lv) * a})`); g.addColorStop(0.6, `rgba(236,244,238,${(0.012 + 0.03 * lv) * a})`); g.addColorStop(1, 'rgba(236,244,238,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
-  }
+  // Calm: the breath lives on the water — concentric ripple rings swell out from the pond's centre on the
+  // in-breath, hold their radius on the hold, draw back in on the out-breath. Driven purely by br.level
+  // (constant during hold/rest), so the rings freeze exactly when the breath holds.
+  if (calmFade > 0.01) drawBreathRings(c, calmFade);
 
   // Companion name chips riding on the water above their koi.
   for (const f of fish) {
@@ -1658,7 +1694,7 @@ function tick() {
     br = breathNow(); brLead = breathNow(1.8).level;
     // hold / rest: the pond goes very still
     calmStill = lerp(calmStill, br.phase === 'hold' || br.phase === 'rest' ? 1 : 0, 1 - Math.exp(-dt * 1.6));
-    // each in-breath starts with one slow ring spreading from the guide
+    // each in-breath starts with one slow drop at the centre of the rings
     if (br.phase !== breathPh) { if (calmFade > 0.3 && br.phase === 'in') { const [cx, cy] = calmCenter(); addDrop(cx, cy, 30, -1.4); } breathPh = br.phase; }
   } else { calmStill = 0; breathPh = ''; }
   if (reminder) { reminder.t += dt; if (reminder.t > 17) reminder = null; else if (reminder.t < 12 && Math.random() < dt / 2.5) addDrop(reminder.x + rand(-60, 60), reminder.y - 64 + rand(-20, 20), 5, -0.5); }
@@ -1714,6 +1750,8 @@ function tick() {
   gl.uniform1f(u.uLanternOn, L.lantern);
   gl.uniform2f(u.uLantern, 0.04, 0.96);
   gl.uniform2fv(u.uSunDir, L.sunDir);
+  if (calmFade > 0.01) { const [bx, by] = calmCenter(); gl.uniform4f(u.uBreath, bx / H, by / H, breathRout() / H, calmFade * (0.09 + 0.07 * br.level)); }
+  else gl.uniform4f(u.uBreath, 0, 0, 0, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 requestAnimationFrame(tick);

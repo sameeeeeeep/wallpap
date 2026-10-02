@@ -1180,8 +1180,8 @@ function spriteDesc(c, s, T) {
   }
   // idle breathing: ±1.5% anchored at the feet (deeper and slower in calm mode)
   if (d.br) {
-    const b = calm.fade > 0 && (d.p === 'sleep' || d.p === 'loaf') ? (breath() * 2 - 1) * calm.fade * 1.6 : Math.sin(T * 1.7 + c.id * 1.3);
-    d.sy *= 1 + 0.015 * b; d.sx *= 1 - 0.004 * b;
+    const cb = calm.fade > 0 && (d.p === 'sleep' || d.p === 'loaf'), b = cb ? (breath() * 2 - 1) * calm.fade * 1.6 : Math.sin(T * 1.7 + c.id * 1.3);
+    d.sy *= 1 + (cb ? 0.022 : 0.015) * b; d.sx *= 1 - (cb ? 0.006 : 0.004) * b;
   }
   d.p = sprPick(s, d.p, d);
   // under the bench there's only room to curl up
@@ -1304,6 +1304,12 @@ const ptrHist = [];
 let greetCool = 6;
 let activity = 0.7, lastMove = nowS(), ptrSpeed = 0, lastPtr = null, laserCool = 0;
 const calm = { on: false, t: 0, fade: 0, auto: 0, br: { phase: 'in', k: 0, level: 0 }, still: 0 };
+// Calm breathes in the terrace itself (lw.js only draws a small caption, set over the sea so it stays
+// clear of the mat where the cats pile up): bougainvillea petals lift off the terrace on the in-breath,
+// hang over the caldera on the hold and float back down on the out-breath; the sea swell brightens,
+// the lanterns + mat glow fill and the sleeping cats' flanks rise on the same clock.
+LW.breathDiegetic = true;
+LW.breathLabelAt = [0.47, 0.525];
 let reminder = null;
 
 function makeCats() {
@@ -2472,7 +2478,7 @@ LW.on('reminder', (r) => {
 LW.on('mute', (m) => { if (m) stopPurrLoop(); updateHud(); });
 // back at the desk after a while: a sleepy cat or two stirs (rendering pauses while away; dt is clamped)
 LW.on('focus', (on) => { if (on) { tPrev = nowS(); cats.forEach((c) => { if (c.state === 'sleep' && !calm.on && Math.random() < 0.35) c.wakeAt = nowS() + rand(1, 8); }); } });
-LW.on('action', (a) => { if (a === 'feed') fillBowl('food'); else if (a === 'water') fillBowl('water'); });
+LW.on('action', (a) => { if (a === 'feed') fillBowl('food'); else if (a === 'water') fillBowl('water'); else if (a === 'toy') spawnToy(W * (0.18 + Math.random() * 0.42), (L.floorTop + L.floorBot) / 2); });
 
 // =====================================================================
 //  audio (soft, synthesised)
@@ -2626,7 +2632,7 @@ function updateRainAudio() {
 // The guide restarts its clock when calm turns on (unless it was still fading out, ~3s), so mirror it.
 const BR = { t0: performance.now() / 1000, off: -1e9 };
 LW.on('calm', (on) => { const n = performance.now() / 1000; if (on) { if (n - BR.off > 3) BR.t0 = n; } else BR.off = n; });
-function breathNow(ahead = 0) { return LW.breathState(performance.now() / 1000 - BR.t0 + ahead); }
+function breathNow(ahead = 0) { const g = LW.breathTime(); return LW.breathState((g > 0 ? g : performance.now() / 1000 - BR.t0) + ahead); }   // the guide's own clock when it runs
 
 // ─── Ambience bed (procedural, quiet) ───────────────────────────────────────
 // Continuous background on LW.bus('ambience'); weather layers on LW.bus('weather').
@@ -2828,12 +2834,14 @@ function drawSkyAndSea(g, T) {
   const hz = L.horizon, sb = L.parCap;
   const hiCol = mix3(E.bot, [255, 255, 255], 0.35);
   g.lineCap = 'round';
+  // calm: the swell rises and brightens with the lungs (a pure function of the level, so holds hold)
+  const cf = calm.fade, ce = cf > 0 ? smooth(breath()) : 0, swA = 1 + cf * (1.7 * ce - 0.4), swY = cf * ce * 7;
   L.waves.forEach((w) => {
-    const a = (0.5 + 0.5 * Math.sin(T * 0.7 + w.p)) * (0.12 + 0.12 * E.dl + E.storm * 0.25);
+    const a = (0.5 + 0.5 * Math.sin(T * 0.7 + w.p)) * (0.12 + 0.12 * E.dl + E.storm * 0.25) * swA;
     if (a < 0.03) return;
-    const x = w.x + Math.sin(T * 0.25 + w.p) * 12;
-    g.strokeStyle = rgba(mix3(hiCol, [235, 240, 248], E.storm), a); g.lineWidth = 1 + (w.y - hz) / (sb - hz) * 1.6;
-    g.beginPath(); g.moveTo(x, w.y); g.lineTo(x + w.len, w.y); g.stroke();
+    const dz = (w.y - hz) / (sb - hz), x = w.x + Math.sin(T * 0.25 + w.p) * 12 * (1 - 0.6 * cf * calm.still), y = w.y - swY * (0.3 + dz);
+    g.strokeStyle = rgba(mix3(hiCol, [235, 240, 248], E.storm), Math.min(0.9, a)); g.lineWidth = 1 + dz * 1.6;
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + w.len * (1 + 0.25 * ce * cf), y); g.stroke();
   });
   // glitter path under the sun / moon
   let sx = null, scol = null, sa = 0;
@@ -2848,7 +2856,7 @@ function drawSkyAndSea(g, T) {
         const seed = Math.sin(rI * 12.9898 + i * 78.233 + Math.floor(T * 1.6 + rI * 0.37) * 3.1) * 43758.5453;
         const nx = (seed - Math.floor(seed)) * 2 - 1;
         const tw = 0.5 + 0.5 * Math.sin(T * 3.2 + rI * 1.7 + i * 2.3);
-        g.strokeStyle = rgba(scol, sa * tw * (0.35 + 0.5 * (1 - t)));
+        g.strokeStyle = rgba(scol, sa * tw * (0.35 + 0.5 * (1 - t)) * (1 + cf * (0.9 * ce - 0.3)));
         g.lineWidth = 1.2 + t * 1.8;
         const x = sx + nx * spread, len = 5 + t * 26;
         g.beginPath(); g.moveTo(x - len / 2, y); g.lineTo(x + len / 2, y); g.stroke();
@@ -2895,11 +2903,14 @@ function drawLights(g, T) {
     g.fill();
   }
   if (lit_) {
+    // calm: lamplight swells with the in-breath and steadies (no flicker) so a hold reads as stillness
+    const cf = calm.fade, ce = cf > 0 ? smooth(breath()) : 0, bk = 1 + cf * (1.1 * ce - 0.35), fk = 1 - 0.85 * cf;
     g.globalCompositeOperation = 'lighter';
-    bulbs.forEach(([x, y, i]) => { g.globalAlpha = 0.32 * E.lamp * (0.85 + 0.15 * Math.sin(T * 2 + i)); g.drawImage(GLOW, x - 22, y - 22, 44, 44); });
+    bulbs.forEach(([x, y, i]) => { g.globalAlpha = Math.min(1, 0.32 * E.lamp * (0.85 + 0.15 * Math.sin(T * 2 + i) * fk) * bk); g.drawImage(GLOW, x - 22, y - 22, 44, 44); });
     L.lanterns.forEach((ln, i) => {
-      const fl = 0.85 + 0.15 * Math.sin(T * 9 + i * 3) * Math.sin(T * 3.7 + i);
-      g.globalAlpha = 0.35 * E.lamp * fl; g.drawImage(GLOW, ln.x - 70, ln.y - 94, 140, 140);
+      const fl = 1 - fk * 0.15 + 0.15 * fk * Math.sin(T * 9 + i * 3) * Math.sin(T * 3.7 + i);
+      const k = ln.x < L.R ? bk : 1, r = 70 * (1 + (ln.x < L.R ? 0.45 * cf * ce : 0));   // widget zone (right) stays put
+      g.globalAlpha = Math.min(1, 0.35 * E.lamp * fl * k); g.drawImage(GLOW, ln.x - r, ln.y - 24 - r, r * 2, r * 2);
     });
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   }
@@ -2912,7 +2923,28 @@ function updatePetals(dt, T) {
     if (p.t > 16) petals.splice(i, 1);
   }
 }
+// Calm: a handful of fallen petals that ARE the breath — position is a pure function of the level
+// (rest on the terrace floor → lifted over the caldera at full lungs), so holds hang perfectly still.
+const BPET = (() => { const r = mulberry(1907), a = []; for (let i = 0; i < 22; i++) a.push({ fx: r(), fy: r(), lx: r(), ly: r(), arc: (r() - 0.5) * 90, rot: r() * TAU, spin: (r() - 0.5) * 5, ph: r() * TAU, flip: 2 + r() * 4, sz: 0.75 + r() * 0.5, c: (r() * 3) | 0, lag: r() * 0.25 }); return a; })();
+const BPCOL = ['#d9629a', '#c4467f', '#e48ab2'];
+function drawBreathPetals(g, T) {
+  const cf = calm.fade; if (cf <= 0.01) return;
+  const lv = breath(), bob = 3 * (1 - 0.9 * calm.still);
+  const x0 = L.bld.x1 + 30, x1 = Math.min(W * 0.52, L.R - 80), hx0 = L.bougX + 30, hx1 = Math.min(W * 0.44, L.R - 120);
+  for (const s of BPET) {
+    const e = smooth((lv - s.lag * (1 - lv) * 0.5) / (1 - s.lag * 0.5));   // a few leave a beat later / land a beat earlier
+    const rx = lerp(x0, x1, s.fx), ry = L.floorBack + 16 + s.fy * 96;
+    const hx = lerp(hx0, hx1, s.lx), hy = L.horizon - 130 + s.ly * 200;
+    const x = lerp(rx, hx, e) + Math.sin(e * Math.PI) * s.arc + Math.sin(T * 0.6 + s.ph) * bob * e;
+    const y = lerp(ry, hy, e) + Math.sin(T * 0.8 + s.ph * 1.3) * bob * e;
+    const fl = 0.3 + 0.7 * Math.abs(Math.cos(s.ph + e * s.flip)), up = 0.45 + 0.55 * Math.min(1, e * 3);   // flat on the floor, fluttering aloft
+    const col = mix3(lit(BPCOL[s.c]), [246, 176, 206], 0.35 * (1 - E.dl) + 0.12);
+    g.fillStyle = rgba(col, cf * (0.6 + 0.35 * e));
+    g.beginPath(); g.ellipse(x, y, 8 * s.sz, 4.6 * s.sz * fl * up, s.rot + e * s.spin, 0, TAU); g.fill();
+  }
+}
 function drawPetals(g) {
+  drawBreathPetals(g, nowS());
   petals.forEach((p) => {
     const a = clamp(Math.min(p.t / 0.5, (16 - p.t) / 2), 0, 1);
     g.fillStyle = rgba(lit('#d9629a'), a * 0.9);
@@ -3227,11 +3259,10 @@ function render(T) {
     flakes.forEach((f) => { ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, TAU); ctx.fill(); });
   }
   // calm: a warm pool of lamplight on the mat where the cats pile up, filling with the breath
-  // (lw.js draws the breathing guide itself)
   if (calm.fade > 0) {
     const b = breath(), cx = L.mat.cx, cy = L.mat.cy, R = 230 + 70 * b;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    g.addColorStop(0, `rgba(255,214,160,${(0.05 + 0.09 * b) * calm.fade})`); g.addColorStop(1, 'rgba(255,214,160,0)');
+    g.addColorStop(0, `rgba(255,214,160,${(0.035 + 0.14 * b) * calm.fade})`); g.addColorStop(1, 'rgba(255,214,160,0)');
     ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = g;
     ctx.beginPath(); ctx.ellipse(cx, cy, R, R * 0.55, 0, 0, TAU); ctx.fill(); ctx.restore();
   }

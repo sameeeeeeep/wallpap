@@ -222,11 +222,25 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
     }
 
+    var musicPermissionDenied = false
     @discardableResult
     func runScript(_ src: String) -> NSAppleEventDescriptor? {
         var err: NSDictionary?
         let r = NSAppleScript(source: src)?.executeAndReturnError(&err)
-        return err == nil ? r : nil
+        if let err {
+            let code = err[NSAppleScript.errorNumber] as? Int ?? 0
+            if code == -1743 || code == -1744 {   // not permitted to send Apple Events
+                if !musicPermissionDenied { musicPermissionDenied = true; NSLog("wallpap: Automation permission missing for Music/Spotify"); rebuildMenu() }
+            } else {
+                NSLog("wallpap AppleScript error %d: %@", code, err[NSAppleScript.errorMessage] as? String ?? "")
+            }
+            return nil
+        }
+        if musicPermissionDenied { musicPermissionDenied = false; rebuildMenu() }
+        return r
+    }
+    @objc func openAutomationSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
     }
 
     /// Only ever talks to an app that's already running (never launches Music/Spotify).
@@ -916,6 +930,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         music.target = self
         lock(music)
         menu.addItem(music)
+        if isPro && musicMode && musicPermissionDenied {
+            let fix = NSMenuItem(title: "⚠︎ Allow wallpap to control Music/Spotify…", action: #selector(openAutomationSettings), keyEquivalent: "")
+            fix.indentationLevel = 1
+            fix.target = self
+            menu.addItem(fix)
+        }
         if isPro && musicMode {
             let bs = NSMenuItem(title: "Beat Sync — react to the music", action: #selector(toggleBeatSync), keyEquivalent: "")
             bs.state = beatSyncOn ? .on : .off

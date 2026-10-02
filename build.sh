@@ -23,7 +23,10 @@ cp host/Info.plist $APP/Contents/Info.plist
 mkdir -p $APP/Contents/Resources/scenes
 cp scenes/*.html scenes/lw.js $APP/Contents/Resources/scenes/
 [[ -d scenes/art ]] && cp -R scenes/art $APP/Contents/Resources/scenes/art
-codesign --force --sign - $APP >/dev/null 2>&1 || true
+# Ad-hoc signature with a STABLE designated requirement (bundle id, not cdhash), so
+# macOS privacy permissions (Automation for Music/Spotify, Screen & Audio capture)
+# survive rebuilds instead of silently resetting every build.
+codesign --force --sign - --requirements '=designated => identifier "live.wallpap.mac"' $APP >/dev/null 2>&1 || true
 echo "built $PWD/$APP"
 if [[ "$1" == "--zip" || "$1" == "--dmg" ]]; then
   mkdir -p dist && rm -f dist/wallpap.zip dist/wallpap.dmg

@@ -15,7 +15,11 @@
   };
   LW.poseFrame=(from,to,progress)=>{
     const t=clamp(Number.isFinite(progress)?progress:1),u=ease(t);
-    return {pose:to,sx:1,sy:1,from,mix:u,layers:!from||from===to||t>=1?[{pose:to,alpha:1}]:[{pose:from,alpha:1-u},{pose:to,alpha:u}]};
+    // Never dissolve two animal silhouettes (a ghosted double cat): the old pose tucks, cuts to the new
+    // one at the lowest point, and settles — one layer at a time.
+    if(!from||from===to||t>=1)return {pose:to,sx:1,sy:1,from,mix:1,layers:[{pose:to,alpha:1}]};
+    const tuck=Math.pow(Math.sin(Math.PI*t),2),p=t<.5?from:to;
+    return {pose:p,sx:1+.025*tuck,sy:1-.085*tuck,from,mix:u,layers:[{pose:p,alpha:1}]};
   };
   // drawn in-between frame names (see LW.petSeqPrep): played as hard cuts, not crossfades
   const drawn=p=>/^(stand-sit|sit-sleep|turn|jump)-\d/.test(name(p));
@@ -166,7 +170,7 @@
     const angle=Math.atan2(Math.abs(vy),Math.abs(vx))*180/Math.PI;
     // screen angle of a ground-plane heading; depth is foreshortened on screen, so a modest slope already
     // means the animal is walking well toward/away from the camera
-    const view=angle>(s.view==='side'?30:22)?(vy>0?'f':'b'):'side';
+    const view=angle>(s.view==='side'?16:10)?(vy>0?'f':'b'):'side';
     const face=Math.abs(vx)>1e-4?Math.sign(vx):s.face;
     const n=LW.PET_CYCLE_N[gait]||8,k=Math.floor(phase*n+1e-6)%n;
     if(k===0||(gait==='walk'&&k===4)){s.view=view;s.face=face;}

@@ -492,7 +492,42 @@
     };
     window.requestAnimationFrame = (cb) => { queue.push(cb); schedule(); return queue.length; };
     LW._resumeFrames = () => { scheduled = false; clearTimeout(timer); schedule(); };
-  } else LW._resumeFrames = () => {};
+    // Run the scene's pending frame once even while paused (to freeze or restore a GPU canvas).
+    LW._frameOnce = () => { const q = queue; queue = []; const ts = performance.now(); q.forEach((cb) => { try { cb(ts); } catch (e) { console.error(e); } }); };
+  } else { LW._resumeFrames = () => {}; LW._frameOnce = () => {}; }
+
+  // Paused GPU scenes: WebKit may drop a WebGL canvas's last frame while the (occluded) desktop
+  // isn't drawing, which shows the page background instead of the paused scene. On pause, render
+  // one last frame and copy each WebGL canvas into a plain 2D canvas laid over it (2D backing
+  // stores persist); remove the copies on resume. If the page comes back visible while still
+  // paused, draw once more as a backstop.
+  const glCanvases = new Set();
+  const getCtx = HTMLCanvasElement.prototype.getContext;
+  HTMLCanvasElement.prototype.getContext = function (type, opts) {
+    const ctx = getCtx.call(this, type, opts);
+    if (ctx && /webgl/.test(type)) glCanvases.add(this);
+    return ctx;
+  };
+  let frozen = [];
+  function freezeGL() {
+    thawGL();
+    if (!glCanvases.size) return;
+    LW._frameOnce();   // the drawing buffer is readable right after a render, in the same task
+    for (const c of glCanvases) {
+      if (!c.isConnected || !c.width || !c.height) continue;
+      const r = c.getBoundingClientRect(), cs = getComputedStyle(c);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || !r.width) continue;
+      const o = document.createElement('canvas');
+      o.width = c.width; o.height = c.height;
+      try { o.getContext('2d').drawImage(c, 0, 0); } catch (e) { continue; }
+      o.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;pointer-events:none;opacity:${cs.opacity};z-index:${cs.zIndex === 'auto' ? 0 : cs.zIndex};mix-blend-mode:${cs.mixBlendMode}`;
+      c.after(o); frozen.push(o);
+    }
+  }
+  function thawGL() { frozen.forEach((o) => o.remove()); frozen = []; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !LW.focused && glCanvases.size) freezeGL();
+  });
   const blurCSS = document.createElement('style');
   // An auto-paused scene simply stops drawing and keeps its last frame (no blur/zoom): it should
   // still look like a wallpaper. A desktop click resumes it (host energy modes).
@@ -517,6 +552,7 @@
   function setFocused(on) {
     if (LW.focused === on) return;
     LW.focused = on;
+    if (on) thawGL(); else freezeGL();
     showPausePill(!on);
     document.documentElement.classList.toggle('lw-unfocused', !on);
     LW.emit('focus', on);

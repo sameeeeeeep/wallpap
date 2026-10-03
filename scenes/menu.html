@@ -172,8 +172,8 @@ function render(state) {
   const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
   const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
-    ? (c.title === 'Look' || c.options.some((o) => String(o.label).length > 9)
-      // Long labels (Looks / skins) get their own full-width block that wraps to two columns.
+    ? (c.title === 'Look' || c.options.length > 4 || c.options.some((o) => String(o.label).length > 9)
+      // Long labels and larger choice sets get a full-width, two-column block.
       ? `<div class="look"><span class="note">${esc(c.title)}</span>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { grid2: true })}</div>`
       : `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`)
     : '').join('');

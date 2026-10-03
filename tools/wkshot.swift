@@ -19,22 +19,31 @@ final class Shot: NSObject, WKNavigationDelegate {
     override init() {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
-        cfg.userContentController.addUserScript(WKUserScript(source: "window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.__pendingImages=new Set();const sd=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');Object.defineProperty(HTMLImageElement.prototype,'src',{get:sd.get,set(v){__pendingImages.add(this);const done=()=>__pendingImages.delete(this);this.addEventListener('load',done,{once:true});this.addEventListener('error',done,{once:true});sd.set.call(this,v)}});window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: W, height: H), configuration: cfg)
         win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
         win.contentView = web; win.orderFrontRegardless()
         web.navigationDelegate = self
+        if let theme = URLComponents(string: target)?.queryItems?.first(where: { $0.name == "shotAppearance" })?.value {
+            web.appearance = NSAppearance(named: theme == "dark" ? .darkAqua : .aqua)
+        }
         web.load(URLRequest(url: URL(string: target)!))
     }
     func run(_ js: String, _ done: @escaping (Any?) -> Void) {
         web.evaluateJavaScript(js) { r, e in if let e { print("js error:", e.localizedDescription) }; done(r) }
     }
+    func waitImages(_ attempts: Int = 0, _ done: @escaping () -> Void) {
+        run("window.__pendingImages.size") { result in
+            if (result as? Int ?? 0) == 0 || attempts >= 60 { done(); return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.waitImages(attempts + 1, done) }
+        }
+    }
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             self.run("1") { _ in
                 self.run(pre.isEmpty ? "1" : pre + ";void 0") { _ in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    self.waitImages {
                         self.run("(()=>{const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 w.takeSnapshot(with: nil) { img, _ in

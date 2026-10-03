@@ -496,3 +496,8 @@ Built-in image generation prompts (no API/CLI fallback):
    plausible materials, soft neutral afternoon lighting, fine texture, no outlines or cartoon shapes. No people,
    cars, text, numbers, logos, ground plane, scenery, drop shadow or labels. Genuine transparency in all empty
    areas. Match scale within each row, bottom edges aligned within each cell. Wide 3:2 atlas.”
+
+## 2026-10-03 — P0 menu verification
+- Checked all 16 bundled scene control sets in native WebKit light and dark appearance at the host's 340px panel width. Opened four contact sheets covering all controls. The Bowls sleep timer overran by 16px; choice sets above four now use a full-width two-column block. Rechecked/opened both Bowls appearances and every expanded shared section. Reports: no JS errors or control overflow.
+- Repro: `python3 tools/check-menu.py` (host literal control/skin definitions); `python3 tools/check-menu.py bowls shared`. Screenshots `shots/menu/`, reports `shots/menu-check.log`, `shots/menu-final.log`. This verifies HTML rendering, not the native host bridge or license transactions.
+- `wkshot` now waits for pending dynamically loaded images and accepts `?shotAppearance=light|dark`; only this standalone helper was compiled. Opened the image-ready Drive ultrawide rain/left capture `shots/p0-drive-wide-left-final.png`. No app rebuild/reload. No image prompts for this item.

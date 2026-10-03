@@ -1,0 +1,810 @@
+[
+  {
+    "id": "kyoto",
+    "case": "day",
+    "seconds": 5.69,
+    "shot": "shots/one-command/kyoto-day.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.15370387566685922,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "night",
+    "seconds": 6.11,
+    "shot": "shots/one-command/kyoto-night.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.482341204355489,
+      "night": 0.9949363425925926,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "rain",
+    "seconds": 5.12,
+    "shot": "shots/one-command/kyoto-rain.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 134,
+      "jsMs": 0.23098229279095914,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "golden",
+    "seconds": 4.95,
+    "shot": "shots/one-command/kyoto-golden.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.1932168434719178,
+      "night": 0.37722059742368885,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "left",
+    "seconds": 5.0,
+    "shot": "shots/one-command/kyoto-left.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 88,
+      "jsMs": 0.2156159532976332,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "calm",
+    "seconds": 4.93,
+    "shot": "shots/one-command/kyoto-calm.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.1917582069875637,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "snow",
+    "seconds": 4.89,
+    "shot": "shots/one-command/kyoto-snow.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 168,
+      "jsMs": 0.24708434607708016,
+      "night": 0,
+      "snow": 0.016527777777777784,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "kyoto",
+    "case": "wide",
+    "seconds": 5.37,
+    "shot": "shots/one-command/kyoto-wide.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "lights"
+      ],
+      "particles": 137,
+      "jsMs": 0.33365827648534274,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.31319444444444444,
+        "water": 0.32178819444444445,
+        "exposed": 0.6471354166666666,
+        "emissive": 0.001345486111111111
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "day",
+    "seconds": 4.75,
+    "shot": "shots/one-command/harbour-day.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.10886456915826759,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "night",
+    "seconds": 5.06,
+    "shot": "shots/one-command/harbour-night.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.4800536801055931,
+      "night": 0.9949363425925926,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "rain",
+    "seconds": 5.76,
+    "shot": "shots/one-command/harbour-rain.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 137,
+      "jsMs": 0.4686883512409656,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "golden",
+    "seconds": 5.19,
+    "shot": "shots/one-command/harbour-golden.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.2699242709753442,
+      "night": 0.37722059742368885,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "left",
+    "seconds": 5.85,
+    "shot": "shots/one-command/harbour-left.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 136,
+      "jsMs": 0.33289828137986444,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "calm",
+    "seconds": 6.0,
+    "shot": "shots/one-command/harbour-calm.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 0,
+      "jsMs": 0.32757442857324814,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "snow",
+    "seconds": 6.21,
+    "shot": "shots/one-command/harbour-snow.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 168,
+      "jsMs": 0.42882657641175304,
+      "night": 0,
+      "snow": 0.016527777777777777,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "harbour",
+    "case": "wide",
+    "seconds": 6.46,
+    "shot": "shots/one-command/harbour-wide.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [
+        "water"
+      ],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds",
+        "boats",
+        "lights"
+      ],
+      "particles": 133,
+      "jsMs": 0.32133501477341864,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.34869791666666666,
+        "water": 0.38689236111111114,
+        "exposed": 0.7684461805555556,
+        "emissive": 0.0008246527777777778
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "day",
+    "seconds": 4.77,
+    "shot": "shots/one-command/iceland-day.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 0,
+      "jsMs": 0.08811440129651844,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "night",
+    "seconds": 5.08,
+    "shot": "shots/one-command/iceland-night.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 0,
+      "jsMs": 0.0955411749164273,
+      "night": 0.9949363425925926,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "rain",
+    "seconds": 5.95,
+    "shot": "shots/one-command/iceland-rain.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 144,
+      "jsMs": 0.29711702755659053,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "golden",
+    "seconds": 5.81,
+    "shot": "shots/one-command/iceland-golden.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 0,
+      "jsMs": 0.20385716371874874,
+      "night": 0.37722059742368885,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "left",
+    "seconds": 5.9,
+    "shot": "shots/one-command/iceland-left.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 145,
+      "jsMs": 0.24266523631787615,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "calm",
+    "seconds": 4.88,
+    "shot": "shots/one-command/iceland-calm.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 0,
+      "jsMs": 0.19248594484234766,
+      "night": 0,
+      "snow": 0,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "snow",
+    "seconds": 5.26,
+    "shot": "shots/one-command/iceland-snow.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 168,
+      "jsMs": 0.26051789800615544,
+      "night": 0,
+      "snow": 0.016527777777777784,
+      "wet": 0,
+      "mirror": false,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  },
+  {
+    "id": "iceland",
+    "case": "wide",
+    "seconds": 6.58,
+    "shot": "shots/one-command/iceland-wide.png",
+    "errors": [],
+    "report": {
+      "ready": true,
+      "version": 1,
+      "paths": [],
+      "presets": [
+        "weather",
+        "calm",
+        "click",
+        "ambience",
+        "water",
+        "birds"
+      ],
+      "particles": 140,
+      "jsMs": 0.5246432489120363,
+      "night": 0,
+      "snow": 0,
+      "wet": 1,
+      "mirror": true,
+      "maskCoverage": {
+        "sky": 0.487890625,
+        "water": 0.24357638888888888,
+        "exposed": 0.8960503472222222,
+        "emissive": 0
+      }
+    }
+  }
+]

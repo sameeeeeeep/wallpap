@@ -1,0 +1,56 @@
+{
+  "kyoto": {
+    "index.html": {
+      "sha256": "8769cd78cd6423820f0db80534d1bc831b5b2950c1a0543a969d28be93d5fac4",
+      "identical_to": "addons/_template/index.html"
+    },
+    "plate-fx.js": {
+      "sha256": "1d9c060dab5a2d0e247a9b5589c56b25488ff76fc97f80dfaca27a175650bcc4",
+      "identical_to": "tools/plate-scene/plate-fx.js"
+    },
+    "zip": {
+      "path": "art-src/kyoto/package/kyoto-1.zip",
+      "bytes": 3397014,
+      "sha256": "2922e66b23e0355ce28668ddbae30ea48c9747e98bc2c9912b0f882e440762ac",
+      "entries": 19,
+      "crc": "ok"
+    },
+    "timings": "art-src/kyoto/timings.json"
+  },
+  "harbour": {
+    "index.html": {
+      "sha256": "8769cd78cd6423820f0db80534d1bc831b5b2950c1a0543a969d28be93d5fac4",
+      "identical_to": "addons/_template/index.html"
+    },
+    "plate-fx.js": {
+      "sha256": "1d9c060dab5a2d0e247a9b5589c56b25488ff76fc97f80dfaca27a175650bcc4",
+      "identical_to": "tools/plate-scene/plate-fx.js"
+    },
+    "zip": {
+      "path": "art-src/harbour/package/harbour-1.zip",
+      "bytes": 2999181,
+      "sha256": "1220dd17c2be8ec748ab6ce7bfdeb4966002038f2e9205661597a50d078edb37",
+      "entries": 20,
+      "crc": "ok"
+    },
+    "timings": "art-src/harbour/timings.json"
+  },
+  "iceland": {
+    "index.html": {
+      "sha256": "8769cd78cd6423820f0db80534d1bc831b5b2950c1a0543a969d28be93d5fac4",
+      "identical_to": "addons/_template/index.html"
+    },
+    "plate-fx.js": {
+      "sha256": "1d9c060dab5a2d0e247a9b5589c56b25488ff76fc97f80dfaca27a175650bcc4",
+      "identical_to": "tools/plate-scene/plate-fx.js"
+    },
+    "zip": {
+      "path": "art-src/iceland/package/iceland-1.zip",
+      "bytes": 2582970,
+      "sha256": "ea32e106c99e10f381c856339b6e0be3dd710c37ab2b023b89c359a7b14b0a77",
+      "entries": 19,
+      "crc": "ok"
+    },
+    "timings": "art-src/iceland/timings.json"
+  }
+}

@@ -814,3 +814,14 @@ reports, and before/after frame-time samples. Raw capture PNGs are deleted after
 conversion. Tests cover headings, full-body crossing, shadow registration, jump scale
 and depth, prop sorting, lateral pandas and graceful exit/re-entry including a narrow
 queue. Acceptance totals and measured timings are recorded in the evidence README.
+
+Final local acceptance: **60/60 Node tests pass**; **506 sequence frames** retained as
+downscaled JPEG grids/close-ups and visually inspected; all eight seeded control runs
+pass with no reported JS errors or pet overlaps. Evidence is **30.2 MiB**, no raw PNGs;
+final free disk space was about **20 GiB**. Median frame-time comparisons showed no
+regression in any scene (Cats 0.889→0.844 ms, Café 1.322→0.456, Records 1.378→1.144,
+Ramen 2.722→1.411, Rooftop 2.733→2.089, Speakeasy 4.844→4.100, Cabin 2.311→2.256,
+Grass 4.578→4.289). These are serial isolated-WKWebView batch measurements; small
+differences are within normal timing noise, not a claim about installed-app FPS. The
+earlier café mask regression was corrected by baking/caching masks, then remeasured.
+No push, release, app rebuild/install/relaunch, host Swift edit or sibling-tree edit.

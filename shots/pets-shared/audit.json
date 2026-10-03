@@ -1,0 +1,62 @@
+{
+  "frames": 506,
+  "evidenceMiB": 30.17,
+  "scenes": {
+    "cats": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "cafe": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "records": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "ramen": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "rooftop": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "speakeasy": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "cabin": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    },
+    "grass": {
+      "motionFrames": 58,
+      "wideFrames": 3,
+      "toggle": "passed",
+      "errors": 0,
+      "overlaps": 0
+    }
+  }
+}

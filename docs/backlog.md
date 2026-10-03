@@ -47,7 +47,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [ ] Plausibility audit of every element in every scene (incl. koi, bowls, train, cymatics, drive) [agents]
 - [~] Layout-aware retrofit: koi/bowls/train/cabin done; cymatics/drive/visualizers in their agents
 - [x] Train skins: Indian Sleeper, Shinkansen, Swiss Alpine, Orient Express (live crossfade) + Indian rail-joint rhythm; passers-by art parked in art-src/train/deferred-people
-- [ ] Airport scene (kit plate add-on) — PAUSED for compute (art + kit plate demo ready)
+- [x] Airport scene (kit plate add-on) — measured departures, parked aircraft, occlusion, night lights; packed locally and WebKit verified.
 - [ ] Realistic plate pipeline + Marine Drive, Taj Mahal, Hillside Valley — PAUSED for compute (low priority per user)
 - [ ] Illustrative "SimCity" living city (traffic, day/night)
 - [~] Codex art over procedural fakes: done in cabin/café/records/speakeasy/rooftop/ramen/train/bowls; rooftop + ramen day plates aligned and verified

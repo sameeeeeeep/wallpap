@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Airport</title></head><body>
+<script src="astronomy.js"></script><script src="kit.js"></script><script src="lw.js"></script><script src="moon.js"></script>
+<script>
+'use strict';
+const plate = Kit.plate({layoutUrl:'layout.json',base:'art/',masks:{sky:'sky.png',exposed:'exposed.png'},focus:[.5,.72]});
+let sheet, clock=0;
+const assets=Object.fromEntries(['a320-side','a320-side-gear-up','e175-side','baggage-train-side'].map(n=>[n,'art/sprites/'+n+'.png']));
+function aircraft(b,k,key,nx,ny,length,right=false,ground=ny,alpha=1){
+ const f=sheet.f[key],[x,y]=plate.toScreen(nx,ny),w=length*plate.pxPerMetre(nx,ground),h=w*f.aspect;
+ const dir=(right?1:-1)*(k.layout.mirror?-1:1);
+ const light=k.L.night, boost=ground>.6?.34:.12;
+ const tint=k.L.tint.map((v,i)=>v*(1-light)+light*(ground>.6?[.48,.46,.42][i]:[.16,.19,.25][i]));
+ b.use(sheet);
+ if(ground===ny)b.shadow(f,x,y,w*.84,h*.22,0,.24*alpha,2,.5,.5);
+ b.quad4(f,[[x+dir*w/2,y-h],[x-dir*w/2,y-h],[x-dir*w/2,y],[x+dir*w/2,y]],tint,alpha);
+ plate.occlude(plate.toScreen(nx,ground)[1],[x-w/2,y-h,x+w/2,y+2]);
+}
+const scene=Kit.scene({assets,setup(k){sheet=k.sheet(Object.fromEntries(Object.keys(assets).map(n=>[n,k.assets[n]])));},onReminder(){},
+ surfaceAt(x,y){return plate.maskAt('exposed',x,y)>.5&&plate.fromScreen(x,y)[1]>.36?'ground':null;},
+ layers:[Kit.sky({cover:.18,elev:[.5,-.91],place:(k,e,az)=>[k.mx(k.W*(.5+Math.sin(az)*.45)),k.H*(.355-e*.71)]}),plate,
+ Kit.sprites((b,k)=>{
+  // Runway lights remain low and steady; no distracting strobes.
+  const L=plate.layout.lights,on=k.L.night*.65+k.L.golden*.12;
+  for(const [name,col] of [['runway_edge_far',[1,.88,.66]],['runway_edge_near',[1,.88,.66]],['runway_centreline',[1,.95,.82]],['taxiway_centreline_green',[.2,.7,.4]],['mast_obstruction_red',[.9,.12,.06]]])
+   for(const p of L[name]||[]){const [x,y]=plate.toScreen(...p);b.glow(x,y,2.1,col,on,1,3);}
+  // Every 150 seconds a departure rolls from beyond the left edge and climbs offscreen.
+  const q=clock%150;
+  if(q<42){
+   let nx,ny,ground;
+   if(q<24){const u=q/24, points=[[-.13,.384],...plate.layout.paths.takeoff_roll];[nx,ny]=Kit.path(points).at(u*u);ground=ny;}
+   else{const u=(q-24)/18;[nx,ny]=Kit.path(plate.layout.paths.climb_out).at(u);ground=.46339+u*.08624;}
+   const [x,y]=plate.toScreen(nx,ny),quiet=k.restOK(x,y)?1:.24;
+   aircraft(b,k,q<25?'a320-side':'a320-side-gear-up',nx,ny,37.6,true,ground,quiet);
+  }
+  // Parked aircraft use the measured stop bars, with mast/jetbridge depth masks.
+  for(const [id,key,len] of [['S2','e175-side',31.7],['S4','a320-side',37.6]]){
+   const s=plate.layout.stands.find(s=>s.id===id),[x,y]=plate.toScreen(...s.nose),w=len*plate.pxPerMetre(...s.nose);
+   const [nx,ny]=plate.fromScreen(x+(k.layout.mirror?-1:1)*w*.42,y);
+   if(k.restOK(...plate.toScreen(nx,ny)))aircraft(b,k,key,nx,ny,len);
+  }
+ }),Kit.particles(),Kit.light({glow:.3})],
+ update(dt){clock+=dt*(LW.calm?.65:1);}
+});
+window.airport={scene,plate,setTime(t){clock=t;}};
+</script></body></html>

@@ -29,6 +29,17 @@
       "zip": "scenes-pack/sky-kites-1.zip",
       "author": "wallpap",
       "thumb": "scenes-pack/sky-kites.jpg"
+    },
+    {
+      "id": "airport",
+      "title": "Airport",
+      "category": "Places",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/airport-1.zip",
+      "author": "wallpap",
+      "blurb": "A quiet control-tower view, measured departures and apron lights.",
+      "thumb": "scenes-pack/airport.jpg"
     }
   ]
 }

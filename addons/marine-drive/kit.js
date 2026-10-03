@@ -1469,7 +1469,14 @@ function meadow(o = {}) {
   let gP, lP, pP, baseRT = null, img = null;
   const L = { kind: 'meadow', opt, field: null, blooms: [], bloom: 0, push: opt.push };
   L.init = (k) => { gP = k.program(GROUND); lP = k.program(LIT); pP = k.program(PHOTO); if (opt.groundImage) img = k.image(opt.groundImage, true); };
+  // The bed is laid out once per size/clear band: the host sends 'layout' whenever the icons/widgets (avoid boxes)
+  // move, and re-planting on each of those made the flowers jump around. buildPlants is seeded, so even a real
+  // resize regrows the same bed rather than a new random one.
+  let bedKey = '';
   L.resize = (k) => {
+    const key = [k.W, k.H, Math.round(k.layout.clearPx[0]), Math.round(k.layout.clearPx[1])].join(',');
+    if (L.field && key === bedKey) return;
+    bedKey = key;
     k.free(baseRT); baseRT = opt.ground === false ? null : k.target(k.sceneRT.w, k.sceneRT.h); L.baked = false;
     if (L.field) { L.field.free(); if (L.sheet && !opt.plants) k.gl.deleteTexture(L.sheet.tex); }
     const P = opt.plants ? opt.plants(k) : buildPlants(k, opt);
@@ -1485,6 +1492,12 @@ function meadow(o = {}) {
   return L;
 }
 function buildPlants(k, opt) {
+  // seeded (opt.seed): the same size grows the same bed; flowers draw from their own stream so a width change that
+  // adds a row of ground cover doesn't reshuffle every flower
+  const stream = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  const seed = opt.seed ?? 20261004, rG = stream(seed), rF = stream(seed ^ 0x5bd1e995);
+  let rnd = rG;
+  const rand = (a = 1, b) => (b === undefined ? rnd() * a : a + rnd() * (b - a)), pick = (arr) => arr[Math.floor(rnd() * arr.length)];
   // ground cover: image clumps (opt.foliage = {images, kinds: [{name, size, weight, sway}], density}) or procedural tufts
   const FO = opt.foliage;
   const S = FO ? Object.assign({}, FO.images) : { tA: paint.grassTuft(128, [70, 104, 46], 26, 1), tB: paint.grassTuft(128, [86, 112, 50], 22, 2), tC: paint.grassTuft(112, [62, 94, 52], 30, 3),
@@ -1503,13 +1516,14 @@ function buildPlants(k, opt) {
     list.push({ f, x: px, y: py, w: sz, h: sz * f.aspect, rot: tuft ? rand(-0.25, 0.25) : rand(TAU), pivot: tuft ? 0.95 : 0.5, height: tuft ? sz * 0.25 : sz * (q.height ?? 0.1), sway: q.sway ?? (tuft ? 9 : 2.5), tint: [rand(0.82, 1.08), rand(0.88, 1.08), rand(0.82, 1.04)] });
   }
   if (F) {
+    rnd = rF;
     const kinds = F.kinds, tot = kinds.reduce((a, q) => a + (q.weight || 1), 0), under = F.under || (FO ? kindsG.map((q) => q.name) : ['r', 'r2']);
     const choose = () => { let r = rand(tot); for (const q of kinds) if ((r -= q.weight || 1) <= 0) return q; return kinds[0]; };
     const nC = F.clusters ?? 14, per = F.per || [3, 8];
     for (let c = 0; c < nC; c++) {
       const q = choose(), cx = rand(k.layout.clearPx[0] + 0.03 * W, k.layout.clearPx[1] - 0.02 * W), cy = rand(0.06, 0.97) * H, n = Math.round(rand(per[0], per[1] + 1)), R = rand(60, 120) * u;
       for (let i = 0; i < n; i++) {
-        const a = rand(TAU), rr = Math.sqrt(Math.random()) * R, x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, d = depthAt(y);
+        const a = rand(TAU), rr = Math.sqrt(rnd()) * R, x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr * 0.8, d = depthAt(y);
         if (heads.some((h) => Math.hypot(h.x - x, h.y - y) < (h.w * 0.5))) continue;
         const sz = rand(q.size[0], q.size[1]) * d * u, f = sheet.f[q.name], ht = rand(40, 75) * d * u;
         if (i % 2 === 0) { const uf = sheet.f[pick(under)], us = sz * rand(1.6, 2.2); list.push({ f: uf, x: x + rand(-10, 10), y: y + rand(4, 16), w: us, h: us * uf.aspect, rot: rand(TAU), pivot: 0.5, height: ht * 0.35, sway: 3, tint: [0.78, 0.88, 0.78], under: true }); }

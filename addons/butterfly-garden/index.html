@@ -35,7 +35,8 @@ meadow.bloom=0;meadow.blooms=[];meadow.sheet={f:{hosta:{}}};
 meadow.field={list:[],sway:p=>[p.x,p.y]};
 const flowerSites=[[.096,.17],[.234,.133],[.278,.211],[.324,.205],[.164,.294],[.12,.39],[.174,.366],[.2,.429],[.323,.348],[.331,.43],[.42,.365],[.503,.407],[.255,.521],[.3,.62],[.348,.719],[.485,.657],[.54,.71],[.565,.465],[.508,.10],[.409,.145]];
 const resizeBed=meadow.resize;
-meadow.resize=k=>{resizeBed(k);meadow.blooms=flowerSites.map(([nx,ny])=>{const [x,y]=meadow.toScreen(nx,ny);return {x,y,bloom:1};});meadow.field.list=[[.18,.78],[.4,.87],[.57,.22]].map(p=>{const [x,y]=meadow.toScreen(...p);return{x,y,f:meadow.sheet.f.hosta};});};
+// flowers are fixed sites in the photo; a layout event that doesn't move them keeps every butterfly where it sits
+meadow.resize=k=>{resizeBed(k);const old=meadow.blooms;meadow.blooms=flowerSites.map(([nx,ny],i)=>{const [x,y]=meadow.toScreen(nx,ny),o=old[i];return o&&Math.abs(o.x-x)<1&&Math.abs(o.y-y)<1?o:{x,y,bloom:1};});const oldL=meadow.field.list;meadow.field.list=[[.18,.78],[.4,.87],[.57,.22]].map((p,i)=>{const [x,y]=meadow.toScreen(...p),o=oldL[i];return o&&Math.abs(o.x-x)<1&&Math.abs(o.y-y)<1?o:{x,y,f:meadow.sheet.f.hosta};});};
 
 // ── Butterflies ──
 function spawn(k, from = 'edge') {
@@ -126,7 +127,7 @@ const garden=Kit.scene({
     wings = k.sheet(k.assets.atlas, FRAMES);
 
   },
-  resize(k) { u = Math.min(k.W, k.H) / 1000; for (const f of flies) if (f.bloom) { f.bloom = null; f.state = 'fly'; } },
+  resize(k) { u = Math.min(k.W, k.H) / 1000; for (const f of flies) if (f.bloom && !meadow.blooms.includes(f.bloom) && !meadow.field.list.includes(f.bloom)) { f.bloom = null; f.state = 'fly'; } },
   layers: [
     meadow,
     Kit.sprites((b, k) => { b.use(wings); for (const f of flies) drawFly(b, f, k, true); }, 'shadows'),

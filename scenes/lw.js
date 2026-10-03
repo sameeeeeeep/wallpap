@@ -496,37 +496,62 @@
     LW._frameOnce = () => { const q = queue; queue = []; const ts = performance.now(); q.forEach((cb) => { try { cb(ts); } catch (e) { console.error(e); } }); };
   } else { LW._resumeFrames = () => {}; LW._frameOnce = () => {}; }
 
-  // Paused GPU scenes: WebKit may drop a WebGL canvas's last frame while the (occluded) desktop
-  // isn't drawing, which shows the page background instead of the paused scene. On pause, render
-  // one last frame and copy each WebGL canvas into a plain 2D canvas laid over it (2D backing
-  // stores persist); remove the copies on resume. If the page comes back visible while still
-  // paused, draw once more as a backstop.
-  const glCanvases = new Set();
+  // Paused scenes: WebKit may drop a canvas's last frame (WebGL *and* accelerated 2D) while the
+  // occluded desktop isn't drawing, which shows the black page background instead of the scene.
+  // On pause, render one last frame and lay a still over each visible canvas: a 2D copy at once,
+  // then a decoded <img> of it (image data survives backing-store purges). Removed on resume.
+  // If the page comes back visible while still paused, re-take the still as a backstop.
+  const liveCanvases = new Set();
   const getCtx = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (type, opts) {
     const ctx = getCtx.call(this, type, opts);
-    if (ctx && /webgl/.test(type)) glCanvases.add(this);
+    if (ctx && /webgl|2d/.test(type)) liveCanvases.add(this);
     return ctx;
   };
-  let frozen = [];
-  function freezeGL() {
-    thawGL();
-    if (!glCanvases.size) return;
-    LW._frameOnce();   // the drawing buffer is readable right after a render, in the same task
-    for (const c of glCanvases) {
-      if (!c.isConnected || !c.width || !c.height) continue;
+  let frozen = [], freezeId = 0;
+  function freezeStill() {
+    thawStill();
+    const id = freezeId;
+    LW._frameOnce();   // a WebGL drawing buffer is readable right after a render, in the same task
+    const minArea = innerWidth * innerHeight * 0.05;   // skip offscreen helpers and small UI canvases
+    for (const c of [...liveCanvases]) {   // snapshot: the stills below are canvases too
+      if (!c.isConnected || !c.width || !c.height || c.dataset.lwStill) continue;
       const r = c.getBoundingClientRect(), cs = getComputedStyle(c);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || !r.width) continue;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || r.width * r.height < minArea) continue;
       const o = document.createElement('canvas');
       o.width = c.width; o.height = c.height;
-      try { o.getContext('2d').drawImage(c, 0, 0); } catch (e) { continue; }
+      o.dataset.lwStill = '1';
+      try { getCtx.call(o, '2d').drawImage(c, 0, 0); } catch (e) { continue; }
       o.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;pointer-events:none;opacity:${cs.opacity};z-index:${cs.zIndex === 'auto' ? 0 : cs.zIndex};mix-blend-mode:${cs.mixBlendMode}`;
       c.after(o); frozen.push(o);
+      try {
+        o.toBlob((b) => {
+          if (!b || id !== freezeId || !o.isConnected) return;
+          const img = new Image(), url = URL.createObjectURL(b);
+          img.src = url; img.style.cssText = o.style.cssText; img.dataset.lwStill = '1'; img._url = url;
+          img.decode().then(() => {
+            if (id !== freezeId || !o.isConnected) { URL.revokeObjectURL(url); return; }
+            o.replaceWith(img); frozen[frozen.indexOf(o)] = img;
+          }, () => URL.revokeObjectURL(url));
+        }, 'image/png');
+      } catch (e) {}   // tainted canvas: keep the 2D copy
     }
   }
-  function thawGL() { frozen.forEach((o) => o.remove()); frozen = []; }
+  // Resume: the live scene restarts from the same frame underneath; the still softly blurs and fades
+  // away over it (no hard cut). Re-freezing mid-fade drops the old still at once.
+  function thawStill(soft) {
+    freezeId++;
+    const gone = frozen; frozen = [];
+    const drop = (o) => { o.remove(); if (o._url) URL.revokeObjectURL(o._url); };
+    if (!soft) { gone.forEach(drop); return; }
+    gone.forEach((o) => {
+      o.style.transition = 'opacity .7s ease, filter .7s ease';
+      setTimeout(() => { o.style.opacity = '0'; o.style.filter = 'blur(10px)'; }, 30);   // after the first live frame
+      setTimeout(() => drop(o), 800);
+    });
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !LW.focused && glCanvases.size) freezeGL();
+    if (document.visibilityState === 'visible' && !LW.focused && liveCanvases.size) freezeStill();
   });
   const blurCSS = document.createElement('style');
   // An auto-paused scene simply stops drawing and keeps its last frame (no blur/zoom): it should
@@ -552,7 +577,7 @@
   function setFocused(on) {
     if (LW.focused === on) return;
     LW.focused = on;
-    if (on) thawGL(); else freezeGL();
+    if (on) thawStill(true); else freezeStill();
     showPausePill(!on);
     document.documentElement.classList.toggle('lw-unfocused', !on);
     LW.emit('focus', on);

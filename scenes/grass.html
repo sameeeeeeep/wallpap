@@ -1012,7 +1012,7 @@ function pSoft(L, X, Y, RX, RY, soft, col, op) { // screen-space soft ellipse (s
 function hazeAt(s) { return clamp(Math.pow(1 - clamp(s, 0, 1), 2.4) * Lt.hazeK + Lt.fog * (1 - clamp(s, 0, 1)) * 0.85, 0, 0.92); }
 
 // Shared pandas: scene data and the WebGL renderer adapter only.
-const petSystem=LW.pets.create({scene:'grass',roster:['bao','cub','mei'],stage:petStage});
+const petSystem=LW.pets.create({scene:'grass',roster:['bao','cub','mei'],stage:petStage,pointer:()=>({x:mx(LW.pointer.x),y:LW.pointer.y})});
 const pandas=petSystem.items;
 for(const p of pandas){p.ap=Object.freeze({name:['Bao','Dou','Mei'][p.id],cub:p.rosterId==='cub',voice:[1,1.7,1.2][p.id]});p.prims=new PrimList();p.headTop=[0,0];p.s=.5;p.S=1;p.len=100;}
 function petStage(){
@@ -1495,7 +1495,7 @@ LW.on('down', (x, y) => {
   cur.inside = true; cur.x = x; cur.y = y; cur.downT = t;
   // pandas (front-most first)
   const hitP = drawList.filter((a) => a.panda).map((a) => a.panda).reverse().find((p) => p.hit && (Math.hypot(x - p.hit.hx, y - p.hit.hy) < p.hit.hr * 1.15 || Math.hypot(x - p.hit.bx, y - p.hit.by) < p.hit.br * 1.0));
-  if (hitP) { pokePanda(hitP); return; }
+  if (hitP) { petSystem.click(hitP.x,hitP.y-20*hitP.k); return; }
   const kt = kiteBirds.find((k) => k.alpha > 0.3 && Math.hypot(x - k.x, y - k.y) < Math.max(32, k.span * 0.6));
   if (kt) { kbBankAway(kt, x, y); kiteCry(kt.x); return; }
   const bd = birds.find((b) => b.state === 'perched' && Math.hypot(x - b.x, y - b.y) < 60);

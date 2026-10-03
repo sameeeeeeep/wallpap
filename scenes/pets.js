@@ -3,6 +3,9 @@
  * const pets = LW.pets.create({scene:'cafe', roster:['grey','golden'], stage:()=>STAGE});
  * pets.step(dt, seconds); pets.draw(ctx); pets.click(x,y); pets.toy(x,y);
  * pets.reset() after a layout change. pets.items is stable (never sort it in place).
+ * pointer:()=>({x,y,inside?}) supplies scene-world cursor coordinates for FOLLOW.
+ * click toggles picks; leave waits, focus pause/reset clears picks. Motion uses drawn
+ * cycles/turns; no selection overlay or procedural animal animation.
  * Optional scene interactions: pets.trip(p, spot, restPose), pets.state(p, pose, seconds).
  * pets.walk(p, x, y, {gait,next}) still enforces stage geometry and mutual clearance.
  * pets.draw(ctx, extraOccluders) sorts pets + props together by ground depth.
@@ -41,7 +44,7 @@ const PANDAS=Object.fromEntries(['mei','bao','cub'].map(id=>[id,{id,set:'pandas/
  poses:['walk1','walk2',...(id==='mei'?['sit-eat','back-sleep']:id==='bao'?['sit-leaf','roll']:['back-sleep','tumble'])],
  sit:id==='mei'?'sit-eat':id==='bao'?'sit-leaf':'tumble',sleep:id==='bao'?'roll':'back-sleep'}]));
 const cycle=p=>/^(walk|run|stalk)-(?:[fb]-)?\d/.test(p);
-const family=p=>cycle(p)||p==='walk2'?'walk1':p.startsWith('jump-')?'jump':p;
+const family=p=>cycle(p)||p==='walk2'||p.startsWith('turn-')?'walk1':/^(jump|pounce)-/.test(p)?'jump':p.startsWith('hunt-')?'hunt':p.startsWith('perk-')?'sit':p;
 function defringe(im) {
   try {
     const w = im.naturalWidth, h = im.naturalHeight, cv = document.createElement('canvas');
@@ -130,8 +133,9 @@ function headings(a,b,slope=.55,directional=true){
 }
 const length=pts=>pts.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p[0]-pts[i][0],p[1]-pts[i][1]),0);
 function overlap(a,b,gap=8){return a[0]<b[2]+gap&&a[2]+gap>b[0]&&a[1]<b[3]+gap&&a[3]+gap>b[1]}
-function create({scene,roster,stage}){
+function create({scene,roster,stage,pointer=()=>LW.pointer}){
  let S=null,T=0,was=enabled(),clock=0,screenMap=null;
+ const cursor={x:0,y:0,inside:false,speed:0,still:0,heading:[1,0],seen:false};
  function panelBoxes(){if(!screenMap)return [];const {m,rect,sx,sy}=screenMap;return [...screenOccluders.values()].map(r=>{const a=m.transformPoint({x:(r[0]-rect.x)*sx,y:(r[1]-rect.y)*sy}),b=m.transformPoint({x:(r[0]+r[2]-rect.x)*sx,y:(r[1]+r[3]-rect.y)*sy});return [Math.min(a.x,b.x),Math.min(a.y,b.y),Math.max(a.x,b.x),Math.max(a.y,b.y)];});}
  function panelClear(b){return !panelBoxes().some(r=>overlap(b,r,10));}
  const wanted=p=>!(LW.virtual&&p.mission==='qa-hidden')&&enabled()&&p.id<(S.count??items.length);
@@ -177,7 +181,7 @@ function create({scene,roster,stage}){
  function validPath(p,pts,exit=false,avoidPets=true){
   for(let i=1;i<pts.length;i++){
    const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/12));
-   for(let j=1;j<=n;j++){const x=lerp(a[0],b[0],j/n),y=lerp(a[1],b[1],j/n);if(!allowed(p,x,y,p.surf,exit)||(avoidPets&&!free(p,x,y,p.surf,false)))return false;}
+   for(let j=1;j<=n;j++){const x=lerp(a[0],b[0],j/n),y=lerp(a[1],b[1],j/n);if(!allowed(p,x,y,p.surf,exit)||(p.picked&&!exit&&!clearRest(p,x,y))||(avoidPets&&!free(p,x,y,p.surf,false)))return false;}
   }return true;
  }
  function plan(p,x,y,exit=false,ignorePets=false){
@@ -190,6 +194,7 @@ function create({scene,roster,stage}){
    // Route around pets/props using visibility candidates; every edge still uses drawn headings.
    const bounds=S.bounds||[0,0,1600,1000],ys=[bounds[1]+10,bounds[3]-10];
    for(const r of panelBoxes()){ys.push(r[1]-20,r[3]+p.spec.height*size(p)*1.4+20);}
+   if(p.picked)for(const r of S.avoid||[]){ys.push(r[1]-p.spec.height*p.k*.2-18,r[1]+r[3]+p.spec.height*p.k*1.3+18);}
    for(const o of items)if(o!==p&&!o.away){const b=box(o),h=p.spec.height*size(p);ys.push(b[1]-18,b[3]+h*1.3+18)}
    for(const yy of ys)for(const xx of [a[0],b[0],(a[0]+b[0])/2]){
     const m=[xx,clamp(yy,bounds[1],bounds[3])];
@@ -229,15 +234,16 @@ function create({scene,roster,stage}){
    const q=[a[0]+u*dx,a[1]+u*dy],dd=Math.hypot(x-q[0],y-q[1]);if(dd<d){best=q;d=dd;}
   }return best;
  }
- function jump(p,x,y,surf,next){
+ function jump(p,x,y,surf,next,action=null){
   if(surf==='floor'){const q=floorPoint(x,y);if(!q)return false;[x,y]=q;}else{const l=ledge(surf);if(!l)return false;x=clamp(x,l.x0,l.x1);y=l.y;}
   if(p.away||!free(p,x,y,surf))return false;
   const d0=depth(p),d1=surf==='floor'?y:ledge(surf).depth;
-  const dir=LW.petJumpDirection(p,x-p.x,d1-d0),key=LW.petJumpKey(dir.view,q=>p.asset.seq[q]);
+  const dir=LW.petJumpDirection(p,x-p.x,d1-d0),key=action?(action+(dir.view==='side'?'':'-'+dir.view)):LW.petJumpKey(dir.view,q=>p.asset.seq[q]);
+  if(action&&!p.asset.seq[key])return false;
   if(!key)return false;
   // A missing depth jump cannot glide: take the lateral jump only when depth is unchanged.
   if(dir.view!=='side'&&key==='jump'&&Math.abs(d1-d0)>1)return false;
-  p.j={x0:p.x,y0:p.y,x1:x,y1:y,s0:p.surf,s1:surf,d0,d1,k0:size(p),k1:size(p,y,surf),view:dir.view,key,
+  p.j={x0:p.x,y0:p.y,x1:x,y1:y,s0:p.surf,s1:surf,d0,d1,k0:size(p),k1:size(p,y,surf),view:dir.view,key,action,
    dur:.36+Math.abs(y-p.y)*.0007+Math.abs(x-p.x)*.00055,h:34+Math.max(0,p.y-y)*.32,next};
   if(!flightClear(p,p.j)){p.j=null;return false;}
   p.dir=dir.face;p.goal={x,y,surf};p.sequence=null;p.prev=null;LW.petJumpLand(p);state(p,'jumpPrep',.34);pose(p,0);return true;
@@ -259,7 +265,11 @@ function create({scene,roster,stage}){
    const ab=route.shift();if(!ab)return walk(q,dest.x,dest.y,{next:finish});
    const [a,b]=ab,ay=a.surf==='floor'?a.y:ledge(a.surf).y,by=b.surf==='floor'?b.y:ledge(b.surf).y;
    const start=a.surf==='floor'?floorPoint(a.x,ay):[a.x,ay];
-   walk(q,...start,{next:r=>{if(!jump(r,b.x,by,b.surf,leg)){r.goal=null;state(r,'sit',2)}}});
+   walk(q,...start,{next:r=>{
+    const launch=()=>{if(!jump(r,b.x,by,b.surf,leg)){r.goal=null;state(r,'sit',2)}};
+    if(r.picked){const d1=b.surf==='floor'?by:ledge(b.surf).depth,dir=LW.petJumpDirection({dir:r.dir},b.x-r.x,d1-depth(r));turnTo(r,dir.view,dir.face,launch);}
+    else launch();
+   }});
   }leg(p);return true;
  }
  function leave(p){
@@ -294,6 +304,7 @@ function create({scene,roster,stage}){
   return walk(p,x,p.y,{next:leave});
  }
  function think(p){
+  if(p.picked){p.goal=null;state(p,'followWait',1e9);return;}
   if(p.mission==='enter')return;
   p.goal=null;if(!wanted(p))return leave(p);if(p.mission==='qa')return state(p,'stand',1e9);
   const spots=(S.spots||[]).filter(s=>(directions(p)||s.surf||Math.abs(s.y-p.y)<1)&&(!s.species||s.species===p.kind)&&clearRest(p,s.x,s.y??ledge(s.surf)?.y));
@@ -308,6 +319,138 @@ function create({scene,roster,stage}){
   if(r>.96){const o=items.find(o=>o!==p&&!o.away);if(o&&p.surf===o.surf){const x=o.x+(p.x<o.x?-1:1)*(p.spec.height*p.k+o.spec.height*o.k)*1.1;if(walk(p,x,o.y,{next:q=>state(q,'sniff',3)}))return;}}
   state(p,pick(['sit','sit','loaf','groom',...(sl>.35?['sleep','sleep']:['stand'])]),rand(5,sl>.35?30:12));
  }
+ // FOLLOW owns intent; the existing path/jump engine still owns every position.
+ function samplePointer(dt){
+  const q=pointer?.();const on=!!q&&(q.inside??LW.pointer?.inside??false)&&LW.focused!==false;
+  if(!on||!Number.isFinite(q.x)||!Number.isFinite(q.y)){cursor.inside=false;cursor.speed=0;cursor.still=0;return;}
+  const dx=q.x-cursor.x,dy=q.y-cursor.y,d=cursor.seen?Math.hypot(dx,dy):0;
+  cursor.speed=lerp(cursor.speed,d/Math.max(dt,1/120),1-Math.exp(-dt*12));
+  if(!cursor.seen||Math.hypot(q.x-cursor.restX,q.y-cursor.restY)>2){cursor.still=0;cursor.restX=q.x;cursor.restY=q.y;}else cursor.still+=dt;
+  if(d>1)cursor.heading=[dx/d,dy/d];
+  Object.assign(cursor,{x:q.x,y:q.y,inside:true,seen:true});
+ }
+ function project(p,x,y,reserve=false){
+  if(!directions(p))y=p.y;
+  const ok=(x,y)=>allowed(p,x,y,'floor')&&clearRest(p,x,y)&&(!reserve||free(p,x,y,'floor'));
+  if(ok(x,y))return [x,y];
+  let best=null,dd=Infinity;
+  const test=(xx,yy)=>{const d=(xx-x)**2+(yy-y)**2;if(d<dd&&ok(xx,yy)){best=[xx,yy];dd=d;}};
+  const q=floorPoint(x,y);if(q)test(...q);
+  const b=S.bounds||[0,0,1600,1000],margin=p.spec.height*p.k*.6,clear=S.clear||[b[0],b[2]];
+  const xx=clamp(x,clear[0]+margin,clear[1]-margin);test(xx,y);const edge=floorPoint(xx,y);if(edge)test(...edge);
+  for(const poly of S.floor||[])for(let i=0;i<poly.length;i++){
+   const a=poly[i],b=poly[(i+1)%poly.length],dx=b[0]-a[0],dy=b[1]-a[1],u=clamp(((x-a[0])*dx+(y-a[1])*dy)/(dx*dx+dy*dy||1));test(a[0]+u*dx,a[1]+u*dy);
+  }
+  // Include expanded prop edges, then refine the fallback lattice to a scene pixel.
+  const body=box(p,0,0,0,p.k);
+  for(const [rx,ry,rw,rh] of S.avoid||[]){
+   const xs=[rx-body[2]-1,rx+rw-body[0]+1],ys=[ry-body[3]-1,ry+rh-body[1]+1];
+   for(const xx of xs)test(xx,y);for(const yy of ys)test(x,yy);for(const xx of xs)for(const yy of ys)test(xx,yy);
+  }
+  for(let yy=directions(p)?b[1]:p.y;yy<=(directions(p)?b[3]:p.y);yy+=30)for(let xx=b[0];xx<=b[2];xx+=35)test(xx,yy);
+  if(best)for(const step of [10,3,1]){const c=best.slice();for(let dy=directions(p)?-3:0;dy<=(directions(p)?3:0);dy++)for(let dx=-3;dx<=3;dx++)test(c[0]+dx*step,c[1]+dy*step);}
+  return best;
+ }
+ function halt(p,name='followWait',seconds=1e9){
+  p.path=null;p.goal=null;p.next=null;p.turn=null;p.sequence=null;p.prev=null;state(p,name,seconds);
+ }
+ function turnTo(p,view,face,next){
+  const old=p._petDirection||{view:'side',face:p.dir},steps=[];
+  const add=(key,rev,dir)=>{if(p.asset.seq[key])for(let i=0;i<5;i++)steps.push({name:key+'-'+(rev?5-i:i+1),dir});};
+  if(old.view!==view||old.face!==face){
+   if(old.view!=='side')add('turn-'+old.view,true,old.face);
+   if(old.face!==face)add('turn',false,old.face);
+   if(view!=='side')add('turn-'+view,false,face);
+  }
+  if(!steps.length){p.dir=face;p._petDirection={view,face};if(next)next();return false;}
+  p.turn={steps,t:0,view,face,next};p.sequence=null;p.prev=null;return true;
+ }
+ function purr(){
+  if(LW.muted||LW.audioPrefs?.fx?.on===false||LW.audioPrefs?.fx?.vol===0||!LW.audio||!LW.bus)return;
+  const ctx=LW.audio(),bus=LW.bus('fx');if(!ctx||!bus)return;
+  const o=ctx.createOscillator(),g=ctx.createGain(),mod=ctx.createOscillator(),mg=ctx.createGain(),t=ctx.currentTime;
+  o.type='triangle';o.frequency.value=92;mod.frequency.value=24;mg.gain.setValueAtTime(.008,t);mg.gain.linearRampToValueAtTime(0,t+.47);
+  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.014,t+.07);g.gain.exponentialRampToValueAtTime(.0001,t+.48);
+  mod.connect(mg);mg.connect(g.gain);o.connect(g);g.connect(bus);o.start(t);mod.start(t);o.stop(t+.5);mod.stop(t+.5);
+  o.onended=()=>{o.disconnect();mod.disconnect();mg.disconnect();g.disconnect();};
+ }
+ function release(p){
+  p.picked=false;p.follow=null;p.mission=null;
+  if(p.j){p.j.next=q=>halt(q,'groom',2.5);return;}
+  halt(p,'groom',2.5);
+ }
+ function pickPet(p){
+  if(p.picked){release(p);return;}
+  p.picked=true;p.follow={phase:'picked',cooldown:1.8,repath:0};p.mission='follow';p.happyT=0;p.awake=0;
+  const begin=()=>{halt(p,'picked',1.05);turnTo(p,directions(p)?'f':'side',p.dir);};
+  if(p.j)p.j.next=()=>{if(p.picked)begin();};else begin();
+  purr();
+ }
+ function clearPicks(){for(const p of items)if(p.picked){release(p);if(!p.j)halt(p,'sit',2);}}
+ const bodyLength=p=>{const b=box(p);return (b[2]-b[0])*.9;};
+ function fanTarget(p,q){
+  const group=items.filter(o=>o.picked&&!o.away),i=group.indexOf(p),n=group.length;
+  const radius=Math.max(...group.map(bodyLength),bodyLength(p))*(n>1?1.5+.3*(n-2):1.05);
+  const angle=Math.atan2(-cursor.heading[1],-cursor.heading[0])+(n>1?(i/(n-1)-.5)*2.4:0);
+  return project(p,q[0]+Math.cos(angle)*radius,q[1]+Math.sin(angle)*radius,true);
+ }
+ function finishHunt(p){
+  if(!p.picked||!p.follow)return;
+  p.follow.phase='wiggle';halt(p,'wiggle',.6+(p.id%3)*.25);p.follow.wiggleFor=p.dur;
+  const q=p.follow.prey,dir=LW.petJumpDirection({dir:p.dir},q[0]-p.x,q[1]-p.y);p.follow.view=dir.view;turnTo(p,dir.view,dir.face);
+ }
+ function beginHunt(p,q){
+  const f=p.follow,range=bodyLength(p)*.72,slope=S.slope||.55;
+  // Choose a takeoff on one of the six drawn rays. Steep approaches walk a zigzag first.
+  const dirs=[[1,0],[-1,0],...[1,-1].flatMap(x=>[1,-1].map(y=>[x/Math.hypot(1,slope),y*slope/Math.hypot(1,slope)]))];
+  const candidates=dirs.map(([x,y])=>[q[0]-x*range,q[1]-y*range]).filter(a=>allowed(p,...a)&&clearRest(p,...a)&&free(p,...a)&&validPath(p,[a,q]));
+  candidates.sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.y)-Math.hypot(b[0]-p.x,b[1]-p.y));
+  for(const a of candidates){
+   const route=plan(p,...a);if(!route)continue;
+   f.phase='stalk';f.prey=q.slice();
+   walk(p,...a,{gait:p.kind==='cat'?'stalk':'walk',next:()=>finishHunt(p)});return true;
+  }return false;
+ }
+ function followStep(p,dt){
+  const f=p.follow;if(!p.picked||!f)return;
+  f.cooldown=Math.max(0,f.cooldown-dt);f.repath-=dt;
+  if(p.j||p.turn)return;
+  if(!cursor.inside){if(p.state!=='followWait')halt(p);f.phase='wait';return;}
+  if(f.phase==='picked'){
+   if(p.state==='picked'&&p.t<1.05)return;
+   f.phase='follow';halt(p);f.repath=0;
+  }
+  const q=project(p,cursor.x,cursor.y);if(!q){halt(p);return;}f.target=q;
+  if(f.phase==='recover'&&p.t<.8)return;
+  if(f.phase==='stalk'||f.phase==='wiggle'){
+   if(cursor.speed>45||Math.hypot(q[0]-f.prey[0],q[1]-f.prey[1])>8){f.phase='follow';halt(p);f.repath=0;}
+   else if(f.phase==='wiggle'&&p.t>=f.wiggleFor){
+    if(free(p,...f.prey,'floor')&&validPath(p,[[p.x,p.y],f.prey])&&jump(p,...f.prey,'floor',r=>{
+     r.lastPounce={target:f.prey.slice(),land:[r.x,r.y]};if(!r.picked)return halt(r,'sit',2);
+     r.follow.phase='recover';r.follow.cooldown=3;halt(r,'followLook',.8);
+    },'pounce')){f.phase='pounce';f.cooldown=3;}
+    else{f.phase='follow';f.cooldown=1;halt(p);}
+   }
+   if(f.phase==='stalk'||f.phase==='wiggle'||p.j)return;
+  }
+  if(p.surf!=='floor'){
+   if(p.state!=='move'&&f.repath<=0){const dest=project(p,...q,true);if(dest)trip(p,{x:dest[0],y:dest[1],surf:'floor'},'followWait');f.repath=1;}
+   return;
+  }
+  const distance=Math.hypot(q[0]-p.x,q[1]-p.y),body=bodyLength(p);
+  const busy=items.some(o=>o!==p&&o.picked&&['stalk','wiggle','pounce'].includes(o.follow?.phase));
+  if(p.asset.seq.pounce&&!busy&&f.cooldown===0&&cursor.still>.5&&cursor.speed<20&&distance>body*.35&&distance<body*2.5&&free(p,...q,'floor')){
+   if(beginHunt(p,q))return;
+  }
+  if(f.repath>0)return;f.repath=.35;
+  const dest=fanTarget(p,q);if(!dest){halt(p);return;}
+  f.slot=dest;
+  if(Math.hypot(dest[0]-p.x,dest[1]-p.y)<12*p.k){if(p.state==='move')halt(p);return;}
+  const gait=distance>body*2.5||cursor.speed>145*p.k?'run':'walk';
+  // Keep a committed leg until the destination moves enough to require another route.
+  if(p.state==='move'&&p.goal&&Math.hypot(dest[0]-p.goal.x,dest[1]-p.goal.y)<18){p.gait=gait;return;}
+  f.phase='follow';walk(p,...dest,{gait,next:r=>halt(r)});
+ }
  function pose(p,dt){
   const s=p.asset;if(!prep(s))return;
   const moving=p.state==='move',st=p.state;
@@ -315,15 +458,20 @@ function create({scene,roster,stage}){
   if(moving&&p._petDirection)p.dir=p._petDirection.face;
   let name=gf||'walk1';
   if(st==='jumpPrep'||st==='jump'||st==='land')name=p.j.key+'-'+(st==='jumpPrep'?1:st==='land'?5:p.t/p.j.dur<.36?2:p.t/p.j.dur<.64?3:4);
+  else if(st==='picked')name=s.seq.perk?'perk-'+Math.min(5,1+Math.floor(p.t/.09)):p.spec.sit;
+  else if(st==='wiggle')name='hunt'+(p.follow.view==='side'?'':'-'+p.follow.view)+'-'+(1+Math.floor(p.t/.12)%5);
+  else if(st==='followWait'||st==='followLook')name=p.spec.sit;
   else if(['sit','groom','watch'].includes(st))name=p.spec.sit;
   else if(['sleep','shelter'].includes(st))name=p.spec.sleep;
   else if(st==='loaf')name=s.img.loaf?'loaf':p.spec.sleep;
+  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];name=f.name;p.dir=f.dir;}
   const fam=family(name)===p.spec.sit?'sit':family(name)===p.spec.sleep?'sleep':family(name);
   if(fam!==p.spFam){
    const path=LW.petPath(p.spFam,fam,q=>s.seq[q]);p.sequence=path?{names:path,t:0}:null;
    p.prev=path?null:p.spP;p.poseT=0;p.spFam=fam;
   }
   if(p.sequence){p.sequence.t+=dt;const i=Math.floor(p.sequence.t/.075);if(i<p.sequence.names.length)name=p.sequence.names[i];else p.sequence=null;}
+  if(p.turn||['picked','wiggle'].includes(st)){p.sequence=null;p.prev=null;}
   p.poseT+=dt;
   // Jumps cut into their registered crouch; never show an old larger side pose at takeoff.
   if(fam==='jump')p.prev=null;
@@ -334,7 +482,13 @@ function create({scene,roster,stage}){
  }
  function stepOne(p,dt){
   if(p.away)return;
+  if(p.turn){
+   p.groundVX=p.groundVY=0;p.turn.t+=dt;
+   if(p.turn.t>=p.turn.steps.length*.065){const turn=p.turn;p.turn=null;p.dir=turn.face;p._petDirection={view:turn.view,face:turn.face};LW.petJumpLand(p);if(turn.next)turn.next();}
+   pose(p,dt);return;
+  }
   p.t+=dt;p.awake+=dt;p.happyT=Math.max(0,p.happyT-dt);p.groundVX=p.groundVY=0;
+  followStep(p,dt);
   if(p.state==='jumpPrep'){
    if(p.t>=p.dur){if(free(p,p.j.x1,p.j.y1,p.j.s1)&&flightClear(p,p.j)){state(p,'jump',p.j.dur)}else{p.j=null;p.goal=null;state(p,'sit',1)}}
   }else if(p.state==='jump'){
@@ -348,7 +502,10 @@ function create({scene,roster,stage}){
    if(!p.path){p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;state(p,'sit',2);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.8){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}pose(p,dt);return;}
    const path=p.path,to=path.pts[path.i];
    if(!to){const next=p.next;p.path=null;p.goal=null;state(p,'stand',.4);if(next)next(p);else think(p);pose(p,dt);return;}
-   const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy),speed=(p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
+   const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy);
+   if(p.picked&&dist>.01){const view=Math.abs(dy)<.01?'side':dy>0?'f':'b',face=Math.sign(dx)||p.dir;
+    if(turnTo(p,view,face)){pose(p,dt);return;}}
+   const speed=(p.gait==='stalk'?19:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
    const d=Math.min(dist,speed*dt),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
    if(free(p,x,y,p.surf,false)){
     p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=d/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
@@ -366,14 +523,14 @@ function create({scene,roster,stage}){
   S=stage();items.forEach((p,i)=>{
    const h=(S.homes||[])[i]||{x:S.bounds[0]+(i+1)*150,y:S.bounds[3]-15};
    p.surf=h.surf||'floor';p.x=h.x;p.y=h.y??ledge(p.surf)?.y;p.z=0;p.k=size(p);p.dir=h.dir||1;p.j=null;p.goal=null;p.path=null;p.sequence=null;
-   p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;
+   p.picked=false;p.follow=null;p.turn=null;p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;
   });
   items.forEach(p=>{if(p.surf==='floor'&&!p.away&&!free(p,p.x,p.y)){const q=nearest(p,p.x,p.y);if(q)[p.x,p.y]=q;}});
  }
  function step(dt,t){
-  S=stage();T=t;clock+=dt;
+  S=stage();T=t;clock+=dt;samplePointer(dt);
   for(const p of items){
-   if(!wanted(p)&&!p.away&&p.mission!=='leave')leave(p);
+   if(!wanted(p)&&!p.away&&p.mission!=='leave'){if(p.picked)release(p);leave(p);}
    if(wanted(p)&&!p.away&&p.mission==='leave'&&!p.j){p.mission=null;think(p);}
    if(wanted(p)&&p.away&&clock>(p.returnAt||0)){
     const h=S.homes[p.id],e=S.exits?.[0];if(!e)continue;
@@ -405,7 +562,7 @@ function create({scene,roster,stage}){
   const width=Math.max(12*p.k,contact.span*sc*.6)*(1-clamp(p.z/400,0,.35));
   return {image:tint(p,im,key,p.light),key,x:p.x+sh[0],y:p.y-p.z+sh[1],dir:p.dir,sx,sy,
    ox:-anchor*sc,oy:-foot*sc,w:im.width*sc,h:im.height*sc,depth:depth(p),
-   shadow:{x:p.x+sh[0]+p.dir*(contact.x-anchor)*sc*sx,y:p.y+sh[1]+(contact.y-foot)*sc*sy,width,height:width*.2+3*p.k,alpha:.32*(1-clamp(p.z/220,0,.7))}};
+   shadow:{x:p.x+sh[0]+p.dir*(contact.x-anchor)*sc*sx,y:p.y+sh[1]+(contact.y-foot)*sc*sy,width,height:width*.2+3*p.k,alpha:(p.picked?.27:.32)*(1-clamp(p.z/220,0,.7))}};
  }
  let shadow;
  function drawOne(g,p){
@@ -421,14 +578,17 @@ function create({scene,roster,stage}){
   entries.sort((a,b)=>a.depth-b.depth);for(const e of entries)e.draw(g);if(screenOccluders.size)g.restore();
  }
  function click(x,y){const p=items.filter(p=>!p.away&&inside([x,y],[[box(p)[0],box(p)[1]],[box(p)[2],box(p)[1]],[box(p)[2],box(p)[3]],[box(p)[0],box(p)[3]]])).sort((a,b)=>depth(b)-depth(a))[0];
-  if(p){p.happyT=3;p.awake=0;if(!p.j){p.goal=null;state(p,'groom',3)}return p;}return null;
+  if(p){pickPet(p);return p;}return null;
  }
- function toy(x,y){const p=items.filter(p=>!p.away&&!p.j&&p.surf==='floor').sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];if(!p)return;const q=nearest(p,x,y);if(q)walk(p,...q,{gait:'run',next:r=>state(r,'sniff',3)});}
+ function toy(x,y){if(items.some(p=>p.picked))return;const p=items.filter(p=>!p.away&&!p.j&&p.surf==='floor').sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];if(!p)return;const q=nearest(p,x,y);if(q)walk(p,...q,{gait:'run',next:r=>state(r,'sniff',3)});}
  function forceWalk(id,x,y,opt={}){if(!LW.virtual)throw Error('QA requires virtual=1');const p=items[id];if(opt.from){[p.x,p.y]=opt.from;p.surf=opt.surf||'floor';p.z=0;p.j=null;p.gd=0;p._gait=null;p._petDirection=null;p.sequence=null;p.prev=null;p.spFam='walk1';p.spP='walk1'}p.away=p.gone=false;p.mission='qa';walk(p,x,y,{gait:opt.gait||'walk',next:q=>state(q,'stand',1e9)});return p;}
  function forceJump(id,x,y,opt={}){if(!LW.virtual)throw Error('QA requires virtual=1');const p=items[id];if(opt.from)[p.x,p.y]=opt.from;p.surf=opt.surf0||'floor';p.away=p.gone=false;p.mission='qa';p.k=size(p);jump(p,x,y,opt.surf1||'floor',q=>opt.walk?walk(q,...opt.walk,{next:r=>state(r,'stand',1e9)}):state(q,'stand',1e9));return p;}
- const api={panelBoxes,items,reset,step,draw,drawOne,frame,click,toy,walk,trip,jump,state,forceWalk,forceJump,box,free,
+ const api={panelBoxes,items,reset,step,draw,drawOne,frame,click,toy,walk,trip,jump,state,forceWalk,forceJump,box,free,project,
   get stage(){return S},get ready(){return items.every(p=>p.asset.ready)},get roster(){return ROSTER},
   overlaps:()=>items.flatMap((p,i)=>items.slice(i+1).filter(q=>!p.away&&!q.away&&overlap(box(p),box(q),0)).map(q=>[p.rosterId,q.rosterId]))};
+ LW.on('focus',on=>{if(!on)clearPicks();});
+ LW.on('pause',()=>clearPicks());
+ LW.on('leave',()=>{cursor.inside=false;for(const p of items)if(p.picked&&!p.j){halt(p);p.follow.phase='wait';}});
  LW.on('action',a=>{if(a==='toy'&&S)toy((S.bounds[0]+S.bounds[2])/2,(S.bounds[1]+S.bounds[3])/2);if(a==='feed'||a==='water')items.forEach(p=>{if(a==='feed')p.hunger=.9;else p.thirst=.9;if(!p.away&&!p.j)think(p)})});
  LW.on('calm',on=>{if(on&&S)items.forEach(p=>{if(!p.away&&!p.j){p.goal=null;think(p)}})});
  LW.on('env',()=>{if(S){S=stage();if(S.wet)items.forEach(p=>{if(!p.away&&!p.j)think(p)})}});

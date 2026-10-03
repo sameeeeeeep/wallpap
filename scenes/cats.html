@@ -796,7 +796,7 @@ function bake(cross) {
 // Santorini stage. Motion, identity, sprites and avoidance live in pets.js.
 const calm={on:false,t:0,fade:0,auto:0,br:{phase:'in',level:0},still:0};
 LW.breathDiegetic=true;LW.breathLabelAt=[.47,.525];
-const petSystem=LW.pets.create({scene:'cats',roster:[{id:'orange',scale:1},{id:'black',scale:.96},{id:'grey',scale:1.04},{id:'calico',scale:.92},{id:'siamese',scale:.92}],stage:petStage});
+const petSystem=LW.pets.create({scene:'cats',roster:[{id:'orange',scale:1},{id:'black',scale:.96},{id:'grey',scale:1.04},{id:'calico',scale:.92},{id:'siamese',scale:.92}],stage:petStage,pointer:()=>({x:toWX(LW.pointer.x),y:LW.pointer.y/cssH*1000})});
 const cats=petSystem.items,parts=[],toys=[];
 function petStage(){
  const ledges=L.ledges.map((l,i)=>({...l,id:String(i),depth:l.base,scale:l.depth}));

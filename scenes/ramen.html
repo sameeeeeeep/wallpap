@@ -1592,7 +1592,7 @@ function buildScreen(st) {
 //  machine roof. Each owns its frozen coat + its own state + its own art
 //  canvas; the array is frozen and never reordered.
 // =====================================================================
-const petSystem=LW.pets.create({scene:'ramen',roster:['calico', 'black'],stage:petStage});
+const petSystem=LW.pets.create({scene:'ramen',roster:['calico', 'black'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items;
 const [catA,catB]=animals,cats=animals;
 function petStage(){
@@ -2274,7 +2274,7 @@ function onDown(px, py) {
   if (!L) return;
   const x = toW(px), y = toW(py), T = nowS();
   if (water && x > L.glass.x - 120 && x < L.glass.x + 40 && y > L.glass.y - 120 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; sDing(); return; }
-  if(petSystem.click(x,y)){sPurr(2);return;}
+  if(petSystem.click(x,y))return;
 
   // the radio is the player: its tuning knob = next track, anywhere else on it = play/pause
   if (R.knob && Math.hypot(x - R.knob.x, y - R.knob.y) < R.knob.r + 6) { sClick(); media('next'); return; }

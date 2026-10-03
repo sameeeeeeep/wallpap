@@ -600,7 +600,7 @@ function rebuildArt(swap) {
 //  animals — a golden puppy + an orange cat. Each owns its identity, its
 //  state and its own tint canvases; the array is frozen, never reordered.
 // =====================================================================
-const petSystem=LW.pets.create({scene:'cabin',roster:['golden', 'orange'],stage:petStage});
+const petSystem=LW.pets.create({scene:'cabin',roster:['golden', 'orange'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items;
 const [dog,cat]=animals;
 const kFloor=y=>clamp(1.36*(3.6+(y/KY-850)*.0115)/3.95,.7,1.7);
@@ -1334,8 +1334,6 @@ function onDown(px, py) {
   if (water && Math.abs(x - L.glass.x) < 18 && y > L.glass.y - 34 && y < L.glass.y + 4) { if (water.out < 0) water.out = 0; sDing(); return; }
   const c = petSystem.click(x, y);
   if (c) {
-    if (c.kind === 'cat') sPurr(2.3);
-    say(c);
     return;
   }
   // the record player (+ its sleeve and card) = play/pause

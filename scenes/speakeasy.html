@@ -1423,7 +1423,7 @@ let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
 const hearts = [];
 function petSound() {}
 // One shared roster and engine; this scene supplies geometry and lighting only.
-const petSystem=LW.pets.create({scene:'speakeasy',roster:['black', 'golden'],stage:petStage});
+const petSystem=LW.pets.create({scene:'speakeasy',roster:['black', 'golden'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items, [cat,dog]=animals;
 function petStage(){
  const ledges=Object.entries(NAV.surfs).filter(([id])=>id!=='floor').map(([id,l])=>({id,...l,scale:l.k,depth:id==='boothL'||id==='boothR'?940:id==='stage'?730:id==='lid'?732:770}));
@@ -2363,7 +2363,6 @@ function onDown(px, py) {
   if (water && Math.abs(x - L.glass.x) < 40 && y > L.glass.y - 70 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; sClink(); return; }
   for (const an of animals) if (!an.gone && hitAnimal(an, x, y)) {
     petAnimal(an, T);
-    if (an === cat) sPurr(2.6); else sBoof();
     return;
   }
   // the piano's keys can be played by hand (the jukebox and the poster are decor: no media controls here)

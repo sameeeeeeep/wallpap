@@ -1,0 +1,12 @@
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f00.png
+result: {"errors":[],"report":{"time":0,"events":[{"time":0,"picked":true}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":true,"x":1371.4705882352941,"y":924,"state":"picked","frame":"walk1"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f01.png
+result: {"errors":[],"report":{"time":0.5000000000000001,"events":[{"time":0,"picked":true}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":true,"x":1371.4705882352941,"y":924,"state":"picked","frame":"perk-2"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f02.png
+result: {"errors":[],"report":{"time":1.999999999999999,"events":[{"time":0,"picked":true}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":true,"x":1382.595454459667,"y":930.1186764234052,"state":"move","frame":"walk-f-3"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f03.png
+result: {"errors":[],"report":{"time":4.000000000000007,"events":[{"time":0,"picked":true}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":true,"x":1424.7507355618934,"y":953.3040810296295,"state":"move","frame":"stalk-f-4"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f04.png
+result: {"errors":[],"report":{"time":5.199999999999996,"events":[{"time":0,"picked":true},{"time":5.0333333333333306,"picked":false}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":false,"x":1444.1776715396468,"y":963.988895817394,"state":"groom","frame":"stand-sit-3"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/rooftop-f05.png
+result: {"errors":[],"report":{"time":5.9999999999999885,"events":[{"time":0,"picked":true},{"time":5.0333333333333306,"picked":false}],"bad":[],"start":[1371.4705882352941,924],"pet":{"id":"orange","picked":false,"x":1444.1776715396468,"y":963.988895817394,"state":"groom","frame":"sit"},"errors":[]}}

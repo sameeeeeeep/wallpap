@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 function rig(roster=['orange','golden'],extra={},scene='cats'){
- const listeners={},LW={settings:{pets:true},virtual:true,on:(k,f)=>(listeners[k]??=[]).push(f)};
+ const listeners={},LW={settings:{pets:true},virtual:true,pointer:{x:0,y:0,inside:false},focused:true,on:(k,f)=>(listeners[k]??=[]).push(f)};
  class Image{set src(v){this.srcName=v}}
  const context={LW,Image,performance:{now:()=>0},document:{createElement:()=>({width:200,height:100,getContext:()=>({drawImage(){},fillRect(){},createRadialGradient(){return {addColorStop(){}}}})})}};
  for(const file of ['pet-motion','pets'])vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/'+file+'.js'),'utf8'),context);
@@ -8,10 +8,10 @@ function rig(roster=['orange','golden'],extra={},scene='cats'){
  const S={floor:[[[0,0],[2000,0],[2000,1000],[0,1000]]],bounds:[0,0,2000,1000],scale:[[0,1],[1000,1]],homes:[{x:300,y:600},{x:950,y:600},{x:1400,y:600}],exits:[{x:-300,y:600}],...extra};
  const pets=LW.pets.create({scene,roster,stage:()=>S});pets.initialized=true;
  const im=()=>({width:200,height:100,petK:1,petFa0:.5,petContact:{x:100,y:99,span:100}});
- for(const p of pets.items){const a=p.asset;a.img={walk1:im(),sit:im(),sleep:im(),lie:im()};a.unit=p.spec.height/100;a.seq={jump:true,'jump-f':true,'jump-b':true};a.cyc={img:{},cyc:{walk:true,'walk-f':true,'walk-b':true},has:q=>!!a.cyc.cyc[q]};
- for(const key of ['walk','walk-f','walk-b'])for(let i=1;i<=8;i++)a.img[key+'-'+i]=im();
- for(const key of ['jump','jump-f','jump-b'])for(let i=1;i<=5;i++)a.img[key+'-'+i]=im();a.ready=true;}
- pets.reset();pets.step(.01,0);return {LW,pets,S,context,tick:(n=1)=>{for(let i=0;i<n;i++)pets.step(1/30,i/30)}};
+ for(const p of pets.items){const a=p.asset;a.img={walk1:im(),sit:im(),sleep:im(),lie:im()};a.unit=p.spec.height/100;a.seq=Object.fromEntries(['jump','jump-f','jump-b','pounce','pounce-f','pounce-b','hunt','hunt-f','hunt-b','perk','turn','turn-f','turn-b'].map(k=>[k,true]));a.cyc={img:{},cyc:{walk:true,'walk-f':true,'walk-b':true},has:q=>!!a.cyc.cyc[q]};
+ for(const key of ['walk','walk-f','walk-b','run','run-f','run-b','stalk','stalk-f','stalk-b']){a.cyc.cyc[key]=true;for(let i=1;i<=(key.startsWith('walk')?8:6);i++)a.img[key+'-'+i]=im();}
+ for(const key of Object.keys(a.seq))for(let i=1;i<=5;i++)a.img[key+'-'+i]=im();a.ready=true;}
+ pets.reset();pets.step(.01,0);return {LW,pets,S,context,emit:(k,...args)=>(listeners[k]||[]).forEach(f=>f(...args)),tick:(n=1)=>{for(let i=0;i<n;i++)pets.step(1/30,i/30)}};
 }
 test('one immutable seven member roster; pandas are private to grass',()=>{const {LW}=rig();assert.equal(Object.keys(LW.pets.ROSTER).length,7);assert.ok(Object.isFrozen(LW.pets.ROSTER.orange));assert.throws(()=>LW.pets.create({scene:'cafe',roster:['mei'],stage:()=>({})}));});
 test('all path legs use lateral or drawn .55 headings, including steep zigzags',()=>{const {LW}=rig();for(const b of [[100,0],[100,40],[15,100],[-80,-200],[0,200]])for(const path of LW.pets.geometry.headings([0,0],b))for(let i=1;i<path.length;i++){const dx=path[i][0]-path[i-1][0],dy=path[i][1]-path[i-1][1];assert.ok(Math.abs(dy)<1e-9||Math.abs(Math.abs(dy/dx)-.55)<1e-9);}});
@@ -55,6 +55,93 @@ test('plate masks crop the same backing pixels under a mirrored scene transform'
  sourceArgs=null;LW.pets.plate(g,cv,[[100,50],[140,50],[140,90],[100,90]]);assert.equal(sourceArgs,null);
  cv.petRevision=1;LW.pets.plate(g,cv,[[100,50],[140,50],[140,90],[100,90]]);assert.ok(sourceArgs);
 });
+
+const point=(r,x,y,inside=true)=>Object.assign(r.LW.pointer,{x,y,inside});
+const tap=(r,p)=>r.pets.click(p.x,p.y-30*p.k);
+test('tap toggles picks independently and uses a stationary drawn perk before following',()=>{
+ const r=rig(['orange','black']),[a,b]=r.pets.items;point(r,700,600);tap(r,a);tap(r,b);
+ assert.ok(a.picked&&b.picked);const start=[a.x,a.y];let perk=false;
+ for(let i=0;i<40;i++){r.tick();perk||=a.spP.startsWith('perk-');assert.deepEqual([a.x,a.y],start);}
+ assert.ok(perk);tap(r,a);assert.equal(a.picked,false);assert.ok(b.picked);assert.equal(a.state,'groom');
+ r.tick(100);assert.ok(b.follow);
+});
+test('multiple followers reserve distinct arc slots and never overlap while the cursor travels',()=>{
+ const r=rig(['orange','black','grey']);point(r,1100,750);for(const p of r.pets.items)tap(r,p);
+ const starts=r.pets.items.map(p=>p.x);let travel=0;
+ for(let i=0;i<1500;i++){point(r,1100+Math.sin(i/260)*280,650+Math.sin(i/340)*150);r.tick();assert.equal(r.pets.overlaps().length,0);}
+ for(const [i,p] of r.pets.items.entries()){travel+=Math.abs(p.x-starts[i]);assert.ok(p.follow.slot);}
+ assert.ok(travel>300,'followers must actually move');
+ for(let i=0;i<3;i++)for(let j=i+1;j<3;j++){const a=r.pets.items[i],b=r.pets.items[j];assert.ok(!r.LW.pets.geometry.overlap(r.pets.box(a,...a.follow.slot),r.pets.box(b,...b.follow.slot),0));}
+});
+test('following only translates on drawn lateral or three-quarter headings, including runs and turns',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,1300,850);tap(r,p);let moved=0,run=false,turn=false;
+ for(let i=0;i<1400;i++){if(i===600)point(r,500,150);r.tick();turn||=p.spP.startsWith('turn-');
+  if(Math.hypot(p.groundVX,p.groundVY)>.01){moved++;run||=p.gait==='run';assert.ok(Math.abs(p.groundVY)<1e-6||Math.abs(Math.abs(p.groundVY/p.groundVX)-.55)<1e-6);assert.ok(!p.spP.startsWith('perk-'));}
+ }assert.ok(moved>100&&run&&turn);
+});
+test('stationary target causes stalk, timed wiggle and exact pounce landing in all drawn views',()=>{
+ for(const target of [[455,600],[455,685.25],[455,514.75]]){
+  const r=rig(['orange']),p=r.pets.items[0];point(r,...target);tap(r,p);const seen=new Set();let landed=false,wiggle=0;
+  for(let i=0;i<1100;i++){r.tick();seen.add(p.follow?.phase);if(p.state==='wiggle'&&!p.turn)wiggle+=1/30;if(p.lastPounce){landed=true;break;}}
+  assert.ok(landed,JSON.stringify({target,x:p.x,y:p.y,phase:p.follow?.phase,state:p.state,path:p.path}));
+  assert.ok(seen.has('stalk')&&seen.has('wiggle')&&seen.has('pounce'));assert.ok(wiggle>=.59&&wiggle<=1.25);
+  assert.ok(Math.hypot(p.x-target[0],p.y-target[1])<2);assert.ok(p.follow.cooldown>=2.9);
+ }
+});
+test('fast pointer chases with a run instead of launching a pounce',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,900,600);tap(r,p);let ran=false;
+ for(let i=0;i<300;i++){point(r,900+(i%100)*5,600);r.tick();ran||=p.gait==='run'&&p.state==='move';assert.ok(!p.j?.action);}
+ assert.ok(ran);
+});
+test('dogs play-bow and bounce through drawn hunt and pounce frames',()=>{
+ const r=rig(['corgi']),p=r.pets.items[0];point(r,485,600);tap(r,p);let bow=false,bounce=false;
+ for(let i=0;i<1100&&!p.lastPounce;i++){r.tick();bow||=p.spP.startsWith('hunt-');bounce||=p.spP.startsWith('pounce-');assert.notEqual(p.gait,'stalk');}
+ assert.ok(bow&&bounce&&p.lastPounce);
+});
+test('pointer leave waits, return resumes, pause and reset clear picks',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,1100,600);tap(r,p);r.tick(120);point(r,1100,600,false);r.tick(40);const x=p.x;
+ assert.equal(p.state,'followWait');r.tick(100);assert.equal(p.x,x);assert.ok(p.picked);
+ point(r,1300,600);r.tick(120);assert.ok(p.x>x);r.emit('focus',false);assert.equal(p.picked,false);assert.equal(p.state,'sit');
+ tap(r,p);r.pets.reset();assert.equal(p.picked,false);
+});
+test('cursor projects to floor and excludes full prop and widget footprints',()=>{
+ const r=rig(['orange'],{clear:[200,1700],avoid:[[700,400,180,180]]}),p=r.pets.items[0];
+ assert.deepEqual(Array.from(r.pets.project(p,400,-200)),[400,0]);
+ for(const [x,y] of [[0,600],[1950,600],[780,500]]){const q=r.pets.project(p,x,y);assert.ok(q);assert.ok(q[0]>=246&&q[0]<=1654);const b=r.pets.box(p,...q);assert.ok(!r.LW.pets.geometry.overlap(b,[700,400,880,580],0));}
+});
+test('a picked ledge pet reaches the floor only through declared jump links',()=>{
+ const r=rig(['orange'],{ledges:[{id:'shelf',x0:250,x1:650,y:300,depth:650,scale:1}],links:[[{surf:'shelf',x:550},{surf:'floor',x:700,y:600}]],homes:[{x:350,y:300,surf:'shelf'}]}),p=r.pets.items[0];
+ point(r,1200,700);tap(r,p);let jumped=false;
+ for(let i=0;i<1500;i++){r.tick();if(p.j&&p.j.s0==='shelf'){jumped=true;assert.equal(p.j.x0,550);assert.equal(p.j.x1,700);assert.equal(p.j.y1,600);}}
+ assert.ok(jumped);assert.equal(p.surf,'floor');assert.ok(p.x>700);
+});
+test('moving a rested cursor cancels a wiggle; releasing in flight cannot restore a pick',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,455,600);tap(r,p);
+ for(let i=0;i<700&&p.follow?.phase!=='wiggle';i++)r.tick();assert.equal(p.follow.phase,'wiggle');
+ point(r,1300,600);r.tick(50);assert.notEqual(p.follow.phase,'wiggle');assert.ok(!p.j?.action);
+ point(r,p.x+140,p.y);
+ for(let i=0;i<900&&p.state!=='jump';i++)r.tick();assert.equal(p.state,'jump');
+ const end=[p.j.x1,p.j.y1];tap(r,p);assert.equal(p.picked,false);point(r,1500,300);
+ for(let i=0;i<80&&p.j;i++)r.tick();assert.equal(p.picked,false);assert.equal(p.follow,null);assert.deepEqual([p.x,p.y],end);
+});
+test('leave cancels an uncommitted turn immediately without dropping the pick',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,800,600);tap(r,p);assert.ok(p.turn);
+ r.emit('leave');point(r,800,600,false);assert.equal(p.turn,null);assert.ok(p.picked);assert.equal(p.state,'followWait');
+ r.tick(50);assert.ok(!p.j);assert.equal(p.x,300);
+});
+test('slow continuous pointer travel is not mistaken for a stationary prey target',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];point(r,455,600);tap(r,p);
+ for(let i=0;i<500;i++){point(r,455+i*.4,600);r.tick();assert.ok(!['stalk','wiggle','pounce'].includes(p.follow.phase));}
+});
+test('picked purr uses the FX bus and never initializes audio when muted or FX-disabled',()=>{
+ const r=rig(['orange']),p=r.pets.items[0];let calls=0,buses=[],levels=[];
+ const gain=()=>({gain:{setValueAtTime(v){levels.push(v)},linearRampToValueAtTime(v){levels.push(v)},exponentialRampToValueAtTime(v){levels.push(v)}},connect(){},disconnect(){}});
+ r.LW.audio=()=>{calls++;return {currentTime:0,createGain:gain,createOscillator:()=>({frequency:{value:0},connect(){},disconnect(){},start(){},stop(){}})}};
+ r.LW.bus=k=>{buses.push(k);return {}};r.LW.muted=true;tap(r,p);tap(r,p);assert.equal(calls,0);
+ r.LW.muted=false;r.LW.audioPrefs={fx:{on:false}};tap(r,p);tap(r,p);assert.equal(calls,0);
+ r.LW.audioPrefs.fx.on=true;tap(r,p);assert.equal(calls,1);assert.deepEqual(buses,['fx']);assert.ok(Math.max(...levels)<=.014);
+});
+
 test('Play screen occluder maps through mirrored canvas transforms and blocks new crossings',()=>{
  const {LW,pets,tick}=rig(['orange']);let mirrored=false;
  const g={canvas:{width:2000,height:1000,getBoundingClientRect:()=>({x:0,y:0,width:2000,height:1000})},getTransform:()=>({inverse:()=>({transformPoint:({x,y})=>({x:mirrored?2000-x:x,y})})}),save(){},restore(){},translate(){},scale(){},drawImage(){},beginPath(){},rect(){},clip(){}};

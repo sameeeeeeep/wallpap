@@ -901,3 +901,42 @@ Shared Play shell over cats, koi and train, light/dark: green-ink glass panel, c
 - 63 accepted baseline frames, 63 final frames, 42 layout frames, plus diagnostic/night/transition runs; all seven scenes load with zero reported JS errors. Final night display luma .188–.245; including wide/left .187–.245, all above G1 .12. Raw PNGs deleted; JPEGs/logs/results retained. Disk stayed around 15–16 GiB free (3 GiB guard). All 64 `node --test tests/*.cjs` tests pass; shared kit/moon/preset copies match their sources byte-for-byte.
 - Acceptance LIMIT: beach, butterfly-garden and sky-kites still cannot boot in this worktree because referenced art is absent. Pending permission to recover beach/art/crab.webp, butterfly-garden/art/garden.webp, and sky-kites/art/{diamond,delta}.webp; cloud.webp is also needed only to reproduce sky-kites' original baseline. The original audit sheets were inspected read-only. The isolated sky fixture is NOT a substitute for these three full scene sequences. Full ten-scene signoff remains open. Existing actor/cast, exposure-mask and performance audit gaps are outside this shared-fix pass; fallback grading reduces but cannot repaint baked shadow geometry.
 - Local commits only. No pets, cats, rooftop, host code, installed/running app, other-worktree writes, releases or pushes.
+## 2026-10-04 — Shared pet FOLLOW mode
+
+Tap toggles independent picks. The drawn turn/perk/front sit precedes following;
+a tiny gated purr uses the FX bus and the contact shadow is subtly lighter. Eight
+scene adapters supply world-space pointer coordinates and preserve mirror/ultrawide
+transforms. Released pets rest briefly and resume their existing routines.
+
+Cursor targets project onto floor polygons with prop/widget exclusions. Followers
+reserve separate arc slots roughly a body length away, walk/run by distance and
+cursor speed, and travel only lateral or drawn 3/4 headings (steep trips zigzag).
+Drawn angle turns stop translation; surface changes use declared jump links. Cats
+stalk with their drawn creeping gait, wiggle for 0.6–1.1 seconds, then use a locked
+pounce target and a three-second cooldown. Dogs trot, play-bow and bounce. Only one
+follower claims a pounce at a time; moving prey cancels an unlaunched hunt. Slow
+continuous pointer movement is distinguished from an actual rest. Leaving waits
+without dropping picks; pause/reset clears them, and an in-flight release finishes
+its already committed landing without restoring selection.
+
+Verification: **75/75 Node tests pass**, covering pick toggles, stationary perk,
+multiple reservations/no overlap, drawn travel headings, all three exact pounce
+landings, dog bow/bounce, fast/slow pointer behavior, leave/resume/pause/reset,
+full-body prop/widget projection, declared ledge links, release during flight,
+leave during a pending turn and FX muting/routing.
+
+LOOKED at 320 pointer-driven WKWebView snapshots in Santorini Cats and Speakeasy
+(day/night), 120 additional new-angle run/pounce/bounce snapshots, and 48 mirrored
+ultrawide input snapshots across all eight scenes. All four interaction runs show
+twelve total targeted landings with **0 scene-pixel endpoint error**, no reported
+JS errors or overlaps, two picks, release and pause clearing. One 79-frame run hit
+wkshot's 60-second timeout and was rerun successfully to all 80 frames. The Grass
+fixture needed one render after QA placement to refresh its hit regions; its
+actual input check then passed. Pandas retain their existing lateral-only art.
+
+Evidence: `shots/follow/README.md`, `shots/follow/acceptance.json`, and
+`shots/follow-angles/`. Reproduction: `tools/follow/README.md`. Combined with the
+gaze-fix matrix, this task retains **600 verified scene snapshots** as downscaled
+JPEGs. All raw capture/generation PNGs removed; source runtime PNGs retained.
+Approximately 14 GiB free at acceptance. Prompts remain in `art-src/gaze-fix/` and
+`art-src/follow/`. No push, release, app build/install/relaunch or sibling-tree edit.

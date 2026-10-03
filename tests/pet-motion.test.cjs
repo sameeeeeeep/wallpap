@@ -191,3 +191,98 @@ test('installed cycles plant their paws (plant.py QA reports)',()=>{
  for(const f of fs.readdirSync(dir).filter(f=>f.endsWith('.json'))){const r=JSON.parse(fs.readFileSync(dir+'/'+f,'utf8'));
   assert.ok(r.overlap_after[0]>=r.overlap_before[0],f);if(/walk/.test(f))assert.ok(r.overlap_after[0]>=.75,f+' '+r.overlap_after[0]);}
 });
+
+test('direction selection uses hysteresis, contact phases and signed ground velocity',()=>{
+ const {LW}=load(),p={dir:1};
+ assert.equal(LW.petDirection(p,10,0,0).view,'side');
+ assert.equal(LW.petDirection(p,10,12,.25).view,'side'); // raised paw: defer
+ assert.equal(LW.petDirection(p,10,12,.5).view,'f');
+ assert.equal(LW.petDirection(p,10,7,.5).view,'f'); // inside dead band
+ assert.equal(LW.petDirection(p,10,5,0).view,'side');
+ assert.equal(LW.petDirection(p,-10,-20,.25).face,1);
+ assert.equal(LW.petDirection(p,-10,-20,.5).view,'b');
+ assert.equal(p._petDirection.face,-1);
+ assert.equal(LW.petDirection(p,0,20,0).view,'f');
+ assert.equal(p._petDirection.face,-1); // pure vertical retains nearest facing
+ assert.equal(LW.petDirection(p,0,0,0).view,'f');
+});
+function directionRig(LW){
+ const C=plantRig(LW),old=C.has;
+ for(const view of ['f','b']){
+  C.cyc['walk-'+view]=true;C.plant['walk-'+view]={n:8,H:100};
+  for(let i=1;i<=8;i++)C.img[`walk-${view}-${i}`]={petFa0:.5,petFa:.5,petW0:200,petCycle:'walk-'+view};
+ }
+ C.has=g=>!!C.cyc[g];return C;
+}
+test('diagonal gait keeps distance phase, chooses the same contact index, and plants both axes',()=>{
+ const {LW}=load(),C=directionRig(LW),p={dir:1};
+ LW.petGait(p,C,0,100,'walk',{vx:1,vy:0});
+ assert.equal(LW.petGait(p,C,20,100,'walk',{vx:1,vy:1}),'walk-3');
+ assert.equal(LW.petGait(p,C,40,100,'walk',{vx:1,vy:1}),'walk-f-5');
+ assert.equal(p._gait.ph,.5);
+ LW.petGait(p,C,44,100,'walk',{vx:1,vy:1});
+ assert.ok(Math.abs(p._gait.shift[0]+4/Math.sqrt(2))<1e-9);
+ assert.ok(Math.abs(p._gait.shift[1]+4/Math.sqrt(2))<1e-9);
+ assert.equal(C.img['walk-f-5'].petFa,.5); // vector consumers must not also apply horizontal planting
+ // Fallback run advances the walk by distance, not time (same stance length).
+ const r={};LW.petGait(r,C,0,100,'run',{vx:0,vy:-1});
+ assert.equal(LW.petGait(r,C,20,100,'run',{vx:0,vy:-1}),'walk-b-3');
+ assert.equal(r._gait.shift[0],0);
+});
+test('a missing directional cycle falls back to a complete side loop without resetting phase',()=>{
+ const {LW}=load(),C=plantRig(LW),p={};
+ LW.petGait(p,C,0,100,'walk',{vx:1,vy:2});
+ assert.equal(LW.petGait(p,C,20,100,'walk',{vx:1,vy:2}),'walk-3');
+ C.cyc['walk-f']=true;C.has=g=>!!C.cyc[g]; // hot availability keeps phase
+ assert.equal(LW.petGait(p,C,30,100,'walk',{vx:1,vy:2}),'walk-f-4');
+ assert.equal(p._gait.ph,.375);
+});
+test('directional loading is atomic: one failed frame disables only that view',()=>{
+ const LW={},images=[];
+ class Image{constructor(){this.naturalWidth=100;images.push(this);}set src(v){this.url=v;}}
+ vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/pet-motion.js'),'utf8'),{LW,Image});
+ let done=0;const C=LW.petCycleLoad('art/sprites/','cats/orange',()=>done++);
+ assert.equal(images.length,30);
+ for(const im of images){if(im.url.endsWith('walk-f-4.png'))im.onerror();else im.onload();}
+ assert.equal(done,1);assert.equal(C.left,0);assert.equal(C.raw['walk-f'],undefined);
+ assert.equal(C.raw.walk.length,8);assert.equal(C.raw['walk-b'].length,8);assert.equal(C.raw.run.length,6);
+ assert.ok(!LW.PET_DIRECTION_HAS['dogs/corgi']);
+});
+test('all cat directional assets contain eight nonempty PNG frames',()=>{
+ for(const coat of ['orange','black','grey','calico','siamese'])for(const view of ['f','b'])for(let i=1;i<=8;i++){
+  const b=fs.readFileSync(require.resolve(`../scenes/art/sprites/cats/${coat}/cycle/walk-${view}-${i}.png`));
+  assert.equal(b.toString('hex',0,8),'89504e470d0a1a0a');assert.ok(b.readUInt32BE(16)>50);assert.ok(b.readUInt32BE(20)>50);
+ }
+});
+test('directional padding never changes the animal scale or foot baseline',()=>{
+ const {LW}=load(),geom=LW.PET_DIRECTION_LAYOUT['cats/orange']['walk-f'];
+ LW.petCycleMeasure=im=>({w:im.width,h:im.height,top:0,bot:im.height-1,cx:im.width*.5});
+ const ims=Array.from({length:8},()=>({width:240+2*geom.pad,height:206+2*geom.pad}));
+ const C={set:'cats/orange',raw:{'walk-f':ims},img:{},cyc:{},left:0};
+ assert.equal(LW.petCyclePrep(C,{im:{width:300,height:200},k:1,fa:.5}),true);
+ for(const im of Object.values(C.img)){
+  assert.ok(Math.abs(im.petK*geom.height-200)<1e-9);
+  assert.equal(im.petFootPad,geom.pad);
+ }
+});
+test('2D planted treadmill holds world contact for front, back, left and vertical movement',()=>{
+ const {LW}=load();
+ for(const [vx,vy] of [[1,1],[1,-1],[-1,1],[0,1]]){
+  const C=directionRig(LW),p={dir:Math.sign(vx)||1},len=Math.hypot(vx,vy),v=[vx/len,vy/len],H=100;
+  LW.petGait(p,C,0,H,'walk',{vx,vy});let previous=null;
+  for(let distance=.5;distance<39;distance+=.5){
+   LW.petGait(p,C,distance,H,'walk',{vx,vy});
+   const k=Math.floor(p._gait.ph*8+1e-6),step=80/8;
+   const paw=v.map((axis,j)=>distance*axis+p._gait.shift[j]-k*step*axis);
+   if(previous)for(let j=0;j<2;j++)assert.ok(Math.abs(paw[j]-previous[j])<1e-8);
+   previous=paw;
+  }
+ }
+});
+test('directional art registration and runtime geometry remain synchronized',()=>{
+ const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-layout.json'),'utf8'));
+ assert.equal(JSON.stringify(LW.PET_DIRECTION_LAYOUT),JSON.stringify(layout));
+ const reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-plant-qa.json'),'utf8'));
+ assert.equal(Object.keys(reports).length,10);
+ for(const r of Object.values(reports))assert.ok(r.max_contact_slip_px<1,'registered contact drift '+r.max_contact_slip_px);
+});

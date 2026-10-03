@@ -606,3 +606,45 @@ and preserves a common vertical extent/baseline per strip. Runtime layout suppli
 per loop relative to the existing standing height. Inspected `shots/cats-dirs/raw-contact.jpg`
 and `installed-contact.jpg`: front/rear body angles are distinct, identities and coat patches
 are consistent. Directional running will use the allowed faster walk fallback; no new run art.
+
+### Direction selection, paths and contact registration
+
+Added optional `LW.PET_DIRECTION_HAS` and `LW.PET_DIRECTION_LAYOUT` registries to the shared
+cycle loader/preparer. All eight frames must load before a view becomes available; one failed
+frame disables that view without disabling side walk/run or the other view. Existing callers
+without `vx`/`vy` retain their side-only behavior. Cats supply actual ground displacement per
+frame: enter a depth view above 40°, return to side below 30° (35° ±5° hysteresis), down-screen
+is front, up-screen is back. Pure vertical travel preserves the most recent horizontal facing.
+Both view and facing commit on walk frames 1/5 or run frame 1, preserving distance-derived phase.
+Directional run/trot uses the walk art at the movement's higher distance rate.
+
+`petGait` now supplies a two-axis planting offset for vector callers. Cats apply that vector
+once, without the former second horizontal image-anchor offset. Drawn directional frames are
+walk-family poses; side turn sheets no longer interrupt a moving directional cycle. Resting
+poses and their transitions remain the existing art. Transparent art padding is excluded from
+body height, baseline, hit bounds, bench clearance and head position. The contact shadow uses
+the standing walk reference width across all walking views; depth scaling is unchanged.
+
+The first enlarged captures exposed inter-frame paw drift in the generated sheets. Added
+`art-src/cycles/plant-directions.py`, extending the existing side-sheet planting method to
+2D stance chains, with soft leg corrections and rigid original paw patches. Tuned directional
+stride to 0.5 walking heights. Preserved original torso centroids and vertical padding in
+`directions-layout.json` (mirrored in the runtime registry). Detached edge speckles are removed.
+`directions-plant-qa.json` records input paw landmarks, offsets, stance chains and canonical
+45-degree registration residuals. These measure the registered landmarks, not a claim of
+zero pixel error for every possible heading or depth change.
+
+Reproduce the installed art with `python3 art-src/cycles/cut-directions.py` followed by
+`python3 art-src/cycles/plant-directions.py`. If regenerating masters, copy the resulting
+`directions-layout.json` values into `LW.PET_DIRECTION_LAYOUT`; a regression test enforces parity.
+
+Replaced the old side-art depth suppression/meander with ground-plane distance paths. About
+35% of floor wander candidates make a depth approach; bowls/toys can be approached directly.
+The existing floor bounds, clear-spot checks, ledge baselines, acceleration and arrival easing
+remain in use. Virtual-only `__cats.forceWalk(id,x,y,{from:[x,y],gait,turn:{after,to:[x,y]}})`
+provides a deterministic isolated walk and optional mid-walk retarget for WebKit capture.
+
+Validation so far: `node --test tests/*.cjs` passes **43/43**. New tests cover missing-frame
+atomicity, hysteresis, contact-only changes, vertical/left movement, phase continuity, run
+fallback, vector planting, geometry/metadata parity and all 80 installed PNGs. Full day/night
+WebKit matrix and visual findings follow below.

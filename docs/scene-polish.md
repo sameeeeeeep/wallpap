@@ -435,3 +435,64 @@ has been marked complete or substituted for the required browser verification.
 - `wkshot` now records errors from document start, gives settings-triggered assets one second to load
   before stepping, accepts non-LW pages, and prints an optional `__shotReport()` diagnostic.
   Recompiled only this screenshot helper; no installed/running wallpaper app touched.
+
+# 2026-10-03 — P0 Night Drive motion + painted world
+
+- Distance fade covers the last 70 segments; same-direction traffic now enters at the horizon too.
+  Forest detail changes blend across 60 segments instead of popping at fixed cutoffs.
+- Road LOD strips anchored to world segment boundaries. Crest clipping calculated per segment independently
+  of LOD. All item faces, emissive layers and traffic lights clip behind crests; billboards reveal gradually.
+  Source/destination sprite cropping caps the drawn rectangle to the viewport while close objects continue
+  expanding beyond its edges. Segment zero traffic stays drawable until it actually passes the near plane.
+- Coast/forest verges now share the road's ground plane (raised banks had unsupported roots over hidden
+  crests); low continuous woodland floor replaces sawtooth walls. Forest density reduced from .38 to .28.
+- Three generated transparent parallax plates: `scenes/art/drive/{coast,forest,desert}-painted.png`.
+  Cached daylight/night/fog grading, correct horizon alignment, retained biomes during transitions.
+  Generated `roadside-painted.png` supplies cottage/diner/fuel buildings and cactus/Joshua/sage sprites;
+  runtime crops each cell to its alpha bounds. Existing train tree art reused and relit.
+- `tools/check-drive.js`: 66s WebKit contact sheets; finite-state, crest monotonicity and projected road
+  contact assertions at LOD joins. Both motion runs: 9 frames, max 4 traffic cars, zero issues/errors.
+  Opened `shots/p0-drive-{traffic,transition}-motion.png`, `p0-drive-wide-left.png` (3440×1440 rain/day),
+  `p0-drive-desert-final.png`, `p0-drive-forest-final.png` and intermediate biome iterations.
+  Forest 1440×900, 240 frames alone: 3.88 ms total, 3.08 ms JS mean, 6 ms p90, 10 ms worst.
+  This meets the mean budget; occasional frames exceed 4 ms. Node suite 32/32 passes.
+- Screenshot helper now uses a nonpersistent WebKit data store: repeated URLs no longer return stale code
+  or saved scene settings. No app rebuild/reload/install.
+
+Built-in image generation prompts (no API/CLI fallback):
+1. **Coast**: “Use case: stylized-concept. Create a premium hand-painted parallax background asset for a calm
+   cinematic driving wallpaper, wide 3:1 composition. Coastal panorama: hazy blue-grey headlands and tiny rocky
+   islands along a low horizon, calm textured slate-blue sea filling the entire lower half, a low weathered
+   coastal bluff far left, very distant hills on the right. Restrained natural gouache/oil brushwork, believable
+   atmospheric perspective, muted daylight colors suitable for runtime dusk grading. No road, no cars, no
+   buildings, no people, no sun or moon, no text. The upper 40 percent above the irregular distant mountain
+   horizon must be genuinely TRANSPARENT, no painted sky, no checkerboard. Terrain and sea are opaque and
+   extend to left, right and bottom edges. The horizon sits about halfway down. This is one continuous
+   landscape layer, not a mockup, not multiple panels. Save the generated asset.”
+2. **Forest**: “Use case: stylized-concept. A single wide 3:1 hand-painted background layer for a cinematic
+   driving wallpaper: Pacific Northwest evergreen valley, layered distant fir-covered ridges, delicate mist
+   between the blue-green hills, nearer dark moss-green conifers at the left and right edges and a low open
+   valley in the middle. Restrained realistic gouache and oil painting detail, atmospheric perspective, neutral
+   muted daylight for runtime night grading. Terrain fills lower half to bottom and both edges. Genuinely
+   transparent sky above the irregular tree-covered ridge, upper 40 percent empty transparent. No sky paint,
+   checkerboard, sun, moon, road, buildings, vehicles, people, text, or labels. Landscape is continuous, not
+   panels. Fine natural tree silhouettes, never geometric triangles.”
+3. **Desert**: “Use case: stylized-concept. A single wide 3:1 hand-painted parallax background layer for a premium
+   calm driving wallpaper: American southwest desert, distant layered sandstone mesas and buttes, hazy dusty
+   rose and ochre cliffs, subtle wind-carved strata, low undulating desert basin in the foreground. All formations
+   distant, strongest rock shapes on outer thirds, low open center. Restrained realistic oil/gouache brushwork,
+   neutral muted daylight suitable for runtime dusk/night grading. Upper 40 percent and sky above the irregular
+   low mesa skyline genuinely transparent; terrain opaque extending to both edges and bottom. No sky paint,
+   checkerboard, sun, moon, road, cars, people, buildings, labels or text. Continuous cinematic landscape, not panels.”
+4. **Roadside atlas**: “Use case: stylized-concept. Production sprite atlas for a cinematic painted road-trip
+   wallpaper. Transparent background, exactly SIX isolated objects in a spacious 3 COLUMN by 2 ROW regular grid,
+   each object entirely inside its cell with transparent margins and clearly separated from neighbors. Top row
+   left: small realistic one-story roadside timber cottage, three-quarter front view, low porch, warm window
+   glints. Top middle: charming weathered mid-century roadside diner, single low red-and-cream building, chrome
+   trim, large warm windows, no sign pole. Top right: a modest small rural gas-station building with an attached
+   low canopy and two vintage pumps, no logos. Bottom row left: one realistic branching saguaro cactus, complete
+   base at ground. Bottom middle: one realistic Joshua tree, complete trunk and base. Bottom right: a low desert
+   sagebrush clump with two small dusty sandstone rocks at its foot. Muted natural gouache/oil painting, physically
+   plausible materials, soft neutral afternoon lighting, fine texture, no outlines or cartoon shapes. No people,
+   cars, text, numbers, logos, ground plane, scenery, drop shadow or labels. Genuine transparency in all empty
+   areas. Match scale within each row, bottom edges aligned within each cell. Wide 3:2 atlas.”

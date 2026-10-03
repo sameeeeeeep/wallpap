@@ -4,7 +4,7 @@ Status: [ ] todo · [~] in progress (agent) · [x] done · owner in brackets
 
 ## Priority verification pass — 2026-10-03
 - [x] P0 Train: actual mask bounds cover both openings; muted panorama grade; trees grounded on the matching moving foreground, smaller with contact shadows, excluded from bridges. All four skins checked in WebKit day/night/surge/tunnel.
-- [ ] P0 Night Drive: entry/exit robustness, painted biome backdrops, performance and ultrawide/left-layout checks
+- [x] P0 Night Drive: continuous distance/detail fades, crest clipping, road-aligned traffic, painted biome/roadside assets. Opened motion contact sheets (66s each), ultrawide left/rain and individual biome shots. Forest 3.88 ms total / 3.08 ms JS at 1440×900.
 - [ ] P0 Menu: every scene's controls, light/dark, overflow
 - [ ] P1 Cats + Grass: finish pets/toggles, moon/weather/layout and mountain band
 - [ ] P1 Rooftop + Ramen: verify/fix day/night plate alignment

@@ -183,7 +183,25 @@ const CONE = (() => {      // volumetric streetlight cone (head at top centre)
 // =====================================================================
 //  art slot
 // =====================================================================
-const ART = { car: null };
+const ART = { car: null, plates: {}, trees: {} };
+// Generated transparent landscapes and existing painted tree cutouts; all lighting is baked offscreen.
+for(const id of ['coast','forest','desert']){
+  const im=new Image();im.onload=()=>{ART.plates[id]=im;if(E&&W>1)requestBake(false);};im.src='art/drive/'+id+'-painted.png';
+}
+for(const [id,path] of Object.entries({fir:'swiss/tree1',tpine:'swiss/tree2',pine:'shinkansen/tree1',cypressW:'orient/tree2',bush:'scrub',rock:'swiss/scrub'})){
+  const im=new Image();im.onload=()=>{ART.trees[id]=im;if(E&&W>1)bakeSprites();};im.src='art/train/'+path+'.png';
+}
+(()=>{const im=new Image();im.onload=()=>{
+  const full=newCanvas(im.width,im.height),g=full.getContext('2d');g.drawImage(im,0,0);
+  const p=g.getImageData(0,0,im.width,im.height).data;
+  ['house','diner','fuel','saguaro','joshua','sage'].forEach((name,i)=>{
+    const cx=(i%3)*512,cy=i<3?0:420,cw=512,ch=i<3?420:604;
+    let x0=cx+cw,y0=cy+ch,x1=cx,y1=cy;
+    for(let y=cy;y<cy+ch;y++)for(let x=cx;x<cx+cw;x++)if(p[(y*im.width+x)*4+3]>32){x0=Math.min(x0,x);x1=Math.max(x1,x+1);y0=Math.min(y0,y);y1=Math.max(y1,y+1);}
+    const c=newCanvas(x1-x0,y1-y0);c.getContext('2d').drawImage(im,x0,y0,c.width,c.height,0,0,c.width,c.height);
+    c.naturalWidth=c.width;c.naturalHeight=c.height;ART.trees[name]=c;
+  });if(E&&W>1)bakeSprites();
+};im.src='art/drive/roadside-painted.png';})();
 (() => { try { const im = new Image(); im.onload = () => { if (im.naturalWidth) { ART.car = im; if (E && W > 1) bakeCar(); } }; im.onerror = () => {}; if (!/[?&]noart=1/.test(location.search)) im.src = 'art/drive/car.png'; } catch (e) {} })();
 
 // =====================================================================
@@ -280,8 +298,8 @@ const NB = 10, NQ = 8;
 const BIOME_IDS = ['coast', 'forest', 'desert'];
 const BIO = {
   //          curve scale, dead zone, straight gate, hill amps (broad, swell, dips), fog, streetlights, towns, cliff/sea, forest walls
-  coast: { curve: 1.0, dead: 0.12, open: 0.22, hA: 6500, hB: 1600, hC: 350, fogK: 1.0, lightsK: 1, townK: 1, sea: 1, walls: 0, bank: 1 },
-  forest: { curve: 1.4, dead: 0.05, open: 0.08, hA: 5200, hB: 1400, hC: 700, fogK: 1.5, lightsK: 0, townK: 0.75, sea: 0, walls: 1, bank: 0.35 },
+  coast: { curve: 1.0, dead: 0.12, open: 0.22, hA: 6500, hB: 1600, hC: 350, fogK: 1.0, lightsK: 1, townK: 1, sea: 1, walls: 0, bank: 0 },
+  forest: { curve: 1.4, dead: 0.05, open: 0.08, hA: 5200, hB: 1400, hC: 700, fogK: 1.5, lightsK: 0, townK: 0.75, sea: 0, walls: 1, bank: 0 },
   desert: { curve: 0.34, dead: 0.26, open: 0.48, hA: 1200, hB: 9500, hC: 2000, fogK: 0.55, lightsK: 0, townK: 0, sea: 0, walls: 0, bank: 0.25 },
 };
 const PAL = {
@@ -407,8 +425,8 @@ function makeSeg(i) {
   const far = 2.4e5;
   s.wallL = fw > 0.001 ? Math.exp(lerp(Math.log(far), Math.log(Math.max(wOff(51), 15000 * bk, lerp(0, 32000, s.lake))), smooth(fw * 1.15))) : 0;
   s.wallR = fw > 0.001 ? Math.exp(lerp(Math.log(far), Math.log(wOff(53) + 2600 * town), smooth(fw * 1.15))) : 0;
-  s.wallH = 2600 + 1900 * hu(seed + 55, i);
-  s.wallH2 = 3600 + 2200 * hu(seed + 57, i);
+  s.wallH = 260 + 140 * vnoise(i / 12, seed + 55);
+  s.wallH2 = 380 + 180 * vnoise(i / 15, seed + 57);
   const cont = t < 0.5 ? bio.a : bio.b;
   s.cont = cont;
   s.rail = cont === 'coast' && town < 0.5 && bk < 0.6;
@@ -446,7 +464,7 @@ const DECOR = {
     for (const side of [-1, 1]) {
       const wall = side < 0 ? s.wallL : s.wallR;
       if (side < 0 && (s.bk > 0.15 || s.lake > 0.3)) continue;
-      for (let q = 0; q < 2; q++) if (r() < 0.38 * (1 - town * 0.7)) {
+      for (let q = 0; q < 2; q++) if (r() < 0.28 * (1 - town * 0.7)) {
         const room = Math.max(300, wall - EDGE - 700);
         s.items.push({ k: (r() < 0.62 ? 'fir' : 'tpine') + ((i + q) % 3), x: side * (EDGE + 450 + r() * room), lod: r() });
       }
@@ -575,7 +593,7 @@ function requestBake(cross) {
     if (!FARL[id]) FARL[id] = { c0: mkL(), c1: mkL() };
     const L = FARL[id];
     const tgt = cross && L.c0.ok ? 'prev' : 'cur';
-    bakeQ.push(() => { FAR[id](L.c0[tgt], L.c1[tgt]); if (tgt === 'prev') done.push(L.c0, L.c1); L.c0.ok = L.c1.ok = true; });
+    bakeQ.push(() => { bakeFar(id,L.c0[tgt],L.c1[tgt]); if (tgt === 'prev') done.push(L.c0, L.c1); L.c0.ok = L.c1.ok = true; });
   }
   bakeQ.push(() => {
     const a = E.amb;
@@ -591,11 +609,11 @@ function requestBake(cross) {
 }
 function ensureBiomeLayers() {
   // bake far layers for biomes coming into view; free those long gone
-  const act = activeBiomes();
+  const act = [...new Set([...activeBiomes(),viewBio.a,viewBio.b])];
   for (const id of act) if (!FARL[id] || !FARL[id].c0.ok) {
     if (!FARL[id]) FARL[id] = { c0: mkL(), c1: mkL() };
     const L = FARL[id]; L.c0.ok = true; L.c1.ok = true;
-    bakeQ.push(() => FAR[id](L.c0.cur, L.c1.cur));
+    bakeQ.push(() => bakeFar(id,L.c0.cur,L.c1.cur));
     if (id === 'desert' && !LY.milky.ok) { LY.milky.ok = true; bakeQ.push(() => bakeMilky(LY.milky.cur)); }
   }
   for (const id in FARL) if (!act.includes(id) && FARL[id].c0.ok) {
@@ -803,6 +821,31 @@ const FAR = {
     if (d > 0.2) ridge(g1, SW1, (x) => HY + 3 - H * 0.012 * fbm(x / 120, 63), 3, rgba(scl(dn, 0.9), 0.6), HY + 0.06 * H);
   },
 };
+
+// Paint plates into the existing two parallax layers. Keep a real transparent sky for the live moon.
+function bakeFar(id,L0,L1){
+  const im=ART.plates[id];if(!im){FAR[id](L0,L1);return;}
+  if(id==='coast')LH=null;
+  const m=PXM*W,sw=W+2*m,top=FAR_TOP(),height=id==='coast'?H-top:.57*H,bs=Math.min(BS,1536/sw);
+  const g=layerCanvas(L0,sw*bs,height*bs);
+  // Match the generated horizon (~62%) to the road horizon, and extend its bottom into the ground.
+  const ph=H*.52*bs;
+  g.drawImage(im,0,0,im.naturalWidth,im.naturalHeight,0,0,L0.width,ph);
+  if(L0.height>ph)g.drawImage(im,0,im.naturalHeight-2,im.naturalWidth,2,0,ph,L0.width,L0.height-ph);
+  const pixels=g.getImageData(0,0,L0.width,L0.height),p=pixels.data;
+  const light=mix3([.12,.17,.25],[.86,.89,.88],E.day),fog=E.fog*.45;
+  for(let i=0;i<p.length;i+=4){for(let j=0;j<3;j++)p[i+j]=lerp(p[i+j]*light[j]*(j===0?1+E.warm*.18:1),E.bot[j],fog);}
+  g.putImageData(pixels,0,0);
+  layerCanvas(L1,1,1); // terrain motion is in the road and painted roadside trees; distant relief stays calm
+}
+function paintedTree(kind,v,wh){
+  const im=ART.trees[kind];if(!im)return null;
+  const ww=wh*im.naturalWidth/im.naturalHeight;
+  const sp=mkSpr(ww,wh,.5,g=>{if(v%2){g.translate(ww,0);g.scale(-1,1);}g.drawImage(im,0,0,ww,wh);},null,420);
+  const g=sp.cv.getContext('2d'),d=g.getImageData(0,0,sp.cv.width,sp.cv.height),p=d.data;
+  for(let i=0;i<p.length;i+=4){const grey=p[i]*.2126+p[i+1]*.7152+p[i+2]*.0722;for(let j=0;j<3;j++)p[i+j]=(grey+(p[i+j]-grey)*.72)*Math.min(1,AMB[j]);}
+  g.putImageData(d,0,0);sp.painted=true;return sp;
+}
 
 // =====================================================================
 //  sprites (baked per light; world-sized; anchored at base)
@@ -1083,21 +1126,21 @@ function bakeSprites() {
   SPR.lampL = mkSpr(1000, 2350, 0.15, paintLamp);
   SPR.lampR = mkSpr(1000, 2350, 0.85, (g) => { g.translate(1000, 0); g.scale(-1, 1); paintLamp(g); });
   for (let v = 0; v < 3; v++) {
-    SPR['fir' + v] = mkSpr(1500, 4600, 0.5, paintTree('fir', v), null, 420);
-    SPR['tpine' + v] = mkSpr(1600, 5400, 0.5, paintTree('tpine', v), null, 420);
-    SPR['cypressW' + v] = mkSpr(3400, 2600, 0.44, paintTree('cypressW', v));
-    SPR['pine' + v] = mkSpr(1800, 3600, 0.5, paintTree('pine', v));
-    SPR['bush' + v] = mkSpr(1050, 490, 0.5, ((pb) => (g) => { g.scale(0.7, 0.7); pb(g); })(paintTree('bush', v)), null, 224);
-    SPR['saguaro' + v] = mkSpr(1200, 2800, 0.5, paintTree('saguaro', v), null, 320);
-    SPR['joshua' + v] = mkSpr(2200, 2400, 0.5, paintTree('joshua', v), null, 320);
-    SPR['sage' + v] = mkSpr(800, 360, 0.5, paintTree('sage', v), null, 128);
-    const [hp, he] = paintHouse(v); SPR['house' + v] = mkSpr(2600, 2000, 0.5, hp, he, 320);
+    SPR['fir' + v] = paintedTree('fir',v,4600) || mkSpr(1500, 4600, 0.5, paintTree('fir', v), null, 420);
+    SPR['tpine' + v] = paintedTree('tpine',v,5400) || mkSpr(1600, 5400, 0.5, paintTree('tpine', v), null, 420);
+    SPR['cypressW' + v] = paintedTree('cypressW',v,2600) || mkSpr(3400, 2600, 0.44, paintTree('cypressW', v));
+    SPR['pine' + v] = paintedTree('pine',v,3600) || mkSpr(1800, 3600, 0.5, paintTree('pine', v));
+    SPR['bush' + v] = paintedTree('bush',v,490) || mkSpr(1050, 490, 0.5, ((pb) => (g) => { g.scale(0.7, 0.7); pb(g); })(paintTree('bush', v)), null, 224);
+    SPR['saguaro' + v] = paintedTree('saguaro',v,2800) || mkSpr(1200, 2800, 0.5, paintTree('saguaro', v), null, 320);
+    SPR['joshua' + v] = paintedTree('joshua',v,2400) || mkSpr(2200, 2400, 0.5, paintTree('joshua', v), null, 320);
+    SPR['sage' + v] = paintedTree('sage',v,360) || mkSpr(800, 360, 0.5, paintTree('sage', v), null, 128);
+    const [hp, he] = paintHouse(v); SPR['house' + v] = paintedTree('house',v,1800) || mkSpr(2600, 2000, 0.5, hp, he, 320);
   }
-  for (let v = 0; v < 2; v++) SPR['rock' + v] = mkSpr(1800, 900, 0.5, paintTree('rock', v), null, 192);
-  { const [a, b] = paintCabin(); SPR.cabin = mkSpr(2400, 1900, 0.5, a, b, 320); }
-  { const [a, b] = paintDiner(); SPR.diner = mkSpr(5600, 3400, 0.5, a, b, 512); SPR.diner.txt = true; }
-  { const [a, b] = paintFuel(); SPR.fuel = mkSpr(5400, 2700, 0.5, a, b, 512); SPR.fuel.txt = true; }
-  { const [a, b] = paintMotel(); SPR.motel = mkSpr(8000, 4600, 0.5, a, b, 640); SPR.motel.txt = true; }
+  for (let v = 0; v < 2; v++) SPR['rock' + v] = paintedTree('rock',v,900) || mkSpr(1800, 900, 0.5, paintTree('rock', v), null, 192);
+  { const [a, b] = paintCabin(); SPR.cabin = paintedTree('house',0,1800) || mkSpr(2400, 1900, 0.5, a, b, 320); }
+  { const [a, b] = paintDiner(); SPR.diner = paintedTree('diner',0,2200) || mkSpr(5600, 3400, 0.5, a, b, 512); SPR.diner.txt = true; }
+  { const [a, b] = paintFuel(); SPR.fuel = paintedTree('fuel',0,2600) || mkSpr(5400, 2700, 0.5, a, b, 512); SPR.fuel.txt = true; }
+  { const [a, b] = paintMotel(); SPR.motel = paintedTree('house',0,2600) || mkSpr(8000, 4600, 0.5, a, b, 640); SPR.motel.txt = true; }
   SPR.post = mkSpr(60, 300, 0.5, paintPost, null, 64);
   for (const k of ['curveL', 'curveR', 'deer']) SPR[k] = mkSpr(900, 1800, 0.5, paintWarn(k), null, 192);
   SPR.tpole = mkSpr(1600, 3100, 0.5, paintTPole, null, 256);
@@ -1467,7 +1510,7 @@ function updateDriving(dt) {
   }
   if (nextSame < 0) {
     nextSame = rand(28, 60);
-    const z = pos + rand(90000, 170000);
+    const z = pos + (DRAW - 3) * SEG;
     if (nSame < 2 && laneFree(LANES[1], z - 30000, z + 30000)) traffic.push({ z, x: LANES[1] + rand(-60, 60), v: Math.max(KMH(45), car.v * rand(0.55, 0.78)), col: (Math.random() * CAR_COLS.length) | 0, age: 0, kind: 'same' });
   }
 }
@@ -1775,10 +1818,7 @@ function emitStrip(a, b, xA, yA, sA, xB, yB, sB) {
       rib(side < 0 ? 'w2L' : 'w2R', M.wall2, S(M.wall2), fa, yA, fa, yA - sA * sa.wallH2, fb, yB, fb, yB - sB * sb.wallH2);
       const na = xA + side * sA * wa, nb = xB + side * sB * wb;
       rib(side < 0 ? 'wL' : 'wR', M.wall, S(M.wall), na, yA, na, yA - sA * sa.wallH, nb, yB, nb, yB - sB * sb.wallH);
-      if (a < 84 && b - a === 1) {   // a fir tip per segment breaks the wall's top into a tree line
-        const tA = yA - sA * sa.wallH, tB = yB - sB * sb.wallH, mx = (na + nb) / 2, tip = (sA + sB) * 0.5 * (900 + 1300 * hu(seed + 59, base + a));
-        Q4(M.wall, S(M.wall), na, tA, mx, (tA + tB) / 2 - tip, nb, tB, mx, (tA + tB) / 2 + 2);
-      }
+
     }
   }
   // guardrail (coast) / wooden fence (forest)
@@ -1802,7 +1842,7 @@ function renderRoad() {
   coneA = CAR_DZ + 600; coneB = CAR_DZ + lerp(17000, 60000, beams.k);
   let maxy = H + 4;
   for (let a = 0; a < DRAW;) {
-    const st = a < 84 ? 1 : a < 180 ? 2 : a < 292 ? 4 : 8, b = Math.min(DRAW, a + st);
+    const st = a < 84 ? 1 : a < 180 ? 2 : a < 292 ? 4 : 8, b = Math.min(DRAW, a + st - ((base + a) % st));
     const clip = maxy;
     if (bz[b] > NEAR) {
       const yA = py[a], yB = py[b];
@@ -1818,6 +1858,9 @@ function renderRoad() {
     for (let n = a; n < b; n++) clipY[n] = clip;
     a = b;
   }
+  // Per-segment crest occlusion must not change when a road strip switches detail level.
+  let horizon=H+4;
+  for(let n=0;n<=DRAW;n++){clipY[n]=horizon;if(bz[n]>=NEAR)horizon=Math.min(horizon,py[n]);}
   for (const r of RIBS.values()) ribFlush(r);
   if (PROF.on) { const t = pt(); PROF.emit = (PROF.emit || 0) + t - PROF._r0; PROF._f0 = t; PROF.cnt = (PROF.cnt || 0) + PATHS.reduce((q, m) => q + m.size, 0); }
   for (let m = 0; m < NM; m++) {
@@ -1877,17 +1920,19 @@ function drawHeadlights() {
 function glow(sp, x, y, r, a) { if (a < 0.004 || r < 0.25) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.drawImage(sp, x - r, y - r, 2 * r, 2 * r); }
 function glowE(sp, x, y, rx, ry, a) { if (a < 0.004 || rx < 0.25) return; ctx.globalAlpha = a > 1 ? 1 : a; ctx.drawImage(sp, x - rx, y - ry, 2 * rx, 2 * ry); }
 function drawSpr(sp, gx, gy, sc, clip, alpha) {
-  const w = sp.ww * sc, h = sp.wh * sc;
-  if (h < 2 || alpha < 0.01) return false;
-  const x = gx - w * sp.ax, y = gy - h;
-  if (y >= clip || x > W + 20 || x + w < -20) return false;
-  ctx.globalAlpha = alpha;
-  const vis = gy > clip + 0.5 ? (clip - y) / h : 1;
-  if (MIR && sp.txt) { ctx.save(); ctx.translate(x + w / 2, 0); ctx.scale(-1, 1); ctx.drawImage(sp.cv, 0, 0, sp.cv.width, sp.cv.height * vis, -w / 2, y, w, h * vis); ctx.restore(); }
-  else if (vis < 1) ctx.drawImage(sp.cv, 0, 0, sp.cv.width, sp.cv.height * vis, x, y, w, h * vis);
-  else ctx.drawImage(sp.cv, x, y, w, h);
+  const w=sp.ww*sc,h=sp.wh*sc;
+  if(h<.3||alpha<.002||!Number.isFinite(w+h+gx+gy))return false;
+  const x=gx-w*sp.ax,y=gy-h;
+  // Clip source and destination together: close objects expand offscreen, with no giant raster or size pop.
+  const left=Math.max(0,x),right=Math.min(W,x+w),top=Math.max(0,y),bottom=Math.min(H,clip,gy);
+  if(right<=left||bottom<=top)return false;
+  const sx=(left-x)/w*sp.cv.width,sy=(top-y)/h*sp.cv.height,sw=(right-left)/w*sp.cv.width,sh=(bottom-top)/h*sp.cv.height;
+  ctx.globalAlpha=alpha;
+  if(MIR&&sp.txt){ctx.save();ctx.translate(left+right,0);ctx.scale(-1,1);ctx.drawImage(sp.cv,sp.cv.width-sx-sw,sy,sw,sh,left,top,right-left,bottom-top);ctx.restore();}
+  else ctx.drawImage(sp.cv,sx,sy,sw,sh,left,top,right-left,bottom-top);
   return true;
 }
+const distanceFade=z=>smooth(((DRAW-2)*SEG-z)/(70*SEG));
 function drawTxt(img, x, y, w, h) {   // text never reads backwards in the mirrored layout
   if (!MIR) { ctx.drawImage(img, x, y, w, h); return; }
   ctx.save(); ctx.translate(x + w / 2, 0); ctx.scale(-1, 1); ctx.drawImage(img, -w / 2, y, w, h); ctx.restore();
@@ -1906,17 +1951,18 @@ let lampK = 1, wireLast = null;
 function drawItems(n, s, T) {
   const sc = ps[n], gx0 = px[n], gyR = py[n], gy = gyR, clip = clipY[n], z = bz[n];
   if (z < NEAR + 50) return;
-  const f = fogAt(z), fa = 1 - 0.95 * Math.pow(f, 1.8), ga = 1 - 0.55 * f;   // opaque things fade late (no see-through billboards)
+  const f = fogAt(z), enter=distanceFade(z), fa = (1 - 0.95 * Math.pow(f, 1.8))*enter, ga = (1 - 0.55 * f)*enter;   // opaque things fade late (no see-through billboards)
   const nt = night();
   for (const it of s.items) {
     const gx = gx0 + sc * it.x;
     const gy = it.x > EDGE + 600 && s.bankH > 60 ? gyR - sc * clamp((it.x - EDGE - 600) / s.bankW, 0, 1) * s.bankH : gyR;
+    ctx.save();ctx.beginPath();ctx.rect(0,0,W,Math.max(0,Math.min(H,clip)));ctx.clip();
     switch (it.k) {
       case 'lampL': case 'lampR': {
         const sp = SPR[it.k], hx = it.k === 'lampL' ? 715 : -715;
         const hX = gx + sc * hx, hY = gy - sc * 2210;
         const on = lampK * (1 + 0.06 * music.pulse * Math.sin(T * 9 + n));
-        if (on > 0.02 && n < 300 && clip > gy - 2) {   // light pool on the road
+        if (on > 0.02 && enter > .002 && clip > gy - 2) {   // light pool on the road
           ctx.globalCompositeOperation = 'lighter';
           const rx = sc * 2000, ry = rx * Math.max(0.09, (CAMH * 1.25) / z);
           glowE(POOL_S, hX, gy, rx, ry, 0.42 * on * ga);
@@ -1927,7 +1973,7 @@ function drawItems(n, s, T) {
         if (on > 0.02 && hY < clip) {
           ctx.globalCompositeOperation = 'lighter';
           const vol = 0.05 + 0.28 * E.fog + 0.12 * E.rain + 0.1 * E.snow;
-          if (n < 260) { ctx.globalAlpha = Math.min(1, vol * on * ga); ctx.drawImage(CONE, hX - sc * 1100, hY, sc * 2200, sc * 2250); }
+          if (n < 300) { ctx.globalAlpha = Math.min(1, vol * on * ga)*smooth((300-n)/60); ctx.drawImage(CONE, hX - sc * 1100, hY, sc * 2200, sc * 2250); }
           glow(GL_SODIUM, hX, hY + sc * 20, Math.max(1.6, sc * 700 * (1 + 1.2 * E.fog)), 0.85 * on * ga);
           glow(GL_WHITE, hX, hY + sc * 20, Math.max(0.8, sc * 120), 0.7 * on * ga);
           ctx.globalCompositeOperation = 'source-over';
@@ -1961,7 +2007,7 @@ function drawItems(n, s, T) {
         const sp = SPR.board;
         if (!drawSpr(sp, gx, gy, sc, clip, fa)) break;
         const fx = gx - 3840 * sc, fy = gy - 6640 * sc, fw = 7680 * sc, fh = 3680 * sc;
-        if (fy + fh < clip) {
+        if (fy < clip) {
           ctx.globalAlpha = fa * (music.np && !music.playing ? 0.75 : 1);
           drawTxt(FACE, fx, fy, fw, fh);
           if (fw > 50) boardsHit.push({ x: fx, y: fy, w: fw, h: fh });
@@ -1998,7 +2044,7 @@ function drawItems(n, s, T) {
       case 'tpole': {
         drawSpr(SPR.tpole, gx, gy, sc, clip, fa);
         const tops = [-540, -200, 540].map((o) => [gx + sc * o, gy - sc * 2880]);
-        if (wireLast && n < 330 && wireLast.n > n) {
+        if (wireLast && enter > .002 && wireLast.n > n) {
           ctx.globalAlpha = fa * 0.8; ctx.strokeStyle = lit([30, 30, 34]); ctx.lineWidth = Math.max(0.5, sc * 22);
           ctx.beginPath();
           for (let k = 0; k < 3; k++) {
@@ -2020,17 +2066,18 @@ function drawItems(n, s, T) {
           if (it.k === 'fuel') glowE(POOL_W, gx, gy, sc * 3600, sc * 3600 * Math.max(0.1, CAMH * 1.3 / z), 0.35 * on);
           else glowE(POOL_S, gx, gy, sc * 3400, sc * 3400 * Math.max(0.1, CAMH * 1.3 / z), 0.25 * on);
           const sx = it.k === 'diner' ? 2150 : it.k === 'motel' ? -3380 : 2400, sy = it.k === 'diner' ? 2850 : it.k === 'motel' ? 3800 : 2300;
-          glow(it.k === 'motel' || it.k === 'diner' ? GL_RED : GL_SODIUM, gx + sc * sx, gy - sc * sy, Math.max(2, sc * 1500), 0.22 * on);
+          if(!sp.painted)glow(it.k === 'motel' || it.k === 'diner' ? GL_RED : GL_SODIUM, gx + sc * sx, gy - sc * sy, Math.max(2, sc * 1500), 0.22 * on);
           ctx.globalCompositeOperation = 'source-over';
         }
         break;
       }
       default: {
         const sp = SPR[it.k];
-        if (it.lod != null && (n > 230 ? it.lod > 0.18 : n > 120 && it.lod > 0.55)) break;   // the forest walls carry the far trees
-        if (sp && (n < 300 || sp.wh * sc > 6)) drawSpr(sp, gx, gy, sc, clip, fa);
+        const detail=it.lod==null||it.lod<=.18?1:it.lod<=.55?smooth((260-n)/60):smooth((150-n)/60);
+        if(sp&&detail>.002)drawSpr(sp,gx,gy,sc,clip,fa*detail*smooth((sp.wh*sc-.3)/2));
       }
     }
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
   // fireflies drifting at the forest verges (summer nights)
@@ -2064,10 +2111,11 @@ function drawTrafficCar(c, T) {
   if (!projZ(rel, c.x)) return;
   const n = PJ.n, sc = PJ.s, gx = PJ.x, gy = PJ.y, clip = clipY[n];
   const f = fogAt(rel), ga = 1 - 0.5 * f, nt = night();
-  const fadeA = smooth(c.age / 1.5);
+  const fadeA = smooth(c.age / 1.5)*distanceFade(rel);
   const sp = SPR[(c.v > 0 ? 'rear' : 'front') + c.col];
   drawSpr(sp, gx, gy, sc, clip, (1 - 0.85 * f) * fadeA);
   if (gy - sc * 150 > clip) return;
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,Math.max(0,Math.min(H,clip)));ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
   if (c.v > 0) {   // tail lights ahead
     const on = (0.45 + 0.55 * nt) * fadeA * ga * (1 + 0.15 * music.pulse);
@@ -2086,7 +2134,7 @@ function drawTrafficCar(c, T) {
     if (rel < 40000 && nt > 0.05) { const k = (1 - rel / 40000) * on; ctx.globalAlpha = Math.min(0.5, 0.35 * k); ctx.drawImage(FLARE, gx - sc * 3000, gy - sc * 160 - sc * 80, sc * 6000, sc * 160); }
     if (projZ(rel - 3200, c.x) && PJ.y < clipY[PJ.n] + 1) glowE(POOL_W, PJ.x, PJ.y, PJ.s * 1500, PJ.s * 1500 * Math.max(0.1, CAMH * 1.3 / Math.max(800, rel - 3200)), 0.3 * nt * fadeA);
   }
-  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawCatsEyes(T) {
   if (night() < 0.05) return;
@@ -2293,6 +2341,7 @@ function render(T) {
   drawBackground(T);
   if (PROF.on) { const t = pt(); PROF.bg += t - t0; t0 = t; }
   setBase();
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
   renderRoad();
   if (PROF.on) { const t = pt(); PROF.road += t - t0; t0 = t; }
   drawHeadlights();
@@ -2308,7 +2357,7 @@ function render(T) {
   boardsHit = []; wireLast = null;
   const slots = new Map();
   for (const c of traffic) { const n = Math.floor((c.z - pos) / SEG + frac); if (n >= 0 && n < DRAW) { if (!slots.has(n)) slots.set(n, []); slots.get(n).push(c); } }
-  for (let n = DRAW - 1; n >= 1; n--) {
+  for (let n = DRAW - 1; n >= 0; n--) {
     const s = seg(base + n);
     if (s.items.length || s.fly != null || s.mist > 0.05) drawItems(n, s, T);
     const cs = slots.get(n); if (cs) for (const c of cs) drawTrafficCar(c, T);
@@ -2436,7 +2485,7 @@ function selfTest(secs = 60) {
   }
   return { bad, pos, km: +(pos / UPM / 1000).toFixed(2), traffic: traffic.length, biome: viewBio, kmh: +(car.v / KMH(1)).toFixed(1) };
 }
-window.__drive = { PROF, boards: () => boardsHit, get E() { return E; }, car, traffic, get pos() { return pos; }, set pos(v) { pos = v; }, get seed() { return seed; }, legs, biomeAt, seg, bench, goto, selfTest, setCalm, flashBeams, honk, get perfMs() { return perfMs; }, get viewBio() { return viewBio; }, get base() { return base; }, newRoad, resetRoad, FARL, LY };
+window.__drive = { PROF, boards: () => boardsHit, get E() { return E; }, car, traffic, get pos() { return pos; }, set pos(v) { pos = v; }, get seed() { return seed; }, legs, biomeAt, seg, bench, goto, selfTest, setCalm, flashBeams, honk, get perfMs() { return perfMs; }, get viewBio() { return viewBio; }, get base() { return base; }, depth: {distanceFade,projZ,PJ,clipY,px,py,ps,bz}, newRoad, resetRoad, FARL, LY };
 })();
 </script>
 </body>

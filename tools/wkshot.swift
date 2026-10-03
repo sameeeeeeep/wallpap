@@ -18,6 +18,7 @@ final class Shot: NSObject, WKNavigationDelegate {
     let web: WKWebView; let win: NSWindow
     override init() {
         let cfg = WKWebViewConfiguration()
+        cfg.websiteDataStore = .nonPersistent()
         cfg.userContentController.addUserScript(WKUserScript(source: "window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: W, height: H), configuration: cfg)
         win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H), styleMask: [.borderless], backing: .buffered, defer: false)

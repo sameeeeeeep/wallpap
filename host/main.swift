@@ -29,7 +29,6 @@ let categories = ["Nature", "Places", "Cozy Rooms", "City Nights", "Journeys", "
 /// Music visualizers except Cymatics. Their files stay in the bundle; they just aren't offered.
 let shelvedScenes: Set<String> = ["drive", "kinetic", "fluids", "skies"]
 /// Scenes shipped inside the app. `scenes` (Catalog.swift) adds the installed add-ons.
-let builtinScenes: [Scene] = allBuiltinScenes.filter { !shelvedScenes.contains($0.id) }
 let allBuiltinScenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),
     Scene(id: "grass", title: "Touch Grass", key: "2", category: "Nature"),
@@ -48,6 +47,8 @@ let allBuiltinScenes: [Scene] = [
     Scene(id: "fluids", title: "Fluids", key: "", category: "Music", music: true),
     Scene(id: "skies", title: "Skies", key: "", category: "Music", music: true),
 ]
+// (after allBuiltinScenes: main.swift globals initialise top to bottom)
+let builtinScenes: [Scene] = allBuiltinScenes.filter { !shelvedScenes.contains($0.id) }
 
 final class WallWindow: NSWindow {
     private(set) var web: WKWebView

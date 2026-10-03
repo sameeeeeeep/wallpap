@@ -39,6 +39,11 @@ Sky/water/exposed masks must have clean, decontaminated edges (no halo around tr
 res (guided/matting filter), choke 1–2 px, and colour-decontaminate edge pixels against the new sky. Check by
 zooming on the skyline in day, golden and night.
 
+## 5b. World geometry (actors never pass through objects)
+Declare props as footprints/colliders on the ground plane with front edges for occlusion, walkable polygons, stairs
+(climbed step by step) and perches with jump links; every actor paths around solids and is drawn behind/in front by
+depth; actors avoid each other. Review sequences of actors moving around and behind every prop. See polish-brief §13.
+
 ## 6. Interaction & moments
 1–3 delightful interactions (click a plane = landing lights; click the road = a car honks its lights; click the sky =
 a paraglider takes off) and occasional "moments" (a fireworks night, a fly-past, a rainbow after rain).

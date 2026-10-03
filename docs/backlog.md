@@ -31,6 +31,12 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Register new scenes + skins: drive, kinetic, fluids, skies, cymatics skins [x]; train skins (pending agent); kit add-ons via catalog [x]
 
 ## Scenes (agents)
+- [ ] **World geometry for actors (polish-brief §13)** — owner 2026-10-04: Santorini cats walk through the stairs;
+  pets/people/vehicles must path around props, climb stairs, be occluded by depth, avoid each other. Do it in the shared
+  pet engine (scenes/pets.js, in progress) + every scene's stage declaration, and in the plate-scene generator/template.
+- [ ] **Shared pet engine + common roster** (owner picked 1a+2a, 2026-10-04): scenes/pets.js from the Santorini engine,
+  5 cats + golden + corgi everywhere (pandas only in Touch Grass), dog 3/4 walk/jump art, migrate all 8 pet scenes.
+  Codex run `.codex-runs/pets-shared-0105.*` was started for this.
 - [x] Santorini Cats directional jumps (Codex): fifty front/back frames across all five coats; shared ground-plane direction/mirroring, matching landing gait, side fallback, natural depth hops and planted-paw/body-tracking shadows. Visually verified 60 day/night/view/facing sequences plus 9 surface/toy/failure cases (1,104 frames); 48 tests pass. JPEG evidence in `shots/cats-jumps/` (36 MiB, raw capture PNGs deleted). Local commit only; installed app untouched.
 - [x] Santorini Cats directional walks (Codex): all five coats have 8-frame front/rear cycles; velocity selects views with contact-gated hysteresis, distance planting and side fallback. Diagonal wandering enabled; 40 day/night motion sequences plus vertical/mirror/run checks visually inspected (`shots/cats-dirs/`); 43 tests pass. Directional runs use faster walk cycles.
 - [x] Walk/run cycles + paw planting (17 cycles, planted paw ±1 px, tests) — cats/grass polish beyond that stopped by user (partial edits verified working)

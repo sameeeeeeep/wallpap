@@ -113,3 +113,19 @@ trains, flags, laundry, smoke, fire — is drawn from a SPRITE SHEET with animat
 wheel/rotor/propeller turns, turn angles, bobbing), generated with consistent scale/camera/lighting and cut cleanly.
 A single still image translated along a path is not acceptable, ever. If a sheet looks wrong, regenerate it; if it
 can't be made good, leave the actor out rather than faking it.
+
+## 13. Actors respect the world's objects (owner: "cats in Santorini sort of go through stairs — be smart about this")
+Nothing that moves may pass through a solid thing. Every scene (hand-built or generated) declares its props as
+geometry, and every actor (pets, people, cars, boats, aircraft, birds landing) plans around it:
+- **Footprints / colliders** for solids on the ground plane (stairs, benches, pots, furniture, tables, booths, the
+  stage, walls, planters, parked cars): actors path around them (no straight lines through), never stop inside them.
+- **Walkable areas** are polygons, not a band; **stairs and steps are climbed** (per-step hops/jumps with the right
+  pose), never walked through; ledges/perches are reached by a jump link.
+- **Occlusion by depth**: each prop has a front edge (y on the floor); actors behind it are drawn behind it (prop
+  re-drawn on top / mask), actors in front are drawn in front. Contact shadows stop at the prop.
+- **Actors avoid each other** (personal space by depth; no overlaps, no riding on each other).
+- Verify with frame sequences of actors moving around/behind every prop (and up/down stairs) in day and night.
+Scene generation (tools/plate-scene, new-scene skill) must produce this geometry too: auto-detect props from the plate
+(depth/segmentation → footprints + front edges), let the design step name walk paths, perches and stairs, and fail QA
+if any actor crosses a collider.
+

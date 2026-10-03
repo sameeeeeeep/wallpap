@@ -17,12 +17,12 @@
 <script>
 /* =====================================================================
    Train Journey — a quiet carriage, window seat. The world slides by in parallax (fields, hills,
-   towns, bridges over water, brief tunnels). A drink rests on the table beside a walkman.
+   towns, bridges over water, brief tunnels). A walkman and its headphones lie on the table.
    Small flocks pass outside the window.
 
    SKINS (LW.settings.skin, default 'indian'): a skin is one entry in the SKINS table below — its
    plates, window/table geometry, panoramas + parallax bands, trackside sprites, bridge, tunnel
-   palette, route segments (jointed or welded rail) and the drink on the table.
+   palette, route segments (jointed or welded rail) and cruising speed.
    Adding a skin = art in art/train/<skin>/ + one table entry. Switching skins crossfades live.
 
    Click the window: the train surges ahead (motion blur, poles whipping past, a whoosh) and eases back
@@ -137,13 +137,15 @@ const fbm = (x, seed) => vnoise(x, seed) * 0.6 + vnoise(x * 2.3, seed + 7) * 0.2
 //   bridge     a horizontally tiling bridge bay sprite shown on 'water' route segments
 //   tunnel     bore/portal palette;  route: [biome, length] segments ('tunnel', 'water' = bridge)
 //   rail       'jointed' = 13 m rails, the da-dum of each bogie over every gap; 'welded' = smooth
+//   cruise     route units/s at cruise (near trackside ≈ 0.95× that in stage px/s); rocking, joints and the
+//              rumble are normalised to it, so a faster skin reads faster without shaking harder
 // =====================================================================
 const SKIN_ORDER = ['indian', 'shinkansen', 'swiss', 'orient'];
 const SKIN_FILES = { night: 'bg-night', day: 'bg-day', mask: 'win-mask', panoNight: 'pano-night', panoDay: 'pano-day', drink: 'drink',
   pole: 'pole', tree1: 'tree1', tree2: 'tree2', scrub: 'scrub', marker: 'marker', bridge: 'bridge' };
 const SKINS = {
   indian: {
-    title: 'Indian Sleeper', dir: 'art/train/', rail: 'jointed',
+    title: 'Indian Sleeper', dir: 'art/train/', rail: 'jointed', cruise: 260,
     files: { night: 'bg-night', day: 'bg-day', panoNight: 'countryside-night-sky', panoDay: 'countryside-day', drink: 'kulhad', mask: 'win-mask',
       pole: 'pole', tree1: 'palm', tree2: 'neem', scrub: 'scrub', marker: 'kmstone', bridge: 'bridge' },
     win: { rect: [480, 322, 950, 550], r: 46, mask: true },
@@ -162,7 +164,7 @@ const SKINS = {
     route: [['city', 7200], ['sub', 6000], ['country', 9000], ['tunnel', 900], ['country', 5200], ['water', 3400], ['country', 5000], ['tunnel', 700], ['sub', 5600]],
   },
   shinkansen: {
-    title: 'Shinkansen', dir: 'art/train/shinkansen/', rail: 'welded', files: { ...SKIN_FILES, extra: 'bento' },
+    title: 'Shinkansen', dir: 'art/train/shinkansen/', rail: 'welded', cruise: 360, files: { ...SKIN_FILES, extra: 'bento' },
     win: { rect: [467, 237, 970, 516], view: [103, 237, 970, 516], r: 44, mask: true },
     table: { x0: 560, x1: 908, back: 562, front: 618 },
     pano: { bands: [[0.555, 0.045], [0.66, 0.22], [0.8, 0.68]], moonY: [0.42, 0.3] },
@@ -179,7 +181,7 @@ const SKINS = {
     route: [['country', 7000], ['tunnel', 1400], ['country', 5200], ['water', 2600], ['sub', 5200], ['country', 6000], ['tunnel', 900], ['country', 4000], ['water', 1800]],
   },
   swiss: {
-    title: 'Swiss Alpine', dir: 'art/train/swiss/', rail: 'welded', files: { ...SKIN_FILES, extra: 'chocolate' },
+    title: 'Swiss Alpine', dir: 'art/train/swiss/', rail: 'welded', cruise: 240, files: { ...SKIN_FILES, extra: 'chocolate' },
     win: { rect: [348, 79, 1161, 469], r: 40, mask: true },
     table: { x0: 533, x1: 975, back: 527, front: 595 },
     pano: { bands: [[0.66, 0.045], [0.74, 0.22], [0.84, 0.68]], moonY: [0.3, 0.2] },
@@ -196,7 +198,7 @@ const SKINS = {
     route: [['country', 5200], ['tunnel', 1200], ['country', 4200], ['water', 2400], ['country', 4800], ['tunnel', 2000], ['country', 5200], ['tunnel', 700], ['country', 3600]],
   },
   orient: {
-    title: 'Orient Express', dir: 'art/train/orient/', rail: 'welded', files: { ...SKIN_FILES, extra: 'teapot' },
+    title: 'Orient Express', dir: 'art/train/orient/', rail: 'welded', cruise: 220, files: { ...SKIN_FILES, extra: 'teapot' },
     win: { rect: [497, 232, 981, 492], r: 30, mask: true },
     table: { x0: 560, x1: 945, back: 562, front: 615 },
     pano: { bands: [[0.6, 0.045], [0.7, 0.22], [0.82, 0.68]], moonY: [0.45, 0.32] },
@@ -229,7 +231,7 @@ function loadImg(path, cb) {
 }
 // load a skin's art; cb once its plates and panoramas are in (or failed)
 function loadSkinArt(sk, cb) {
-  const names = Object.values(sk.files), key = ['night', 'day', 'panoDay', 'panoNight', 'mask'].filter((k) => sk.files[k]).map((k) => sk.dir + sk.files[k]);
+  const names = Object.entries(sk.files).filter(([k]) => !TP_HIDDEN.has(k)).map(([, n]) => n), key = ['night', 'day', 'panoDay', 'panoNight', 'mask'].filter((k) => sk.files[k]).map((k) => sk.dir + sk.files[k]);
   let left = key.length;
   for (const n of names) loadImg(sk.dir + n, (im) => {
     if (sk === S && im) { clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); }
@@ -465,10 +467,10 @@ function bake(cross) {
   bakeRoom(); bakeSky(); bakeRefl();
   lastBake = nowS(); bakedSnap = envSnap(); bakeMs = Date.now() - tb;
 }
-function bakeRoom() {
+function bakeRoom(target = roomCv) {
   const mw = Math.round(cv.width + 2 * RM * U), mh = Math.round(cv.height + 2 * RM * U);
-  roomCv.width = mw; roomCv.height = mh;
-  const g = roomCv.getContext('2d');
+  target.width = mw; target.height = mh;
+  const g = target.getContext('2d');
   if (artMode()) {
     setW(g); g.translate(RM, RM);
     const n = A('night'), d = A('day');
@@ -496,6 +498,20 @@ function bakeRoom() {
   paintEmissive(g);
   albCv.width = albCv.height = 1; lmCv.width = lmCv.height = 1;
 }
+// In a tunnel the daylight that came in through the glass is gone: the carriage is lit by its own lamps
+// (the night plate), whatever the hour. Only the light through the window changes — the walls are never
+// painted over — so by day the room crossfades to a lamp-lit bake as the bore covers the glass (train.dark).
+// Baked lazily on the first tunnel of a bake and freed once back in the open.
+let darkCv = null, darkOf = -1;
+function darkRoom() {
+  if (darkCv && darkOf === lastBake) return darkCv;
+  darkCv = darkCv || newCanvas(1, 1);
+  const keep = { day: E.day, warm: E.warm }, tp = { tint: tpCache.tint, hp: tpCache.hp };   // the live props keep the real light
+  E.day = 0; E.warm = 0;
+  try { bakeRoom(darkCv); } finally { Object.assign(E, keep); Object.assign(tpCache, tp); }
+  darkOf = lastBake; return darkCv;
+}
+const dayIn = () => E.day * (1 - train.dark);   // daylight actually reaching the carriage
 // a plate on the 1600×1000 stage; wide desktops continue its own outer columns (stretched, shaded) so the
 // side panels carry the carriage's colours instead of a flat wash
 const edgeCols = new WeakMap();
@@ -566,7 +582,6 @@ function paintAlbedo(g) {
   paintSeat(g, L.seatL);
   paintSeat(g, L.seatR);
   paintTable(g);
-  paintCupBody(g);
   paintBook(g);
 }
 function paintIndianBars(g) {
@@ -768,20 +783,9 @@ function paintTable(g) {
   g.fillStyle = 'rgba(255,236,190,0.45)'; g.fillRect(t.x0, t.front, t.w, 1.6);
   g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(t.x0, t.front + t.th - 3, t.w, 3);
 }
-function paintCupBody(g) {
-  // A tapered terracotta kulhad; the chai surface and steam remain live.
-  const {x,y}=L.cup;
-  g.fillStyle='rgba(0,0,0,.28)';g.beginPath();g.ellipse(x+2,y+1,25,5,0,0,TAU);g.fill();
-  const clay=g.createLinearGradient(x-21,y,x+21,y);clay.addColorStop(0,'#80503b');clay.addColorStop(.4,'#c78d64');clay.addColorStop(1,'#89563d');
-  g.fillStyle=clay;g.beginPath();g.moveTo(x-21,y-63);g.lineTo(x+21,y-63);g.lineTo(x+15,y-3);g.quadraticCurveTo(x,y+3,x-15,y-3);g.closePath();g.fill();
-  g.strokeStyle='rgba(224,167,120,.3)';g.lineWidth=1;
-  for(let i=0;i<5;i++){g.beginPath();g.ellipse(x,y-12-i*9,16+i*.6,3,0,0,Math.PI);g.stroke();}
-  g.fillStyle='#bb8057';g.beginPath();g.ellipse(x,y-63,22,5,0,0,TAU);g.fill();
-  g.fillStyle='#654330';g.beginPath();g.ellipse(x,y-63,17,3.6,0,0,TAU);g.fill();
-}
 // =====================================================================
 //  the fold-out table: a walkman with a cassette, its foam headphones, the cassette's case with a
-//  handwritten J-card, and the chai. Painted sprites (art/train/*.png), lit by the carriage light at
+//  handwritten J-card. Painted sprites (art/train/*.png), lit by the carriage light at
 //  bake time; reels, LED, J-card ink and the headphones' beat are live.
 //  Sprite feature coordinates are in each PNG's own pixels.
 // =====================================================================
@@ -791,7 +795,11 @@ const TP_FEAT = {
   headphones: {}, case: { card: [17, 39, 388, 248] }, drink: {}, extra: {},
 };
 let TP = {};
-function applySkinProps() { TP = {}; for (const k in TP_FEAT) if (S.props[k]) TP[k] = { ...TP_FEAT[k], ...S.props[k] }; }
+// No drink or snack on the table: nobody's sitting there, so a full cup (and its steam) read as staged for no
+// one. The walkman, its headphones and the cassette case are the traveller's things, left out; the skins keep
+// their drink/extra entries only as table geometry (L.cup anchors the calm-mode warmth on the table).
+const TP_HIDDEN = new Set(['drink', 'extra']);
+function applySkinProps() { TP = {}; for (const k in TP_FEAT) if (S.props[k] && !TP_HIDDEN.has(k)) TP[k] = { ...TP_FEAT[k], ...S.props[k] }; }
 applySkinProps();
 const tpImg = (k) => k === 'case' ? AS('cassette-case') : k === 'walkman' || k === 'headphones' ? AS(k) : A(k);
 function tpGeom(k) {   // stage rect of a prop sprite
@@ -822,7 +830,7 @@ function paintTableProps(g) {
   const shadow = (x, y, rx, ry, a) => { g.fillStyle = `rgba(20,12,8,${a})`; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); };
   // back to front: the case (leaning on the window ledge), the chai, the walkman
   for (const k of ['case', 'extra', 'drink', 'walkman'].filter((k) => TP[k]).sort((a, b) => TP[a].base - TP[b].base)) {
-    const r = tpGeom(k); if (!r) { if (k === 'drink' && skinId === 'indian') paintCupBody(g); continue; }
+    const r = tpGeom(k); if (!r) continue;
     shadow(r.x + r.w * 0.5 + 2, TP[k].base - 1, r.w * 0.5, k === 'drink' || k === 'extra' ? 4.5 : 3.6, k === 'case' ? 0.22 : 0.3);
     const c = tintSprite(r.im, Math.ceil(r.w * res), Math.ceil(r.h * res), tint);
     g.drawImage(c, r.x, r.y, r.w, r.h);
@@ -1137,14 +1145,14 @@ function outsidePalette() {
 // =====================================================================
 //  the train: speed, distance, track joints, rocking, skips
 // =====================================================================
-const train = { v: 150, d: 15000, joint: 0, lampX: [], skip: null, beatLamps: [], tunnel: 0 };
+const train = { v: 150, d: 15000, joint: 0, lampX: [], skip: null, beatLamps: [], tunnel: 0, dark: 0 };
 // Jointed track (Indian skin): 13 m rails. Each gap is crossed first by one bogie's two axles (dha-dha),
 // then, after a short gap, by the next bogie's pair (dhaa-dhaa, a touch lower and duller), then a longer
 // gap until the next joint: da-dum . da-dum ... timed by speed. The two audible bogies are the near ones
 // across the coupler; spacings are tuned a little so the rhythm reads (pair 1.8 m, between pairs 3.4 m,
 // to the next joint 6 m). Rail lengths vary a hair per joint.
 const RAIL = {
-  dPerM: 5.6,   // route units per metre (cruise 140 u/s ≈ 25 m/s ≈ 90 km/h → a joint every 0.52 s)
+  dPerM: 10.4,  // route units per metre (Indian cruise 260 u/s ≈ 25 m/s ≈ 90 km/h → a joint every 0.52 s)
   axles: [{ o: 7.0, front: true, k: 1 }, { o: 5.2, front: true, k: 0.84 }, { o: 1.8, front: false, k: 0.78 }, { o: 0, front: false, k: 0.66 }],
 };
 const RAIL_LEN = 13;
@@ -1155,15 +1163,17 @@ function jointIndex(m) { let j = Math.floor(m / RAIL_LEN); if (m < jointPos(j)) 
 // can't be seen, then eases back to cruise over ~1.6 s. The glass never goes dark.
 const SURGE = { up: 0.9, hold: 0.3, down: 1.7, gain: 13 };
 function surgeEnv(t) { return t < SURGE.up ? smooth(t / SURGE.up) : t < SURGE.up + SURGE.hold ? 1 : 1 - smooth((t - SURGE.up - SURGE.hold) / SURGE.down); }
+const cruise = () => S.cruise || 260;
+const vPhys = () => train.v * 140 / cruise();   // speed in "feel" units (140 = cruising): rocking, wind on the glass
 function updateTrain(dt, T) {
-  let vT = 140;
+  let vT = cruise();
   if (calm.on) vT *= 0.5;
   const sk = train.skip;
   if (sk) {
     sk.t += dt;
     const e = surgeEnv(sk.t);
     sk.env = e;
-    train.v = lerp(sk.t < SURGE.up ? sk.v0 : vT, vT * (1 + SURGE.gain), e * e);
+    train.v = lerp(sk.t < SURGE.up ? sk.v0 : vT, vT * (1 + SURGE.gain) * 140 / cruise(), e * e);   // same peak on every skin
     if (!sk.jumped && sk.t > SURGE.up + SURGE.hold * 0.5) {
       sk.jumped = true;
       const [i] = segAt(train.d); let j = (i + 1) % SEG.length; if (SEG[j].t === 'tunnel') j = (j + 1) % SEG.length;
@@ -1175,7 +1185,7 @@ function updateTrain(dt, T) {
   train.d += train.v * dt;
   // rail joints: each axle of our car crossing a gap jolts the floor a hair — the same physics the
   // ambience bed schedules the clacks from, so the jolt lands on the "dha"
-  const vr = Math.min(train.v, 320);
+  const vr = Math.min(vPhys(), 320);
   const jolt = (k) => { rock.jv += k * (vr / 200) * (train.skip ? 0.35 : 1) * (1 - 0.6 * calm.lv * breathHold()); };
   if (S.rail === 'jointed') {
     const sm = train.d / RAIL.dPerM;
@@ -1344,7 +1354,7 @@ function drawPaintedCountryside(g,T) {
   const night=moonless,day=A('panoDay');
   if(!(night||day) || !artMode())return;
   const v=L.V,w=v.ww,h=v.wh;
-  const blur=Math.max(0,train.v-170)*0.042;   // stage px the nearest poles travel while the "shutter" is open
+  const blur=Math.max(0,train.v-170)*0.035+Math.max(0,train.v-400)*0.012;   // stage px the nearest poles travel while the "shutter" is open: none at a sleeper's cruise, a short smear at Shinkansen speed, a streak in the surge
   g.save();g.beginPath();g.rect(v.x0,v.y0,w,h);g.clip();
   const paint=(im,alpha)=>{
     if(!im || alpha<.001)return;
@@ -1647,7 +1657,7 @@ function drawGlass(g, T, dt) {
   const v = L.V, w = L.win;
   setWR(g);
   // the carriage mirrored in the glass: strongest at night and in tunnels
-  const refl = (0.03 + 0.13 * (1 - E.day)) * (0.4 + 0.6 * E.lamp) * (1 + 2.6 * train.tunnel) * (1 - calm.lv * 0.4);
+  const refl = (0.03 + 0.13 * (1 - dayIn())) * (0.4 + 0.6 * Math.max(E.lamp, train.dark)) * (1 + 2.6 * train.tunnel) * (1 - calm.lv * 0.4);
   if (refl > 0.005) {
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = 'screen'; g.globalAlpha = Math.min(0.85, refl);
     g.drawImage(reflCv, OX * dpr + (v.x0 + rock.x) * U, OY * dpr + (v.y0 + rock.y) * U, v.ww * U, v.wh * U);
@@ -1662,10 +1672,10 @@ function drawGlass(g, T, dt) {
   // streaks run diagonally backwards (the train's wind pushes them)
   const rate = E.rain * 70;
   if (rate > 0.5) { for (let i = 0; i < rate * dt * open; i++) streaks.push({ x: w.x0 + Math.random() * (w.w + 200), y: w.y0 + Math.random() * w.h * 0.8, len: 10 + Math.random() * 26, sp: 50 + Math.random() * 90, life: 0 }); }
-  const ang = Math.atan2(1, 0.4 + train.v / 160), dx = -Math.cos(ang), dy = Math.sin(ang);
+  const ang = Math.atan2(1, 0.4 + vPhys() / 160), dx = -Math.cos(ang), dy = Math.sin(ang);
   g.strokeStyle = 'rgba(214,228,248,0.32)'; g.lineWidth = 1.3; g.lineCap = 'round'; g.beginPath();
   for (let i = streaks.length - 1; i >= 0; i--) {
-    const s = streaks[i]; s.life += dt; s.x += dx * s.sp * dt * (1 + train.v / 200); s.y += dy * s.sp * dt;
+    const s = streaks[i]; s.life += dt; s.x += dx * s.sp * dt * (1 + vPhys() / 200); s.y += dy * s.sp * dt;
     if (s.y > w.y1 || s.x < w.x0 - 40 || s.life > 4 || streaks.length > 260 || inTunnel(s.x)) { streaks.splice(i, 1); continue; }
     if (s.x > w.x1) continue;
     g.moveTo(s.x, s.y); g.lineTo(s.x - dx * s.len, s.y - dy * s.len);
@@ -1724,6 +1734,7 @@ function drawSweeps(g, dt) {
 // =====================================================================
 // where the chai's surface is (painted kulhad sprite, or the procedural cup)
 function teaSurface() {
+  if (!TP.drink) return { x: L.cup.x, y: L.cup.y, rx: 0, ry: 0, painted: false, live: false };
   const r = tpGeom('drink');
   if (!r) return { x: L.cup.x, y: L.cup.y - 62, rx: 15.5, ry: 3.2, painted: false, live: skinId === 'indian' };
   const tea = TP.drink.tea;
@@ -1745,7 +1756,7 @@ function drawTea(g, T) {
 //  calm breathing and birds passing outside the glass
 // =====================================================================
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
-// Diegetic breathing: the berth lamps fill and empty with the breath and the chai's steam rises with it
+// Diegetic breathing: the berth lamps fill and empty with the breath and the table's warmth swells with it
 // (holds: frozen at their level); lw.js only draws a quiet caption. Mirror the guide's clock.
 LW.breathDiegetic = true;
 LW.breathLabelAt = [0.49, 0.86];   // the dark aisle floor under the tea table, above the Dock
@@ -1791,7 +1802,7 @@ function updateParticles(dt, T) {
   // tea steam (wavers when the carriage jolts)
   // calm: the steam rises with the breath — a taller, fuller plume on the in-breath, thin and low on the out
   const sb = calm.lv * breath(), sMax = 7 + Math.round(7 * calm.lv), up = 1 + calm.lv * (1.6 * breath() - 0.5);
-  if (steam.length < sMax && Math.random() < dt * 2.4 * (1 + calm.lv * (2 * breath() - 0.4))) steam.push({ x: L.cup.x + rand(-6, 6), y: teaSurface().y - 6, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
+  if (TP.drink && steam.length < sMax && Math.random() < dt * 2.4 * (1 + calm.lv * (2 * breath() - 0.4))) steam.push({ x: L.cup.x + rand(-6, 6), y: teaSurface().y - 6, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
   for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 1.1 + s.ph + s.t) * 5 - rock.jv * 0.3) * dt; s.y -= dt * (14 + s.t * 4) * up; s.r += dt * 4 * (1 + 1.8 * sb); if (s.t > s.life) steam.splice(i, 1); }
 
 }
@@ -2000,7 +2011,7 @@ function sHorn(a, t, amp, o) {              // the loco, far up front: a two-not
   for (const f of [311, 370, 313.5]) { const s = a.createOscillator(); s.type = 'sawtooth'; s.frequency.value = f; s.connect(lp); s.start(t); s.stop(end); }
 }
 function ambUpdate(a, t, dt, B, X) {
-  const v = clamp(train.v / 140, 0, 3.2), tun = train.tunnel, q = 1 - 0.25 * calm.lv;
+  const v = clamp(train.v / cruise(), 0, 3.2), tun = train.tunnel, q = 1 - 0.25 * calm.lv;
   const bridge = (biomeAt(train.d).water || 0), out = 1 - 0.75 * tun;
   ambGain('rumble', 0.11 * (0.3 + 0.7 * Math.min(v, 1.4)) * (1 + 0.9 * tun) * q); ambFreq('rumble', 80 + 50 * Math.min(v, 1.5) + 60 * tun);
   ambGain('rail', 0.012 * Math.min(v, 1.5) * (1 + 1.2 * tun) * q);
@@ -2109,11 +2120,16 @@ function render(T, dt) {
   const rx = (rock.x - RM) * K * dpr, ry = (rock.y - RM) * K * dpr;
   if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, rx, ry);
   ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, rx, ry); ctx.globalAlpha = 1;
+  // tunnel by day: the carriage falls back to its own lamps as the bore covers the glass
+  train.dark = approach(train.dark, train.tunnel, 5, dt);
+  const dk = artMode() ? train.dark * E.day : 0;
+  if (dk > 0.004) { ctx.globalAlpha = Math.min(1, dk); ctx.drawImage(darkRoom(), rx, ry); ctx.globalAlpha = 1; }
+  else if (darkCv && train.tunnel === 0 && train.dark < 0.002) { darkCv.width = darkCv.height = 1; darkCv = null; darkOf = -1; }
   setWR(ctx);
   // in calm the berth lamps become the breath: they fill with light on the in-breath, hold, and empty on the
   // out-breath (lit by day too, as soft candlelight, so the rhythm always reads)
   const bl = calm.lv > 0.01 ? breath() : 0;
-  const sg = stretchGlow(), lv = Math.max(lerp(E.lamp * (1 - E.day), 0.12 + 0.88 * bl, calm.lv), sg * 0.9);
+  const sg = stretchGlow(), lv = Math.max(lerp(lerp(E.lamp * (1 - E.day), Math.max(E.lamp, 0.85), train.dark * E.day), 0.12 + 0.88 * bl, calm.lv), sg * 0.9);
   if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) {
     drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60 + 60 * calm.lv * bl, 0.45 * lv);
     if (calm.lv > 0.01) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 70, 150 + 200 * bl, 0.3 * calm.lv * lv);   // the pool it casts on the wall + berth

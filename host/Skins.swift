@@ -8,8 +8,8 @@ import AppKit
 let sceneSkins: [String: [(String, String)]] = [
     "cafe": [("record", "Turntable"), ("jukebox", "Jukebox")],          // stored under the scene's existing "player" key
     "cymatics": [("sand", "Sand"), ("faraday", "Faraday Water"), ("filings", "Iron Filings")],
-    "kinetic": [("copper", "Copper Rain"), ("harmonograph", "Harmonograph")],
-    "fluids": [("ferro", "Magnet Bloom")],
+    "kinetic": [("copper", "Copper Rain"), ("harmonograph", "Harmonograph"), ("pendulum", "Pendulum Wave")],
+    "fluids": [("ferro", "Magnet Bloom"), ("vortex", "Vortex Rings"), ("ripple", "Ripple Tank")],
     "skies": [("komorebi", "Komorebi")],
     "train": [("indian", "Indian Sleeper"), ("shinkansen", "Shinkansen"), ("swiss", "Swiss Alpine"), ("orient", "Orient Express")],
 ]

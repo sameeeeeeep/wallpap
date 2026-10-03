@@ -29,7 +29,7 @@
   Harmonograph, music:
     two strongest pitch classes → frequency ratio (unison 1:1, fifth 3:2, fourth 4:3, maj 3rd 5:4,
                                   min 3rd 6:5, tritone 45:32), glided like changing a pendulum length
-    loudness wobble             → a small detune: the rosette precesses
+    rational frequency lock     → a closed rosette, pen lifts at the common period
     brightness                  → nib width;  loudness at the start of a sheet → figure size
     phrases                     → one sheet per 16 bars (or when the figure has decayed)
     drop                        → a third, rotary pendulum joins, drawing in the accent ink
@@ -78,6 +78,7 @@
 <canvas id="cap"></canvas>
 <script src="lw.js"></script>
 <script src="music.js"></script>
+<script src="physical-skins.js"></script>
 <script>
 'use strict';
 const TAU = Math.PI * 2;
@@ -95,7 +96,7 @@ const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], 
 const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
 const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 const MX = LW.mx;
-const SKINS = ['copper', 'harmonograph'];
+const SKINS = ['copper', 'harmonograph', 'pendulum'];
 const skinWanted = () => SKINS.includes(LW.settings.skin) ? LW.settings.skin : 'copper';
 
 // hour → [base, key light] (sRGB) shared by both skins
@@ -138,7 +139,7 @@ function setCalm(on, auto = 0) {
   calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
 }
 let tag = null;
-function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') CU.swell(0.5, 0.5, 1); }
+function showTag(kind) { if (kind === 'stretch') CU.swell(0.5, 0.5, .4); }
 
 // =====================================================================
 //  COPPER RAIN
@@ -671,7 +672,7 @@ const HG = (() => {
   }
   // ── the pendulums ──
   function ratioNow() {
-    if (!MX.playing) return [1, 1];
+    if (!MX.playing) return [3, 2];
     return MX.interval.strength > 0.25 ? MX.interval.ratio : [1, 1];
   }
   function newSheet(reason) {
@@ -685,30 +686,25 @@ const HG = (() => {
     }
     ix.setTransform(1, 0, 0, 1, 0, 0); ix.clearRect(0, 0, ink.width, ink.height);
     S.inked = false; S.rot = (Math.random() - 0.5) * 0.05; S.slide = 0; bg.dirty = true; HG.dirtyDesk = true;
-    const r = ratioNow(), slow = TAU / 1.05;
-    S.f1 = slow * r[1] / Math.min(r[0], r[1]); S.f2 = S.f2T = slow * r[0] / Math.min(r[0], r[1]);
+    const r = ratioNow();
+    S.period = Math.max(6, Math.min(16, (r[0]+r[1])*.9));
+    S.f1 = TAU*r[1]/S.period; S.f2 = S.f2T = TAU*r[0]/S.period;
+    S.ratio = r.slice();
     S.p = [Math.random() * TAU, Math.random() * TAU];
     S.k1 = Math.PI / 2 * (0.82 + 0.16 * Math.random()); S.k2 = Math.PI / 2 * (0.78 + 0.2 * Math.random());
     S.spin = MX.playing && MX.minor ? 1 : -1;
     const loud = MX.playing ? MX.energy : 0.3;
-    S.A = reason === 'calm' ? 0 : reason === 'idle' ? 0.55 : 0.72 + 0.22 * loud;
+    S.A = reason === 'calm' ? 0 : reason === 'idle' ? 0.85 : 0.72 + 0.22 * loud;
     S.d = reason === 'idle' ? 1 / 70 : 1 / 30;
-    S.t = 0; S.last = null; S.lifted = false; S.accent = false; S.R3 = 0; S.mode = reason; S.bars = 0; S.startT = nowS();
+    S.t = 0; S.loops=0; S.hold=0; S.last = null; S.lifted = false; S.accent = false; S.R3 = 0; S.mode = reason; S.bars = 0; S.startT = nowS();
     S.inkCol = reason === 'idle' ? [70, 70, 74] : [22, 20, 24];
   }
   MX.on('track', () => newSheet('music'));
   MX.on('phrase', (i) => { if (MX.playing && calm.lv < 0.5 && (i % 2 === 0 || S.A * Math.exp(-S.d * S.t) < 0.06)) newSheet('music'); });
-  MX.on('drop', () => { if (calm.lv < 0.5) { S.accent = true; S.R3 = 0.16; S.f3 = (S.f1 + S.f2) * 0.5 * 1.003; } });
+  MX.on('drop', () => { if (calm.lv < 0.5) { newSheet('music'); S.accent = true; S.R3 = .12; S.f3 = TAU*(S.ratio[0]+S.ratio[1])/S.period; S.t3=0; } });
   // two rotary pendulums (pen arm + table): nearly circular orbits; counter-rotating (major) draws petals,
   // co-rotating (minor) draws inner loops
-  function penAt(t) {
-    const e = Math.exp(-S.d * t), e2 = Math.exp(-S.d * 1.25 * t);
-    const a1 = S.A * 0.56, a2 = S.A * 0.44, sg = S.spin;
-    let x = a1 * Math.sin(S.f1 * t + S.p[0]) * e + a2 * Math.sin(S.f2 * t + S.p[1]) * e2;
-    let y = a1 * Math.sin(S.f1 * t + S.p[0] + S.k1) * e + a2 * Math.sin(S.f2 * t + S.p[1] + sg * S.k2) * e2;
-    if (S.R3 > 0) { const e3 = Math.exp(-S.d * 0.8 * (t - S.t3)); x += S.R3 * e3 * Math.cos(S.f3 * t); y += S.R3 * e3 * Math.sin(S.f3 * t); }
-    return [x, y];
-  }
+  function penAt(t) { return PhysicalSkins.rosetteAt(t,S); }
   function tick(dt, T) {
     if (S.dirty) bake();
     if (S.stackDirty) bakeStack();
@@ -719,17 +715,16 @@ const HG = (() => {
     if (cl < 0.5 && S.mode === 'calm') newSheet(MX.playing ? 'music' : 'idle');
     if (S.mode !== 'calm' && !playing && S.silent > 90 && S.mode !== 'idle') newSheet('idle');
     if (!MX.ever && S.mode === 'idle' && S.t === 0 && !S.inked) newSheet('idle');
+    if(S.lifted && S.mode!=='calm' && S.loops<6){
+      S.hold+=dt;if(S.hold>1.5){S.hold=0;S.loops++;S.A*=.91;S.t=0;S.last=null;S.lifted=false;}
+    }
     // slide the fresh sheet in from above-left
     S.slide = Math.min(1, S.slide + dt / 1.4);
     const e = 1 - Math.pow(1 - S.slide, 3);
     sheetEl.style.transform = `translate(${(1 - e) * -S.size * 0.25}px, ${(1 - e) * -S.size * 0.9}px) rotate(${S.rot + (1 - e) * -0.12}rad)`;
     if (S.slide < 1) { HG.dirtyDesk = true; }
-    // ratio glide (like sliding a pendulum bob) + loudness wobble → slow precession
-    const r = ratioNow(), slow = TAU / 1.05;
-    const wob = playing ? (MX.level - MX.energy) * 0.04 : 0;
-    S.f2T = slow * r[0] / Math.min(r[0], r[1]) * (1 + 0.004 + wob);
-    S.f1 = approach(S.f1, slow * r[1] / Math.min(r[0], r[1]), 2.5, dt);
-    S.f2 = approach(S.f2, S.f2T, 2.5, dt);
+    // Freeze frequencies for the entire sheet: gliding them mid-stroke cannot close a rosette.
+    // Harmony is sampled on the next phrase/new sheet; the pen lifts at the exact common period.
     S.nibW = approach(S.nibW, 0.6 + 1.1 * MX.bright, 2, dt);
     let lw = S.nibW * L.dpr, alpha = 0.62;
     const steps = Math.max(2, Math.ceil(dt * 240));
@@ -748,13 +743,13 @@ const HG = (() => {
     } else if (!S.lifted) {
       const pts = S.last ? [S.last] : [];
       for (let i = 1; i <= steps; i++) {
-        const t = S.t + dt * i / steps;
+        const t = Math.min(S.period, S.t + dt * i / steps);
         if (S.accent && S.t3 == null) S.t3 = t;
         p = penAt(t); pts.push(p);
       }
       drawPath(pts, k, c0, lw, alpha, col);
-      S.t += dt; S.last = p; S.inked = true;
-      if (S.A * Math.exp(-S.d * S.t) < 0.012) S.lifted = true;      // the figure has died away: lift the pen
+      S.t = Math.min(S.period, S.t+dt); S.last = p; S.inked = true;
+      if (S.t >= S.period) S.lifted = true;      // the figure has died away: lift the pen
     }
     if (!S.accent) S.t3 = null;
     // pen (nib + brass arm) follows the point, in screen space
@@ -787,7 +782,7 @@ const HG = (() => {
     ix.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha})`; ix.lineWidth = lw;
     ix.beginPath(); ix.moveTo(x0, y0); ix.lineTo(x1, y1); ix.stroke();
   }
-  S.layout = layout; S.tick = tick; S.newSheet = newSheet;
+  S.layout = layout; S.tick = tick; S.newSheet = newSheet; S.penAt = penAt;
   S.markEnv = () => { S.dirty = true; };
   return S;
 })();
@@ -797,7 +792,9 @@ const bg = { dirty: false };
 //  Skins: crossfade by CSS opacity, both tick during the fade
 // =====================================================================
 const SK = { cur: null, fadeUntil: 0 };
-const skinEl = { copper: document.getElementById('skin-copper'), harmonograph: document.getElementById('skin-harmonograph') };
+const PHYSICAL = PhysicalSkins.create(document.body);
+PHYSICAL.el.classList.add('skin');
+const skinEl = { pendulum: PHYSICAL.el, copper: document.getElementById('skin-copper'), harmonograph: document.getElementById('skin-harmonograph') };
 function applySkin() {
   const want = skinWanted();
   if (want === SK.cur) return;
@@ -805,6 +802,8 @@ function applySkin() {
   SK.cur = want; SK.prev = prev; SK.fadeUntil = nowS() + 1.6;
   for (const k of SKINS) skinEl[k].classList.toggle('on', k === want);
   if (want === 'harmonograph' && !HG.inked) HG.newSheet(MX.playing ? 'music' : 'idle');
+  PHYSICAL.set(want==='pendulum'?'pendulum':'');
+  capCv.style.display=want==='pendulum'?'none':'block';
   cap.dirty = true;
 }
 LW.on('settings', applySkin);
@@ -826,8 +825,8 @@ function ellipsize(g, s, maxW) { if (g.measureText(s).width <= maxW) return s; w
 function stateLabel() {
   if (calm.lv > 0.5) return SK.cur === 'harmonograph' ? 'one ellipse per breath' : 'breathing plane';
   if (SK.cur === 'harmonograph') {
-    if (!MX.playing) return HG.lifted ? 'pen at rest' : 'free swing · 1:1';
-    const r = MX.interval.strength > 0.25 ? MX.interval.ratio : [1, 1];
+    if (!MX.playing) return HG.lifted ? 'pen at rest' : 'closed rosette · '+(HG.ratio||[3,2]).join(':');
+    const r = HG.ratio||[1,1];
     return MX.chordName() + '  ·  ' + r[0] + ':' + r[1];
   }
   if (!MX.playing) return 'resting choreography';
@@ -909,7 +908,8 @@ function tick(dt, T) {
   const fading = T < SK.fadeUntil;
   if (SK.cur === 'copper' || (fading && SK.prev === 'copper')) CU.tick(dt, T);
   if (SK.cur === 'harmonograph' || (fading && SK.prev === 'harmonograph')) HG.tick(dt, T);
-  drawCaption(dt);
+  if(SK.cur==='pendulum')PHYSICAL.tick(dt);
+  else drawCaption(dt);
 }
 
 // =====================================================================
@@ -953,7 +953,7 @@ applySkin();
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
 
-window.__kin = {
+window.__kin = { PHYSICAL,
   CU, HG, L, calm, MX, SK,
   bench(n = 120) {
     const realNow = () => new Event('x').timeStamp, px = new Uint8Array(4), gl = CU.gl;

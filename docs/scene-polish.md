@@ -561,3 +561,25 @@ Each skin's alpha foreground mask removes the walker behind near seat backs, doo
 rocking, soft contact shadow, graded approach to clear-zone/avoid boundaries; no text. No new generation prompts.
 Inspected `shots/p2-train-{indian,shinkansen,swiss,orient,occlusion,avoid}.png` and contact sheets, covering daylight,
 night, left/off layouts and an explicit avoid region. No JS errors; Node suite 32/32. Installed app untouched.
+
+## 2026-10-03 — P2 music installations and closed rosettes
+Added `scenes/physical-skins.js`: Vortex Rings and Ripple Tank in Fluids, Pendulum Wave in Kinetic; registered all three
+in `host/Skins.swift`. Original defaults remain first. Owning scenes update the shared music layer once per frame and
+skip hidden renderers. New installations choose a free rectangle inside LW.layout.clear around avoid boxes.
+- Vortex: capped five toroidal density volumes, softly lit ray integration, bounded ring speed/radius with mutual
+  coaxial influence, rate-limited kicks, quiet idle releases and one calm ring per exhale. This is a bounded visual
+  approximation, not a full fluid solver or the proposal's tracer-based Biot–Savart simulation.
+- Ripple Tank: sum cylindrical wave fields from strongest chroma sources before caustic shading; circle-of-fifths
+  source placement glides; idle/calm returns to one quiet source. No weather in the indoor installations.
+- Pendulum: fifteen brass bobs, analytic integer cycle counts, lengths proportional to inverse squared frequency,
+  phrase-period revival, smoothed amplitude, quiet resting motion. No beat-driven light flashes.
+- Harmonograph: lock rational ratios and amplitudes for each complete orbit, lift at its exact common period, and
+  draw successively smaller separate closed orbits. Third pendulum also uses an integer multiple; no detune-driven
+  failure to close. Fixed caption to report the locked ratio. Existing reminder sentences no longer render.
+
+Inspected wkshot `shots/p2-{vortex,ripple,pendulum,rosette}.png`, `*-final.png`, ripple-calm, skin-switch and review sheets.
+Covered music, idle, calm, mirrored ultrawide/avoid, switching back to Harmonograph. Virtual captures disable CSS skin
+transitions where necessary (WebKit's CSS clock does not advance with LW.advance). No JS errors. Closure reported
+4.74e-16; invariant tests cover six ratios (including 45:32), both rotations, third pendulum, and 15-bob revival.
+`node --test tests/*.cjs`: 34/34. `swiftc -typecheck -target arm64-apple-macos13 host/*.swift`: passed, existing warnings
+only (including duplicate bowls case). No app rebuild/install, push or release. Other proposed visualizers remain backlog.

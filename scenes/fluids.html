@@ -55,6 +55,7 @@
 <canvas id="cap"></canvas>
 <script src="lw.js"></script>
 <script src="music.js"></script>
+<script src="physical-skins.js"></script>
 <script>
 'use strict';
 const TAU = Math.PI * 2;
@@ -552,7 +553,7 @@ function setCalm(on, auto = 0) {
   calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
 }
 let tag = null;
-function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') F.jolt = 1; }
+function showTag(kind) { if (kind === 'stretch') F.jolt = .4; }
 
 // =====================================================================
 //  Caption (under the dish, inside the clear band)
@@ -686,6 +687,7 @@ function render(dt, T) {
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
+const PHYSICAL=PhysicalSkins.create(document.body);
 const rnow = LW.virtual ? () => new Event('x').timeStamp : () => performance.now();
 let tPrev = nowS(), bgOpacity = -1;
 function frame() {
@@ -696,6 +698,10 @@ function frame() {
 }
 function tick(dt, T) {
   MX.update(dt);
+  const physical=['vortex','ripple'].includes(LW.settings.skin)?LW.settings.skin:'';
+  if(PHYSICAL.mode!==physical)PHYSICAL.set(physical);
+  for(const c of [glCv,bgCv,capCv])c.style.display=physical?'none':'block';
+  if(physical){PHYSICAL.tick(dt);return;}
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 1.2 : 1.6, dt);
   calm.br = calm.lv > 0.01 ? LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) : { level: 0 };
@@ -750,7 +756,7 @@ layout();
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
 
-window.__fx = {
+window.__fx = { PHYSICAL,
   F, V, L, calm, MX,
   bench(n = 120) {
     const realNow = () => new Event('x').timeStamp, px = new Uint8Array(4);

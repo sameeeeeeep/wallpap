@@ -1,1 +1,7 @@
-{"id":"butterfly-garden","title":"Butterfly Garden","category":"Nature","pro":true,"version":1}
+{
+  "id": "butterfly-garden",
+  "title": "Butterfly Garden",
+  "category": "Nature",
+  "pro": true,
+  "version": 2
+}

@@ -1,0 +1,559 @@
+ace|Playing card that can rank above a king
+act|One major division of a stage play
+add|Calculate a sum
+age|Number of years since birth
+ago|In the past, after a duration
+aid|Help given to someone
+aim|Point toward a target
+air|Mixture of gases we breathe
+all|The whole amount
+and|Word that joins two items in a list
+ant|Six-legged insect living in a colony
+any|Even one, whichever it is
+ape|Primate such as a gorilla
+apt|Well suited to the situation
+arc|Curved part of a circle
+are|Form of be used with you
+ark|Noah's vessel
+arm|Limb from shoulder to wrist
+art|Paintings and sculpture, collectively
+ash|Powder left after burning wood
+ask|Put a question to someone
+ate|Had a meal, in the past
+awe|Wonder mixed with admiration
+bad|Opposite of good
+bag|Flexible container with handles
+ban|Officially forbid
+bar|Long counter where drinks are served
+bat|Flying mammal that may use echolocation
+bay|Coastal inlet smaller than a gulf
+bed|Furniture made for sleeping
+bee|Honey-making insect
+bet|Wager on an outcome
+bid|Offer a price at an auction
+big|Opposite of small
+bin|Container for household rubbish
+bit|Smallest binary unit of information
+bow|Weapon used to launch an arrow
+box|Container with flat sides and a lid
+boy|Male child
+bud|Flower before its petals open
+bug|Informal word for a software defect
+bun|Small round bread roll
+bus|Large road vehicle on a public route
+but|Conjunction meaning however
+buy|Obtain by paying for it
+cab|Taxi, for short
+can|Metal food container
+cap|Soft hat with a visor
+car|Road vehicle usually with four wheels
+cat|Pet that purrs
+cod|White-fleshed fish often served with chips
+cog|Tooth on a gear wheel
+cop|Informal word for a police officer
+cot|Small portable bed
+cow|Adult female bovine
+cry|Shed tears
+cub|Young bear
+cue|Signal for an actor to begin
+cup|Small drinking vessel with a handle
+cut|Divide with scissors
+dad|Informal word for father
+dam|Barrier built across a river
+day|Period of twenty-four hours
+den|Wild animal's sheltered home
+dew|Morning water droplets on grass
+did|Past tense of do
+dig|Break up soil with a spade
+dim|Not brightly lit
+dip|Lower briefly into liquid
+dog|Pet that barks
+dot|Small round mark
+dry|Free from moisture
+due|Scheduled to arrive now
+dug|Past tense of dig
+duo|Group of two performers
+dye|Substance used to change fabric's colour
+ear|Organ of hearing
+eat|Consume food
+eel|Long snake-shaped fish
+egg|Oval object laid by a hen
+elf|Small magical being in folklore
+elk|Large member of the deer family
+elm|Deciduous tree with serrated oval leaves
+end|Final part of something
+era|Distinct period in history
+eve|Evening before a special day
+ewe|Adult female sheep
+eye|Organ of sight
+fan|Device that circulates air
+far|At a great distance
+fat|Nutrient group that includes oils
+fax|Document sent over a telephone line
+fed|Gave food to, in the past
+fee|Charge for a service
+few|A small number of
+fig|Soft fruit with many tiny seeds
+fin|Flat swimming appendage of a fish
+fir|Evergreen tree often used at Christmas
+fit|Be the correct size
+fix|Repair something broken
+fly|Travel through the air on wings
+fog|Thick cloud at ground level
+for|Preposition meaning intended to benefit
+fox|Wild canine with a bushy tail
+fro|Word paired with to in a back-and-forth phrase
+fry|Cook in hot oil
+fun|Enjoyment or amusement
+fur|Thick animal hair
+fan|Device that circulates air
+gap|Empty space between two things
+gas|State of matter that fills its container
+gel|Thick jelly-like styling substance
+gem|Precious stone cut for jewellery
+get|Obtain or receive
+got|Past tense of get
+gum|Chewy confection not meant to be swallowed
+gut|Informal word for the digestive tract
+guy|Informal word for a man
+gym|Room equipped for exercise
+had|Past tense of have
+ham|Cured meat from a pig's hind leg
+has|Form of have used with she
+hat|Head covering with a crown
+hay|Dried grass used as animal feed
+hen|Adult female chicken
+her|Object pronoun corresponding to she
+hey|Informal call to attract attention
+hid|Past tense of hide
+him|Object pronoun corresponding to he
+hip|Joint connecting a leg to the pelvis
+his|Possessive pronoun corresponding to he
+hit|Strike a target
+hog|Large domesticated pig
+hop|Jump on one foot
+hot|Having a high temperature
+how|Question word asking in what way
+hub|Central part of a wheel
+hug|Hold someone in a warm embrace
+hum|Sing with closed lips
+hut|Small simple shelter
+ice|Frozen water
+icy|Covered with frozen water
+ill|Unwell
+ink|Fluid used in a fountain pen
+inn|Small establishment offering lodging
+ion|Atom with an electric charge
+its|Possessive form of it
+ivy|Climbing plant often covering walls
+jar|Wide-mouthed glass container
+jaw|Bony structure holding the teeth
+jet|Aircraft powered by a turbine engine
+job|Paid position of employment
+jog|Run at a gentle pace
+joy|Feeling of great delight
+jug|Pitcher with a handle and spout
+key|Small shaped object that opens a lock
+kid|Young goat
+kin|One's relatives
+kit|Set of tools for a particular task
+lab|Room for scientific experiments, briefly
+lad|Informal word for a boy
+lag|Fall behind in progress
+lap|Upper thighs when seated
+law|Rule enforced by a government
+lay|Put down in a horizontal position
+lea|Poetic word for a meadow
+led|Past tense of lead
+leg|Limb used for standing and walking
+let|Allow someone to do something
+lid|Removable top of a container
+lie|Recline in a horizontal position
+lip|Fleshy border of the mouth
+lit|Past tense of light
+log|Section of a felled tree trunk
+lot|Parcel of land
+low|Not high above the ground
+mad|Angry, informally
+man|Adult male human
+map|Drawing that shows geographic locations
+mat|Small protective floor covering
+may|Month between April and June
+men|Plural of man
+met|Past tense of meet
+mix|Combine ingredients together
+mob|Disorderly crowd
+mop|Tool used to wash a floor
+mud|Wet soft earth
+mug|Large drinking cup with a handle
+nap|Short daytime sleep
+net|Mesh used to catch fish
+new|Recently made or discovered
+nod|Move the head down and up in agreement
+nor|Word paired with neither
+not|Word used to negate a statement
+now|At this moment
+nut|Hard-shelled edible seed
+ oak|Tree that produces acorns
+oar|Long paddle used to row a boat
+oat|Cereal grain used in porridge
+odd|Not divisible by two
+off|Opposite of on
+oil|Liquid fat used in cooking
+old|Having existed for many years
+one|Number after zero
+opt|Choose, with for
+orb|Sphere, in literary language
+ore|Rock containing extractable metal
+our|Possessive form corresponding to we
+out|Opposite of in
+owl|Nocturnal bird with large eyes
+own|Possess or have legal title to
+pad|Cushion used for protection
+pan|Shallow metal cooking vessel
+pat|Light tap with a flat hand
+paw|Animal's foot with claws
+pay|Give money owed
+pea|Round green seed from a pod
+peg|Small pin used to fasten things
+pen|Tool that writes with ink
+pet|Animal kept for companionship
+pie|Baked dish with a pastry crust
+pig|Farm animal that oinks
+pin|Thin pointed metal fastener
+pit|Large deep hole in the ground
+ply|One layer in plywood
+pod|Seed case of a pea plant
+pop|Burst with a short sharp sound
+pot|Deep round cooking vessel
+pry|Open by using a lever
+pub|Public house, briefly
+pug|Small dog with a wrinkled face
+pun|Joke based on a word's double meaning
+pup|Young dog
+put|Place in a particular position
+rag|Scrap of cloth used for cleaning
+ram|Adult male sheep
+ran|Past tense of run
+rap|Rhythmic spoken vocal performance
+rat|Long-tailed rodent larger than a mouse
+raw|Not cooked
+ray|Beam of light
+red|Colour of a ripe tomato
+rib|Curved bone around the chest
+rid|Free of something unwanted, with of
+rig|Set up equipment for use
+rim|Outer edge of a circular object
+rip|Tear apart forcefully
+rob|Steal from a person or place
+rod|Thin straight bar
+rot|Decay through natural processes
+row|Horizontal line of entries in a table
+rub|Move a hand back and forth over a surface
+rug|Movable covering for part of a floor
+run|Move faster than a walk
+rye|Grain used to make some dark breads
+sad|Feeling sorrow
+sag|Droop under weight
+sap|Fluid circulating inside a plant
+sat|Past tense of sit
+saw|Toothed tool for cutting wood
+say|Speak words aloud
+sea|Large body of salt water
+see|Perceive with the eyes
+set|Collection of matching items
+sew|Join fabric with needle and thread
+she|Subject pronoun corresponding to her
+shy|Nervous around unfamiliar people
+sip|Drink in small mouthfuls
+sir|Polite form of address to a man
+sit|Rest with weight on the buttocks
+six|Number after five
+ski|Long narrow runner used on snow
+sky|Region above the earth's surface
+sly|Clever in a secretive way
+sob|Cry with audible gasps
+sod|Piece of grass-covered earth
+son|Male child in relation to a parent
+sow|Plant seeds in soil
+soy|Bean used to make tofu
+spa|Place offering mineral baths
+spy|Person secretly gathering information
+sum|Result of addition
+sun|Star at the centre of our solar system
+tag|Small label attached to an item
+tan|Light brown colour
+tap|Faucet controlling a water supply
+tar|Dark sticky road-surfacing substance
+tea|Drink made by steeping leaves
+ten|Number of fingers on two typical hands
+the|English definite article
+tie|Neckwear tied in a knot
+tin|Metal whose chemical symbol is Sn
+tip|Very end of a pointed object
+toe|Digit on a foot
+ton|Unit equal to two thousand pounds in the US
+too|Also; in addition
+top|Highest part of something
+tow|Pull a vehicle with a rope
+toy|Object a child plays with
+try|Make an attempt
+tub|Large open bathing container
+tug|Pull with a short sharp movement
+two|Number after one
+use|Employ for a purpose
+van|Road vehicle with room for cargo
+vat|Large vessel for holding liquid
+vet|Animal doctor, briefly
+via|By way of a particular place
+vie|Compete for something
+vow|Solemn promise
+wad|Small compressed lump of paper
+wag|Move a tail from side to side
+war|Armed conflict between countries
+was|Past form of be used with I
+wax|Material used to make candles
+way|Route from one place to another
+web|Silken trap spun by a spider
+wed|Get married
+wet|Covered with water
+who|Question word asking which person
+why|Question word asking for a reason
+wig|Artificial covering of hair
+win|Be victorious
+wit|Ability to make clever amusing remarks
+won|Past tense of win
+wow|Exclamation of amazement
+yak|Long-haired bovine of Central Asia
+yam|Starchy edible tuber
+yap|Short sharp bark
+yes|Affirmative answer
+yet|Up to the present time
+you|Pronoun for the person being addressed
+zip|Fasten with a zipper
+zoo|Place where animals are kept for public viewing
+ACORN|Oak seed inside a cup-shaped cap
+ACTOR|Performer playing a role on stage
+ADORE|Love very deeply
+AFTER|Later than, in time
+AGENT|Person authorised to act for another
+ALERT|Wide awake and watchful
+ALIEN|Being from another planet in fiction
+ALONE|Without anyone else present
+AMBER|Fossilised tree resin used in jewellery
+APPLE|Round fruit used in cider
+APRON|Garment protecting clothes while cooking
+ARENA|Central space used for sporting contests
+AROMA|Pleasant noticeable scent
+ARROW|Shaft shot from a bow
+ATLAS|Bound collection of maps
+ATTIC|Room directly beneath a roof
+AUDIO|Recorded or transmitted sound
+BAKER|Person whose trade is making bread
+BASIL|Fragrant herb often used in pesto
+BASIN|Bowl-shaped container for washing
+BEACH|Sandy shore beside the sea
+BEARD|Hair growing on the chin
+BENCH|Long seat for several people
+BERRY|Small juicy fruit such as a raspberry
+BIRCH|Tree often recognised by white peeling bark
+BLEND|Mix into a uniform combination
+BLOOM|A flower, or the act of flowering
+BOARD|Long flat piece of sawn wood
+BRAIN|Organ inside the skull that controls thought
+BREAD|Food baked from flour and yeast
+BRICK|Rectangular clay building block
+BROOK|Small flowing stream
+BROOM|Long-handled sweeping tool
+BRUSH|Tool with bristles for painting
+CABIN|Small wooden dwelling
+CAMEL|Desert animal with one or two humps
+CANAL|Artificial waterway for boats
+CANDY|Sweet confection made with sugar
+CANOE|Narrow boat propelled with a paddle
+CEDAR|Evergreen tree with fragrant wood
+CHAIR|Seat designed for one person
+CHALK|Soft white rock used on blackboards
+CHARM|Quality of being pleasing or delightful
+CHESS|Board game with kings and queens
+CHIME|Melodious ringing of a bell
+CHOIR|Organised group of singers
+CIDER|Drink made from pressed apples
+CLEAN|Free of dirt
+CLEAR|Transparent and easy to see through
+CLIFF|Steep exposed rock face
+CLOCK|Instrument that shows the time
+CLOUD|Visible mass of water droplets in the sky
+COAST|Land along the edge of the sea
+COCOA|Powder made from roasted cacao beans
+COMET|Icy body that can grow a tail near the sun
+CORAL|Marine colony that builds a reef
+CRANE|Tall lifting machine on a building site
+CREAM|Rich fatty part of milk
+CREEK|Small natural stream
+CROWN|Ceremonial headpiece worn by a monarch
+DAISY|Flower with white petals and a yellow centre
+DANCE|Move rhythmically to music
+DENIM|Strong cotton fabric used for jeans
+DIARY|Personal record of daily events
+DREAM|Sequence of images experienced during sleep
+EAGLE|Large bird of prey with a hooked beak
+EARTH|Planet where we live
+EASEL|Stand supporting an artist's canvas
+ELBOW|Joint in the middle of an arm
+EMBER|Small glowing piece left by a fire
+ENTRY|An act of going inside
+EQUAL|The same in amount or value
+FABLE|Short story that teaches a moral
+FEAST|Large celebratory meal
+FENCE|Barrier enclosing a piece of land
+FERRY|Boat carrying people across a waterway
+FIELD|Open area of land used for crops
+FINCH|Small seed-eating songbird
+FLAME|Visible burning gas above a candlewick
+FLOAT|Rest on the surface of water
+FLOOR|Lower surface of a room
+FLOUR|Finely ground grain used in baking
+FLUTE|Woodwind instrument played sideways
+FOCUS|Point where rays of light meet
+FRAME|Border surrounding a picture
+FROST|Thin icy coating formed on a cold surface
+FRUIT|Seed-bearing produce such as apples
+GLASS|Hard transparent material used in windows
+GLEAM|Brief soft shine of reflected light
+GLOBE|Spherical model of the earth
+GLOVE|Covering with separate spaces for fingers
+GOOSE|Water bird larger than a duck
+GRAIN|Small hard seed of a cereal plant
+GRAPE|Fruit that grows in bunches on a vine
+GRASS|Low green plant covering a lawn
+GREEN|Colour made by mixing blue and yellow paint
+GROVE|Small group of trees
+GUIDE|Person who shows visitors the way
+HEART|Organ that pumps blood
+HEDGE|Row of shrubs forming a boundary
+HERON|Long-legged wading bird
+HONEY|Sweet substance produced by bees
+HORSE|Hoofed animal commonly ridden
+HOUSE|Building in which people live
+IGLOO|Dome-shaped shelter made from snow blocks
+IVORY|Hard creamy material forming elephant tusks
+JELLY|Wobbly dessert set with a gelling agent
+JEWEL|Precious stone used as an ornament
+JUICE|Liquid squeezed from fruit
+KOALA|Australian tree-dwelling marsupial
+LABEL|Tag giving an item's name or information
+LADLE|Deep spoon used to serve soup
+LEAFY|Covered with many leaves
+LEMON|Yellow citrus fruit with a sour taste
+LIGHT|Visible radiation that makes sight possible
+LILAC|Shrub with fragrant pale-purple flowers
+LINEN|Fabric woven from flax fibres
+LODGE|Small house used for temporary stays
+LOTUS|Aquatic plant with large floating leaves
+LUNAR|Relating to the moon
+LYRIC|A line of words in a song
+MANGO|Tropical fruit with orange flesh and a large stone
+MAPLE|Tree tapped to make a sweet syrup
+MARSH|Wetland dominated by grasses
+MEDAL|Metal award hung from a ribbon
+MELON|Large sweet fruit with a thick rind
+METAL|Material such as copper or iron
+MIRTH|Amusement expressed in laughter
+MOOSE|Large deer with broad flat antlers
+MOSSY|Covered with small soft green plants
+MOUND|Small raised hill of earth
+MOUSE|Small rodent with a pointed snout
+MURAL|Painting made directly on a wall
+MUSIC|Art of arranging sounds in time
+NIGHT|Period between sunset and sunrise
+NORTH|Compass direction opposite south
+OCEAN|Largest kind of salt-water body
+OLIVE|Small fruit pressed to make a cooking oil
+ONION|Edible bulb with many concentric layers
+OPERA|Stage drama sung to orchestral music
+ORBIT|Path of a planet around a star
+OTTER|Playful aquatic mammal with dense fur
+PANDA|Black-and-white bear native to China
+PAPER|Thin material made from wood pulp for writing
+PASTA|Food such as spaghetti or penne
+PEACH|Soft-skinned stone fruit with juicy flesh
+PEARL|Smooth gem formed inside some molluscs
+PETAL|One colourful part of a flower
+PIANO|Keyboard instrument with strings struck by hammers
+PLANT|Living organism that commonly uses photosynthesis
+PLATE|Flat dish from which food is eaten
+PLUME|Large decorative feather
+POPPY|Flower whose seed capsules contain tiny edible seeds
+PORCH|Covered entrance outside a house
+PRISM|Transparent solid that splits white light into colours
+PUPPY|Young dog
+QUAIL|Small ground-dwelling bird with a rounded body
+QUIET|Making very little noise
+QUILT|Bed covering made of stitched padded layers
+RADIO|Device receiving broadcasts through electromagnetic waves
+RAVEN|Large all-black bird in the crow family
+REEDS|Tall slender wetland grasses
+RELAY|Race in which teammates take turns
+RHYME|Words ending in the same sound
+RIVER|Large natural stream flowing toward the sea
+ROBIN|Small bird often depicted with a red breast
+ROBOT|Programmable machine that performs tasks
+ROSES|Flowers known for layered petals and thorny stems
+ROUND|Circular in shape
+SALAD|Dish of mixed vegetables often served cold
+SANDY|Covered with loose grains of rock
+SATIN|Fabric with a smooth glossy surface
+SAUCE|Liquid accompaniment served with food
+SCARF|Long cloth worn around the neck
+SCENT|Distinctive smell
+SHADE|Area sheltered from direct sunlight
+SHEEP|Farm animal raised for wool
+SHELF|Flat board used to store objects
+SHELL|Hard protective outer covering of a mollusc
+SHINE|Give off or reflect light
+SHORE|Land at the edge of a lake or sea
+SKATE|Glide over ice on metal blades
+SLEET|Precipitation of small ice pellets
+SLOTH|Slow-moving tree-dwelling mammal
+SMILE|Expression formed by turning up the mouth's corners
+SNAIL|Slow mollusc carrying a spiral shell
+SNOWY|Covered in frozen white flakes
+SOLAR|Relating to the sun
+SOUND|Vibrations that can be heard
+SPACE|Region beyond the earth's atmosphere
+SPICE|Aromatic plant substance used to flavour food
+SPOON|Eating utensil with a small shallow bowl
+SPRIG|Small stem bearing leaves or flowers
+STAIR|One step in a flight between floors
+STEAM|Water in its gaseous state
+STONE|Small piece of rock
+STORK|Large long-legged bird with a long straight bill
+STORM|Severe weather with strong wind
+STORY|Account of events, real or imagined
+SUGAR|Sweet crystals used to flavour food
+SUNNY|Bright with direct sunlight
+SWIFT|Moving at great speed
+SYRUP|Thick sweet liquid poured on pancakes
+TABLE|Furniture with a flat top and legs
+THYME|Small-leaved herb used in savoury cooking
+TIGER|Large wild cat with dark stripes
+TOAST|Bread browned by radiant heat
+TOPAZ|Gemstone often yellow or golden
+TOWEL|Absorbent cloth used for drying
+TOWER|Tall narrow building
+TRAIL|Path through a natural area
+TRAIN|Rail vehicles pulled in a connected line
+TROUT|Freshwater fish related to salmon
+TULIP|Spring flower with a cup-shaped bloom
+TWINE|Strong thread made of twisted strands
+VIOLA|String instrument slightly larger than a violin
+VOICE|Sound produced when a person speaks
+WATER|Liquid whose chemical formula is H2O
+WHALE|Large marine mammal that breathes air
+WHEAT|Cereal grain commonly ground into bread flour
+WHEEL|Circular component that turns on an axle
+WHITE|Colour of fresh snow
+WORLD|The earth and all its inhabitants
+YEAST|Microorganism that makes bread dough rise
+ZEBRA|African equine with black and white stripes

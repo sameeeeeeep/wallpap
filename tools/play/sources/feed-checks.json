@@ -1,0 +1,32 @@
+[
+  {
+    "id": "bbc",
+    "url": "https://feeds.bbci.co.uk/news/rss.xml",
+    "status": 200,
+    "format": "rss",
+    "items": 26,
+    "checked": "2026-10-04"
+  },
+  {
+    "id": "npr",
+    "url": "https://feeds.npr.org/1001/rss.xml",
+    "status": 200,
+    "format": "rss",
+    "items": 10,
+    "checked": "2026-10-04"
+  },
+  {
+    "id": "guardian",
+    "url": "https://www.theguardian.com/world/rss",
+    "status": 200,
+    "format": "rss",
+    "items": 45,
+    "checked": "2026-10-04"
+  },
+  {
+    "id": "reuters",
+    "url": "https://www.reutersagency.com/feed/?best-topics=world&post_type=best",
+    "error": "HTTP Error 404: Not Found",
+    "checked": "2026-10-04"
+  }
+]

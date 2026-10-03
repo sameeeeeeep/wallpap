@@ -82,3 +82,12 @@ for these motion rows. `plant-qa.json` reports selected stance-landmark residual
 it is not an all-pixel optical-flow proof. Run `python3 tools/gaze-fix/capture.py`
 for Santorini/Speakeasy day/night sequences. Inspect `shots/gaze-fix/<animal>.jpg`
 (old over new for each frame) and the rendered sequences before accepting any recut.
+
+### FOLLOW artwork (2026-10-04)
+`art-src/follow/install.py` installs front/back `run` (6), cats’ `stalk` side/f/b (6),
+`t/hunt`, `t/pounce` side/f/b, `t/perk`, `t/turn-f`, `t/turn-b`, `t/loaf-stretch` (5).
+Dogs use hunt/pounce keys for play-bow/bounce. `perk-5` is the picked-me front sit.
+Turns play forward/reverse; only the stationary perk may look at the viewer.
+`PET_FOLLOW_LAYOUT` registers sequence anatomical height, foot padding and torso
+centers. New cycle geometry is in `art-src/follow/cycle-layout.json`; prompts and
+masters are beside it. JPEG cut reviews are in `shots/follow/`.

@@ -32,14 +32,14 @@ const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.le
 const enabled=()=>![false,0,'0','false'].includes(LW.settings.pets);
 const ROSTER=Object.freeze(Object.fromEntries([
  ...['orange','black','grey','calico','siamese'].map(id=>[id,Object.freeze({id,set:'cats/'+id,kind:'cat',height:78,
- poses:['walk1','walk2','sit','sleep',...(['orange','black'].includes(id)?['loaf','stretch']:[])],sleep:'sleep',sit:'sit'})]),
+ poses:['walk1','walk2','sit','sleep','loaf','stretch'],sleep:'sleep',sit:'sit'})]),
  ...['golden','corgi'].map(id=>[id,Object.freeze({id,set:'dogs/'+id,kind:'dog',height:96,
  poses:['walk1','walk2','sit',...(id==='golden'?['lie','belly-up']:['sleep','play-bow'])],sleep:id==='golden'?'lie':'sleep',sit:'sit'})])
 ]));
 const PANDAS=Object.fromEntries(['mei','bao','cub'].map(id=>[id,{id,set:'pandas/'+id,kind:'panda',height:id==='cub'?90:120,
  poses:['walk1','walk2',...(id==='mei'?['sit-eat','back-sleep']:id==='bao'?['sit-leaf','roll']:['back-sleep','tumble'])],
  sit:id==='mei'?'sit-eat':id==='bao'?'sit-leaf':'tumble',sleep:id==='bao'?'roll':'back-sleep'}]));
-const cycle=p=>/^(walk|run)-(?:[fb]-)?\d/.test(p);
+const cycle=p=>/^(walk|run|stalk)-(?:[fb]-)?\d/.test(p);
 const family=p=>cycle(p)||p==='walk2'?'walk1':p.startsWith('jump-')?'jump':p;
 function defringe(im) {
   try {
@@ -74,7 +74,7 @@ function asset(spec) {
  const s={spec,img:{},seq:{},seqRaw:{},ready:false};
  for(const p of spec.poses){const im=new Image();im.onload=()=>{if(im.naturalWidth)s.img[p]=defringe(im)};im.src='art/sprites/'+spec.set+'/'+p+'.png'}
  s.cyc=LW.petCycleLoad('art/sprites/',spec.set);
- for(const q of [...(LW.PET_SEQ_HAS[spec.set]||[]),...Object.keys(LW.PET_JUMP_LAYOUT[spec.set]||{})]){
+ for(const q of [...(LW.PET_SEQ_HAS[spec.set]||[]),...Object.keys(LW.PET_JUMP_LAYOUT[spec.set]||{}),...Object.keys(LW.PET_FOLLOW_LAYOUT?.[spec.set]||{})]){
   const ims=[];let n=0;
   for(let i=1;i<=5;i++){const im=new Image();im.onload=()=>{if(im.naturalWidth&&++n===5)s.seqRaw[q]=ims};im.src='art/sprites/'+spec.set+'/t/'+q+'-'+i+'.png';ims.push(im)}
  }
@@ -89,7 +89,7 @@ function prep(s){
   const ims=s.seqRaw[q],end=q==='stand-sit'?['walk1','sit']:q==='sit-sleep'?['sit','sleep']:['walk1','walk1'];
   if(!end.every(e=>s.img[ends[e]]))continue;
   const E=end.map(e=>{const p=ends[e],im=s.img[p];return {im,k:LW.petPoseScale(s.spec.kind,p,w,im),fa:e==='walk1'?.555:.5}});
-  const geom=(LW.PET_JUMP_LAYOUT[s.spec.set]||{})[q];
+  const geom=(LW.PET_JUMP_LAYOUT[s.spec.set]||{})[q]||(LW.PET_FOLLOW_LAYOUT?.[s.spec.set]||{})[q];
   const layouts=geom?ims.map((im,i)=>{const k=(s.ref.bot-s.ref.top+1)/geom.height;return {k,fa:(geom.centers[i]+(.555*w.width-s.ref.cx)/k)/im.width}}):LW.petSeqLayout(q,ims.map(im=>[im.width,im.height]),...E);
   ims.forEach((im,i)=>{const d=defringe(im),l=layouts[i];d.petK=l.k;d.petFa=d.petFa0=l.fa;d.petFootPad=geom?geom.pad:0;d.petName=q+'-'+(i+1);s.img[d.petName]=d});
   s.seq[q]=true;delete s.seqRaw[q];

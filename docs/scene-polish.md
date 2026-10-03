@@ -849,3 +849,26 @@ tests pass, including geometry/contact registry checks. Raw generation/capture P
 were removed after lossless WebP/JPEG preservation; approximately 16 GiB remains.
 No app rebuild/install/relaunch, push, release or sibling-tree change. The missing
 angles and FOLLOW addendum are subsequent logical steps.
+
+## 2026-10-04 — Missing pet angles and chase art
+
+Added 524 drawn frames: five cats each receive front/back runs (6 each), creeping
+side/front/back walks (6 each), hunt/wiggle and pounce in all three views (5 each),
+front sit/perk (5), side↔front and side↔back turns (5 each), loaf-to-stretch (5).
+Both dogs receive the directional runs, bow/bounce, perk, turns and rest/stretch
+equivalents (62 each). Grey/calico/Siamese also gain six standalone idle endpoints.
+Existing orange/black idle endpoints are preserved.
+
+All exact ImageGen prompts/provenance and 21 lossless masters are in
+`art-src/follow/`; `install.py` locates whole connected figures before cutting row
+bounds, registers the new gait contacts, and emits fixed-scale action metadata.
+Prompt constraints: match existing painted coat, invariant anatomical scale, exact
+counts, profile one-eye forward gaze, front gaze along diagonal, rear never lookback;
+only picked-me sit faces viewer. Rejected colored backgrounds were regenerated on
+flat light grey before cutting. Dog stalking rows are unused (dogs trot, bow, bounce).
+
+LOOKED at all seven `shots/follow/*-art.jpg` cut/plant contact sheets. The metadata
+checks cover complete sequences, runtime/source geometry and subpixel registered
+stance contacts (same landmark limitation as gaze fix). Runtime loaders now expose
+these assets; FOLLOW behavior and scripted scene verification follow separately.
+Raw generated PNGs removed after lossless master preservation; no installed app changes.

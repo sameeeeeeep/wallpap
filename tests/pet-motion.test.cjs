@@ -243,7 +243,7 @@ test('directional loading is atomic: one failed frame disables only that view',(
  class Image{constructor(){this.naturalWidth=100;images.push(this);}set src(v){this.url=v;}}
  vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/pet-motion.js'),'utf8'),{LW,Image});
  let done=0;const C=LW.petCycleLoad('art/sprites/','cats/orange',()=>done++);
- assert.equal(images.length,30);
+ assert.equal(images.length,60);
  for(const im of images){if(im.url.endsWith('walk-f-4.png'))im.onerror();else im.onload();}
  assert.equal(done,1);assert.equal(C.left,0);assert.equal(C.raw['walk-f'],undefined);
  assert.equal(C.raw.walk.length,8);assert.equal(C.raw['walk-b'].length,8);assert.equal(C.raw.run.length,6);
@@ -283,7 +283,8 @@ test('2D planted treadmill holds world contact for front, back, left and vertica
 test('directional art registration and runtime geometry remain synchronized',()=>{
  const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-layout.json'),'utf8'));
  Object.assign(layout,JSON.parse(fs.readFileSync(require.resolve('../art-src/pets-shared/directions-layout.json'),'utf8')));
- assert.equal(JSON.stringify(LW.PET_DIRECTION_LAYOUT),JSON.stringify(layout));
+ for(const [set,extra] of Object.entries(JSON.parse(fs.readFileSync(require.resolve('../art-src/follow/cycle-layout.json'),'utf8'))))Object.assign(layout[set],extra);
+ assert.deepEqual(JSON.parse(JSON.stringify(LW.PET_DIRECTION_LAYOUT)),layout);
  const reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-plant-qa.json'),'utf8'));
  assert.equal(Object.keys(reports).length,10);
  for(const r of Object.values(reports))assert.ok(r.max_contact_slip_px<1,'registered contact drift '+r.max_contact_slip_px);
@@ -341,6 +342,22 @@ test('gaze replacement registers every seven-pet motion cycle with subpixel stan
     const png=fs.readFileSync(require.resolve(`../scenes/art/sprites/${set}/cycle/${key}-${i}.png`));
     assert.ok(png.readUInt32BE(16)>2*g.pad);assert.ok(png.readUInt32BE(20)>2*g.pad);
    }
+  }
+ }
+});
+
+test('FOLLOW art has complete registered run, stalk, hunt, pounce and social sequences',()=>{
+ const {LW}=load(),reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/follow/plant-qa.json'),'utf8'));
+ for(const [set,seqs] of Object.entries(LW.PET_FOLLOW_LAYOUT)){
+  for(const key of ['perk','turn-f','turn-b','loaf-stretch','hunt','hunt-f','hunt-b','pounce','pounce-f','pounce-b']){
+   assert.equal(seqs[key].centers.length,5);
+   for(let i=1;i<=5;i++){const b=fs.readFileSync(require.resolve(`../scenes/art/sprites/${set}/t/${key}-${i}.png`));assert.ok(b.length>1000);assert.ok(b.readUInt32BE(20)>2*seqs[key].pad);}
+  }
+  for(const key of ['run-f','run-b',...(set.startsWith('cats/')?['stalk','stalk-f','stalk-b']:[])]){
+   const g=LW.PET_DIRECTION_LAYOUT[set][key],r=reports[set.split('/')[1]+'-'+key];
+   assert.equal(g.centers.length,6);assert.ok(r.max_contact_slip_px<1e-6);
+   assert.ok(Math.abs(g.height*g.stride-r.height*r.stride)<1e-8);
+   for(let i=1;i<=6;i++)assert.ok(fs.statSync(require.resolve(`../scenes/art/sprites/${set}/cycle/${key}-${i}.png`)).size>1000);
   }
  }
 });

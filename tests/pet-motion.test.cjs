@@ -247,7 +247,7 @@ test('directional loading is atomic: one failed frame disables only that view',(
  for(const im of images){if(im.url.endsWith('walk-f-4.png'))im.onerror();else im.onload();}
  assert.equal(done,1);assert.equal(C.left,0);assert.equal(C.raw['walk-f'],undefined);
  assert.equal(C.raw.walk.length,8);assert.equal(C.raw['walk-b'].length,8);assert.equal(C.raw.run.length,6);
- assert.ok(!LW.PET_DIRECTION_HAS['dogs/corgi']);
+ assert.ok(LW.PET_DIRECTION_HAS['dogs/corgi']);
 });
 test('all cat directional assets contain eight nonempty PNG frames',()=>{
  for(const coat of ['orange','black','grey','calico','siamese'])for(const view of ['f','b'])for(let i=1;i<=8;i++){
@@ -282,6 +282,7 @@ test('2D planted treadmill holds world contact for front, back, left and vertica
 });
 test('directional art registration and runtime geometry remain synchronized',()=>{
  const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-layout.json'),'utf8'));
+ Object.assign(layout,JSON.parse(fs.readFileSync(require.resolve('../art-src/pets-shared/directions-layout.json'),'utf8')));
  assert.equal(JSON.stringify(LW.PET_DIRECTION_LAYOUT),JSON.stringify(layout));
  const reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/directions-plant-qa.json'),'utf8'));
  assert.equal(Object.keys(reports).length,10);
@@ -311,6 +312,7 @@ test('missing jump view falls back to side; landing starts the matching walk at 
 });
 test('all fifty jump frames share walk geometry and the runtime registry matches the cut manifest',()=>{
  const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/jumps-layout.json'),'utf8'));
+ Object.assign(layout,JSON.parse(fs.readFileSync(require.resolve('../art-src/pets-shared/jumps-layout.json'),'utf8')));
  assert.deepEqual(JSON.parse(JSON.stringify(LW.PET_JUMP_LAYOUT)),layout);
  for(const [coat,views] of Object.entries(layout))for(const [name,geom] of Object.entries(views)){
   assert.equal(geom.height,LW.PET_DIRECTION_LAYOUT[coat][name.replace('jump','walk')].height);
@@ -322,29 +324,5 @@ test('all fifty jump frames share walk geometry and the runtime registry matches
    const w=png.readUInt32BE(16),height=png.readUInt32BE(20);h??=height;assert.equal(height,h);
    assert.ok(geom.centers[i-1]>geom.pad&&geom.centers[i-1]<w-geom.pad);
   }
- }
-});
-
-function shadowRig(){
- const {LW}=load();const scene=fs.readFileSync(require.resolve('../scenes/cats.html'),'utf8');
- const src=scene.slice(scene.indexOf('function sprContact('),scene.indexOf('// soft contact shadow, stamped'));
- const ctx={LW,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),sprK:()=>1,sprAnchor:()=>50,isCyc:p=>p.startsWith('walk-')};
- vm.runInNewContext(src+';this.shadow=spriteShadow',ctx);
- const im=(x,y,span)=>({width:100,height:120,petFootPad:20,petContact:{x,y,span}});
- const s={px:1,img:{'walk-f-1':im(60,95,40),'jump-f-1':im(55,99,40),'jump-f-3':im(90,99,90),'jump-f-5':im(65,99,40)},ok:{'walk-f-1':true,'jump-f-1':true,'jump-f-3':true,'jump-f-5':true}};
- const c={x:200,y:300,k:1,dir:-1,sx:-1,spP:'walk-f-1',spFadeT:1,sv:{ox:0,oy:0,sx:1,sy:1,rot:0},_gait:{shift:[-4,6]}};
- return {shadow:ctx.shadow,s,c};
-}
-test('contact shadow tracks measured paws including padding, mirroring and world-space gait shift',()=>{
- const {shadow,s,c}=shadowRig();let f=shadow(c,s);
- assert.equal(f.x,186);assert.equal(f.y,302);assert.equal(f.width,24);
- c.sx=c.dir=1;f=shadow(c,s);assert.equal(f.x,206);assert.equal(f.y,302); // vector shift is not mirrored twice
- c.k=2;f=shadow(c,s);assert.equal(f.x,212);assert.equal(f.y,304);
-});
-test('airborne shadow follows body path instead of jumping between tucked and reaching paws',()=>{
- const {shadow,s,c}=shadowRig();c.state='jump';c.spP='jump-f-3';c.j={key:'jump-f',dur:1};c.sx=c.dir=1;
- for(const t of [0,.25,.5,.75,1]){
-  c.t=t;c.x=200+80*t;c.y=300+60*t;const f=shadow(c,s);
-  assert.equal(f.x,205+90*t);assert.equal(f.y,c.y);assert.equal(f.width,24);
  }
 });

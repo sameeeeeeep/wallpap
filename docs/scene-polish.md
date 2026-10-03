@@ -766,3 +766,18 @@ Visual art review: `shots/pets-shared/dog-art.jpg`. Corrected the golden second-
 paw detector and widened its leg warp to eliminate torn fur. The selected planted
 landmark residuals are below 1 source pixel; runtime verification follows separately.
 Pandas retain their existing side sheets and will use lateral-only routes.
+
+### Shared runtime (integration in progress)
+
+`scenes/pets.js` now owns roster loading, pose sequencing, distance gait, drawn-heading
+routes, floor/perch graph trips, jump registration, contact shadows, lighting, behavioral
+choices, and cross-species full-body reservations. Jump flight paths reserve their swept
+volume. Pose changes draw one opaque silhouette. Touch Grass consumes the same frame
+geometry through its GPU adapter; side-only pandas cannot change walking depth.
+
+The takeoff scale comes from the current supporting surface before the first crouch;
+it no longer inherits a stale pose scale. Tests now exercise the shared module instead
+of extracting private functions from Cats. Added common-roster, heading, panda-lane,
+cross-species clearance, takeoff-scale, shadow, and exit/re-entry regressions.
+`node --test tests/*.cjs`: 54 passing at this step. Scene/control/visual acceptance is
+tracked separately and remains in progress until the full matrix is signed off below.

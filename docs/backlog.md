@@ -83,3 +83,11 @@ _2026-10-03 04:20 IST: monthly spend limit hit — 8 agents stopped mid-task; re
 _2026-10-03 12:00: user asked to prioritise near-complete work to save compute — stopped Airport + plate scenes; scoped down visualizers, marketing, train._
 
 _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Next: in-app test + 0.13 release + site push; rooftop/ramen day plates generated (verify alignment)._
+
+## Play mode v1 — isolated play-mode worktree (2026-10-04)
+- [x] Step 1: sandboxed card SDK, shared deterministic rules, shell, authoring contract, template/scaffolder and static gates. Final headless gates follow the cards in step 6.
+- [~] Step 2: native presentation/menus and restricted feed/link bridge.
+- [ ] Step 3: original bundled puzzles and verified official feed decisions.
+- [ ] Step 4: contextual house ads and adapter.
+- [ ] Step 5: anonymous counters and undeployed aggregate worker.
+- [ ] Step 6: content/security/functional tests, local app build and WebKit JPEG matrix.

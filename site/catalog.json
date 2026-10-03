@@ -40,6 +40,39 @@
       "author": "wallpap",
       "blurb": "A quiet control-tower view, measured departures and apron lights.",
       "thumb": "scenes-pack/airport.jpg"
+    },
+    {
+      "id": "marine-drive",
+      "title": "Marine Drive",
+      "category": "Places",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/marine-drive-1.zip",
+      "author": "wallpap",
+      "blurb": "The Queen\u2019s Necklace above a quietly moving Arabian Sea.",
+      "thumb": "scenes-pack/marine-drive.jpg"
+    },
+    {
+      "id": "taj-mahal",
+      "title": "Taj Mahal",
+      "category": "Places",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/taj-mahal-1.zip",
+      "author": "wallpap",
+      "blurb": "Marble, cypress gardens and a moonlit reflecting pool.",
+      "thumb": "scenes-pack/taj-mahal.jpg"
+    },
+    {
+      "id": "hillside-valley",
+      "title": "Hillside Valley",
+      "category": "Places",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/hillside-valley-1.zip",
+      "author": "wallpap",
+      "blurb": "An original hand-painted valley, a quiet farmhouse and a flowing stream.",
+      "thumb": "scenes-pack/hillside-valley.jpg"
     }
   ]
 }

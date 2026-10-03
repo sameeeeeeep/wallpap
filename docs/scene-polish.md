@@ -518,3 +518,36 @@ Built-in image generation prompts (no API/CLI fallback):
 
 ## 2026-10-03 — P2 Airport
 Built `addons/airport` using Kit.plate and the prepared aligned plates, masks and metric layout. Quiet 150-second departure cycle enters/exits beyond the frame; parked A320/E175 use stop bars, contact shadows, plate occluders and apron lighting. Mirrored layout and avoid regions suppress resting aircraft; exposure mask excludes the terminal and surface checks exclude sky splashes. Shared moon, no reminder text. Existing generated art only (no new prompts). Packed with addons/build.sh and tools/pack-scene.sh. Inspected shots/p2-airport-{day,night,wide}.png (night lighting corrected after review); all WebKit errors empty; 32 Node tests pass. No app build/install or publishing.
+
+## 2026-10-03 — P2 realistic plate add-ons
+Created `addons/marine-drive`, `addons/taj-mahal`, `addons/hillside-valley` using Kit.plate. Six new built-in imagegen
+masters are preserved in `art-src/plate-scenes/<id>/{day,night}.png`. `tools/plate-scene/build-kit.py` reproducibly encodes
+WebP plates and builds measured water/exposure masks from manifest.json, with sky segmentation. Night edits retain the
+day geometry; dawn/dusk and overcast use Kit fallback grading. Water shimmer is restrained, clicks make small ripples
+only in clear water, shared sky/moon follow time, mirrored composition follows LW.layout, weather is masked from
+facades/covered foliage and splash surfaces exclude sky. No people, text bubbles or emoji.
+
+Built-in image prompts (all 1536×1024; no copied frames/characters):
+- Marine Drive day: cinematic photorealistic view from high apartment at northern Back Bay looking south, elegant curved
+  seafront road and Art Deco apartments LEFT, distant Nariman Point at x .55/y .4, tetrapods, calm Arabian Sea RIGHT,
+  clear soft late-afternoon daylight, understated natural colors. Empty road, no people/vehicles/boats, smooth pale-blue
+  sky without clouds/sun/moon, right 28% quiet for widgets, no text/logos/watermark.
+- Marine Drive night (reference day): preserve ALL geometry/framing and every building, road, lamp, shoreline and horizon
+  location. Change ONLY lighting to blue-hour night; Queen's Necklace amber promenade lamps, restrained water reflections,
+  sparse lit apartment windows, deep navy sea, smooth dark sky without stars/clouds/moon. No new objects/light trails.
+- Taj day: photorealistic cinematic architectural photograph, slightly offset garden viewpoint, entire marble mausoleum
+  and four minarets left-central, reflecting pool from lower-left, cypress gardens, right 28% calm lawn/trees, fine marble
+  detail and soft morning light, plain sky, no people/animals/vehicles/text/logos.
+- Taj night (reference day; one connection failure, successful retry): preserve exact geometry/framing, change ONLY lighting
+  to cool moonlit night, gently visible marble, dark gardens, silvery pool, no artificial floodlights, smooth navy sky
+  without moon/stars/clouds, no new objects.
+- Valley day: original Japanese hillside valley, Ghibli-inspired hand-painted background atmosphere, NO copied composition
+  or characters, rich realistic depth, delicate gouache/watercolor texture, luminous afternoon light, tiny rustic farmhouse
+  on terraced green hills LEFT, winding stream, grasses/wildflowers, misty wooded ridges, plain sky, right 28% quiet slopes,
+  mature cinematic painting without outlines/toy shapes, no people/animals/text/logos.
+- Valley night (reference day): change ONLY lighting, preserve every landscape feature and geometry; warm dim farmhouse
+  windows, cool muted-green slopes, silvery stream, misty blue ridges, plain navy sky without moon/clouds/stars, no characters.
+
+Inspected WebKit `shots/p2-{marine,taj,valley}-{day,night}.png` plus contact sheets; corrected pale leftover sky regions
+and the valley horizon mask after visual review. Night checks include mirrored layout, ultrawide, rain and snow.
+All captures report no JS errors. All 32 Node tests pass. All three packed locally; no publishing or installed-app changes.

@@ -48,7 +48,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Layout-aware retrofit: koi/bowls/train/cabin done; cymatics/drive/visualizers in their agents
 - [x] Train skins: Indian Sleeper, Shinkansen, Swiss Alpine, Orient Express (live crossfade) + Indian rail-joint rhythm; passers-by art parked in art-src/train/deferred-people
 - [x] Airport scene (kit plate add-on) — measured departures, parked aircraft, occlusion, night lights; packed locally and WebKit verified.
-- [ ] Realistic plate pipeline + Marine Drive, Taj Mahal, Hillside Valley — PAUSED for compute (low priority per user)
+- [x] Realistic plate pipeline + Marine Drive, Taj Mahal, Hillside Valley — six new generated masters, reproducible kit packaging, water/exposure masks, day/night + wide/mirrored/weather screenshots inspected.
 - [ ] Illustrative "SimCity" living city (traffic, day/night)
 - [~] Codex art over procedural fakes: done in cabin/café/records/speakeasy/rooftop/ramen/train/bowls; rooftop + ramen day plates aligned and verified
 

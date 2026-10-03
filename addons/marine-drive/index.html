@@ -1,0 +1,14 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Marine Drive</title></head><body>
+<script src="astronomy.js"></script><script src="kit.js"></script><script src="lw.js"></script><script src="moon.js"></script>
+<script>
+'use strict';
+const plate=Kit.plate({base:'art/',plates:{day:'plate-day.webp',night:'plate-night.webp'},masks:{sky:'sky.png',water:'water.png',exposed:'exposed.png'},shimmer:.16,sparkle:.06,focus:[.5,.35]});
+const scene=Kit.scene({onReminder(){},
+ exposedAt(x,y){return plate.maskAt('sky',x,y)>.5||plate.maskAt('water',x,y)>.5||plate.maskAt('exposed',x,y)>.5;},
+ surfaceAt(x,y){return plate.maskAt('water',x,y)>.5?'water':plate.maskAt('exposed',x,y)>.5?'ground':null;},
+ layers:[Kit.sky({cover:.12,elev:[.55,-.85]}),plate,Kit.particles({splash:true}),Kit.light({glow:.18,fog:.3})],
+ onDown(x,y,k){if(plate.maskAt('water',x,y)>.5&&k.restOK(x,y))k.ripples.drop(x,y,12,-.25);},
+ breathe(level,phase,k){plate.opt.shimmer=.1+level*.08;}
+});
+window.plateScene={plate,scene};
+</script></body></html>

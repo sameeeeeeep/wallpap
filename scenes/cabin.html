@@ -15,6 +15,7 @@
 <script src="lw.js"></script>
 <script src="moon.js"></script>
 <script src="pet-motion.js"></script>
+<script src="pets.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -599,156 +600,23 @@ function rebuildArt(swap) {
 //  animals — a golden puppy + an orange cat. Each owns its identity, its
 //  state and its own tint canvases; the array is frozen, never reordered.
 // =====================================================================
-const COAT_CAT = Object.freeze({ name: 'Ember', species: 'cat', base: '#e0904a' });
-const COAT_DOG = Object.freeze({ name: 'Maple', species: 'dog', base: '#e2b47e' });
-const POSE_NAMES = ['stand', 'sit', 'loaf', 'curl', 'stretch', 'sniff'];
-const SPR = {};
-function loadSpriteSet(set, poses) {
-  if (SPR[set]) return;
-  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set), cyc: LW.petCycleLoad('art/sprites/', set) };
-  for (const p of poses) {
-    const im = new Image();
-    im.onload = () => { if (im.naturalWidth > 1) o.img[p] = im; o.pending--; };
-    im.onerror = () => { o.pending--; };
-    im.src = 'art/sprites/' + set + '/' + p + '.png';
-  }
+const petSystem=LW.pets.create({scene:'cabin',roster:['golden', 'orange'],stage:petStage});
+const animals=petSystem.items;
+const [dog,cat]=animals;
+const kFloor=y=>clamp(1.36*(3.6+(y/KY-850)*.0115)/3.95,.7,1.7);
+function petStage(){
+ const ledges=Object.entries(L.nodes).map(([id,n])=>({id,x0:n.x-35,x1:n.x+35,y:n.y,depth:n.base.y,scale:n.k}));
+ const links=Object.entries(L.nodes).map(([id,n])=>{const before=n.chain[n.chain.length-2];return [before?{surf:before,x:L.nodes[before].x}:{surf:'floor',...n.base},{surf:id,x:n.x},'cat']});
+ const spots=Object.entries(L.spots).map(([id,p])=>({id,...(p.node?L.nodes[p.node]:p),surf:p.node||'floor',kind:'bed',species:p.who==='any'?undefined:p.who}));
+ const lay=LW.layout||{},c=lay.clear||[0,.72],clr=MIR?[1-c[1],1-c[0]]:c;
+ return {floor:[[[40,L.P(0,915).y],[L.P(455,0).x,L.P(0,915).y],[L.P(455,0).x,L.P(0,795).y],[W-60,L.P(0,795).y],[W-60,980],[40,980]]],bounds:[40,L.P(0,795).y,W-60,980],scale:kFloor,ledges,links,spots,
+ homes:[{...L.spots.rug,state:'sleep'},{x:L.nodes.seat.x,surf:'seat',state:'loaf'}],exits:[L.exit],clear:clr.map(v=>v*W),light:(x,y)=>lightAt(x,y),night:1-E.day,
+ occluders:L.floorProps.map(p=>({depth:p.y,draw:g=>drawFloorProp(g,p)}))};
 }
-function spriteFor(c) {
-  const sp = spriteBase(c);
-  return sp && c.seqF ? { im: SPR[c.spr].seq.img[c.seqF], kind: c.seqF.startsWith('jump-') ? 'jump' : 'seq' } : sp;
-}
-function spriteBase(c) {
-  const S = SPR[c.spr];
-  if (!S || S.pending > 0 || !S.img.walk1) return null;
-  const I = S.img;
-  if (c.act && c.act.t === 'hop' && c.hopPh && S.seq.has('jump')) return { im: S.seq.img[LW.petJumpFrame(c.hopPh, c.hopU)], kind: 'jump' };
-  if (c.act && c.act.t === 'hop') return { im: (c.air > 0.1 ? I.walk2 : I.walk1) || I.walk1, kind: 'hop' };
-  if (c.walk > 0.3) return { im: (c.gaitF && (S.cyc.img[c.gaitF] || I[c.gaitF])) || (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
-  if (c.happyT > 0 && c.happyPose && I[c.happyPose]) return { im: I[c.happyPose], kind: 'happy' };
-  let best = 'sit', bw = -1; for (const n of POSE_NAMES) if (c.w[n] > bw) { bw = c.w[n]; best = n; }
-  const map = c.sprMap;
-  let key = map[best]; const fb = { loaf: 'sit', lie: 'sit', stretch: 'walk1', sleep: 'loaf', sit: 'walk1' };
-  while (key && !I[key]) key = fb[key];
-  return { im: I[key] || I.walk1, kind: best, faked: map[best] !== key || (best === 'stretch' && !I.stretch) };
-}
-const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2 || !!(im && im.petCycle);
-function sprCycStep(c) {
-  const S = SPR[c.spr]; c.gaitF = null;
-  if (!S || S.pending > 0 || !S.img.walk1 || !S.cyc) return;
-  LW.petCyclePrep(S.cyc, { im: S.img.walk1, k: 1, fa: 0.5 });
-  const now = nowS(), dt = c.gaitT ? Math.min(0.1, now - c.gaitT) : 0; c.gaitT = now;
-  if (c.walk > 0.3) c.gaitF = LW.petGait(c, S.cyc, c.gait / 0.03, LW.petUnit(c.kind, S.img.walk1) * S.img.walk1.naturalHeight, 'walk', { dt });
-}
-function sprSeqStep(c) {
-  sprCycStep(c);
-  const S = SPR[c.spr]; c.seqF = null;
-  const sp = spriteBase(c); if (!sp) return;
-  const sleepN = c.sprMap.curl, T = S.seq;
-  if (!LW.petSeqPrep(T, (f) => { const n = f === 'sleep' ? sleepN : f, im = S.img[n]; return im ? { im, k: LW.petPoseScale(c.kind, n, S.img.walk1, im), fa: 0.5 } : null; }) && !Object.keys(T.seq).length) return;
-  const key = sp.im.petName || Object.keys(S.img).find((k) => S.img[k] === sp.im);
-  const fam = key === 'walk2' || /^(walk|run)-\d/.test(key) ? 'walk1' : key === sleepN ? 'sleep' : key.startsWith('jump-') ? 'jump' : key;
-  const f = LW.petSeqStep(c, T, fam, c.face, nowS());
-  if (f && T.img[f]) { c.seqF = f; if (f.startsWith('turn-')) c.faceS = c.face; }
-}
-// each animal keeps ITS OWN cache of lit sprites (one canvas per pose image), re-lit only when its
-// quantized light changes — never per frame. Lit = sprite × light colour; rim = the edge facing the fire.
-function tintSprite(cv2, im, w, h, light, grade) {
-  const pw = Math.max(1, Math.round(w * U)), ph = Math.max(1, Math.round(h * U));
-  if (cv2.width !== pw || cv2.height !== ph) { cv2.width = pw; cv2.height = ph; }
-  const a = cv2.getContext('2d');
-  a.globalCompositeOperation = 'copy'; a.filter = grade || 'none'; a.drawImage(im, 0, 0, pw, ph); a.filter = 'none';
-  a.globalCompositeOperation = 'multiply'; a.fillStyle = rgba(light.map((v) => clamp(v, 0, 1) * 255)); a.fillRect(0, 0, pw, ph);
-  // light above 1 (close to the fire) lifts the fur a little instead of clipping
-  if (grade) {   // pets: a little occlusion toward the ground they rest on
-    const og = a.createLinearGradient(0, ph * 0.7, 0, ph); og.addColorStop(0, 'rgb(255,255,255)'); og.addColorStop(1, 'rgb(150,140,135)');
-    a.globalCompositeOperation = 'multiply'; a.fillStyle = og; a.fillRect(0, 0, pw, ph);
-  }
-  a.globalCompositeOperation = 'destination-in'; a.drawImage(im, 0, 0, pw, ph);
-  a.globalCompositeOperation = 'source-over';
-}
-const K_MAX = 1.6;
-// the pets are illustrated; soften their saturation/contrast a little toward the painted plate
-const PET_GRADE = 'saturate(0.82) contrast(0.92) brightness(0.96)';
-function tinted(c, im, sc1) {
-  const q = (v) => Math.round(clamp(v, 0, 1.2) * 40) / 40;
-  const lt = [q(c.light[0]), q(c.light[1]), q(c.light[2])], key = lt.join(',') + '|' + U;
-  if (!c.tint) c.tint = new Map();
-  let e = c.tint.get(im);
-  if (!e) { e = { cv: newCanvas(2, 2), key: '', rim: {} }; c.tint.set(im, e); }
-  if (e.key !== key) { tintSprite(e.cv, im, im.naturalWidth * sc1 * K_MAX, im.naturalHeight * sc1 * K_MAX, lt, PET_GRADE); e.key = key; }
-  return e;
-}
-function rimOf(e, im, side) {
-  const key = side + '|' + e.cv.width;
-  if (e.rim[side] && e.rim[side].key === key) return e.rim[side].cv;
-  const w = e.cv.width, h = e.cv.height, c = newCanvas(w, h), a = c.getContext('2d'), d = Math.max(2, Math.round(w * 0.035));
-  a.drawImage(im, 0, 0, w, h);
-  a.globalCompositeOperation = 'source-in'; a.fillStyle = 'rgb(255,168,92)'; a.fillRect(0, 0, w, h);
-  a.globalCompositeOperation = 'destination-out'; a.drawImage(im, side > 0 ? -d : d, Math.round(d * 0.5), w, h);
-  e.rim[side] = { cv: c, key };
-  return c;
-}
-function drawAnimalSprite(g, c, sp, T) {
-  const S = SPR[c.spr], sc1 = LW.petUnit(c.kind, S.img.walk1), sc = sc1 * c.k;
-  if (sp.im !== c.sprA) {
-    const sw = c.sprA ? LW.petSwap(c.sprA, sp.im, isWalkFrame(c.sprA, S), isWalkFrame(sp.im, S)) : 'cut';
-    if (sw !== 'cut') { c.sprB = c.sprA; c.sprT = 0; c.sprFd = sw === 'quick' ? 0.12 : 0.24; }
-    else if (!isWalkFrame(sp.im, S) || !isWalkFrame(c.sprA, S)) { c.sprB = null; c.sprT = 1; }
-    c.sprA = sp.im;
-  }
-  const awake = 1 - c.s, playing = music.np && music.np.playing;
-  const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
-  const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
-  let sx = 1, sy = 1 + (0.014 + 0.012 * calm.lv) * br - 0.035 * Math.max(0, c.nod) * vibe, rot = 0;
-  if (sp.kind === 'hop') { sy *= 1 - 0.14 * c.crouch + 0.06 * c.air; sx *= 1 + 0.06 * c.crouch; rot = c.air > 0.05 ? -0.12 * Math.cos(c.air * Math.PI) : 0; }
-  if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.07 * c.w.stretch; }
-  if (c.wagK > 0.01 && sp.kind !== 'walk') rot += Math.sin(T * 14) * 0.01 * c.wagK;
-  const faceSign = Math.sign(c.faceS) || c.face;
-  g.save(); g.translate(c.x, c.y); g.scale(faceSign * (0.78 + 0.22 * Math.abs(c.faceS)) * sx, sy); g.rotate(rot);
-  const transition = LW.poseFrame(c.sprB, c.sprA, c.sprT);
-  let main = null;
-  LW.petComposite(g, c, transition.layers.map((layer) => {
-    const im = layer.pose, key = Object.keys(S.img).find((k) => S.img[k] === im);
-    const pk = LW.petPoseScale(c.kind || 'cat', key, S.img.walk1, im), w = im.naturalWidth * sc * pk, h = im.naturalHeight * sc * pk;
-    const e = tinted(c, im, sc1), fr = { image: e.cv, x: -w * (im.petFa != null ? im.petFa : 0.5), y: -h, w, h, alpha: layer.alpha };
-    if (!main || layer.alpha > main.alpha) main = Object.assign({ e, im }, fr);
-    return fr;
-  }));
-  // rim light on the side facing the fire (in sprite-local terms)
-  if (main && c.rimK > 0.03) {
-    const side = Math.sign(L.fire.fx - c.x) * faceSign >= 0 ? 1 : -1;
-    g.globalCompositeOperation = 'lighter'; g.globalAlpha = Math.min(0.85, c.rimK) * main.alpha;
-    g.drawImage(rimOf(main.e, main.im, side), main.x, main.y, main.w, main.h);
-    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  }
-  g.restore();
-}
-function makeAnimal(id, coat, opts) {
-  const c = {
-    x: 0, y: 0, k: 1, face: 1, faceS: 1, plat: 'floor', node: null, spot: null, dest: null,
-    w: {}, light: [1, 1, 1], rimK: 0, gait: 0, walk: 0, s: 0, happyT: 0, lastStim: nowS(), wakeUntil: 0, breathP: rand(0, 6),
-    nod: 0, nodV: 0, earPerk: 0, plan: [], act: null, roamT: rand(14, 26), stretchT: -1, wantStretch: false,
-    air: 0, crouch: 0, restT: 0, wagK: 0, gone: false, leaving: false,
-  };
-  for (const n of POSE_NAMES) c.w[n] = n === 'loaf' ? 1 : 0;
-  Object.defineProperty(c, 'id', { value: id, writable: false, enumerable: true });
-  Object.defineProperty(c, 'coat', { value: coat, writable: false, enumerable: true });
-  Object.defineProperty(c, 'kind', { value: coat.species, writable: false, enumerable: true });
-  Object.assign(c, opts || {});
-  return c;
-}
-const dog = makeAnimal('maple', COAT_DOG, {
-  spr: 'dogs/golden', speed: 62, happyPose: 'belly-up', home: 'rug', sound: 'woof',
-  sprMap: { stand: 'walk1', sniff: 'walk1', sit: 'sit', loaf: 'lie', curl: 'lie', stretch: 'walk1' },
-  pref: { rug: 3, rugL: 1.2, cab: 1.4 },
-});
-const cat = makeAnimal('ember', COAT_CAT, {
-  spr: 'cats/orange', speed: 56, home: 'seat', sound: 'purr',
-  sprMap: { stand: 'walk1', sniff: 'walk1', sit: 'sit', loaf: 'loaf', curl: 'sleep', stretch: 'stretch' },
-  pref: { seat: 2.6, perch: 1.1, rugL: 1.3, hearthF: 1.2 },
-});
-const animals = Object.freeze([dog, cat]);
-
+function hitAnimal(c,x,y){return petHit(c,x,y);}
+const petsOn=()=>![false,0,'false','0'].includes(LW.settings.pets);
+const petIn=p=>p.away?0:1;
+function petHit(p,x,y){const b=petSystem.box(p);return !p.away&&x>b[0]&&x<b[2]&&y>b[1]&&y<b[3];}
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
 // Diegetic breathing: the hearth carries the breath (fire + embers + room light swell on the in-breath,
 // hold still, ebb on the out-breath; the snow outside slows); lw.js only draws a quiet caption.
@@ -763,192 +631,6 @@ function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'h
 function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }
 const toW = (px) => (px / cssH) * 1000;
 function ptrW() { const x = toW(LW.pointer.x); return { x: MIR ? W - x : x, y: toW(LW.pointer.y) }; }
-// apparent size from depth: the plate's floor is ~3.6 px/cm at the armchair's feet (y 850 px)
-const kFloor = (y) => { const yi = y / KY, s = 3.6 + (yi - 850) * 0.0115; return clamp(1.36 * s / 3.95, 0.7, 1.7); };
-function spotPos(name) { const S = name === 'exit' ? L.exit : L.spots[name]; return S.node ? L.nodes[S.node] : S; }
-function spotDef(name) { return name === 'exit' ? L.exit : L.spots[name]; }
-function placeAnimal(c, name) {
-  const S = spotDef(name);
-  c.spot = name; c.dest = null; c.plan = []; c.act = null; c.air = 0; c.crouch = 0;
-  if (S.node) { const N = L.nodes[S.node]; c.node = S.node; c.plat = N.plat; c.x = N.x; c.y = N.y; c.k = N.k; }
-  else { c.node = null; c.plat = 'floor'; c.x = S.x; c.y = S.y; c.k = kFloor(S.y); }
-  c.restPose = S.rest[0];
-}
-function spotOK(c, name) {
-  const S = L.spots[name];
-  if (S.who !== 'any' && S.who !== c.kind) return false;
-  const other = animals.find((o) => o !== c);
-  if (!other.gone && (other.spot === name || other.dest === name)) return false;
-  return true;
-}
-function spotWeight(c, name) {
-  if (!spotOK(c, name)) return 0;
-  let w = c.pref[name] || 0;
-  const playing = music.np && music.np.playing, night = 1 - E.day;
-  if ((name === 'rug' || name === 'hearthF') && night > 0.5) w *= 1.5;   // the fire is the best place at night
-  if (L.spots[name].music && playing) w *= 2;                          // listening by the record player
-  if (name === c.spot) w *= 0.05;
-  return w;
-}
-function pickSpot(c) {
-  const names = Object.keys(L.spots), ws = names.map((n) => spotWeight(c, n));
-  let r = Math.random() * ws.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < names.length; i++) { r -= ws[i]; if (r <= 0) return names[i]; }
-  return c.home;
-}
-function planTrip(c, dest) {
-  const D = spotDef(dest), plan = [];
-  const cur = c.node ? L.nodes[c.node].chain : [], dc = D.node ? L.nodes[D.node].chain : [];
-  let p = 0;
-  if (cur.length && dc.length) while (p < cur.length && p < dc.length && cur[p] === dc[p]) p++;
-  if (c.s > 0.5 || c.w.curl > 0.4) plan.push({ t: 'pose', pose: 'stretch', dur: 2.4 });
-  plan.push({ t: 'pose', pose: 'stand', dur: 0.6 });
-  for (let i = cur.length - 1; i >= Math.max(p, 1); i--) plan.push({ t: 'hop', node: cur[i - 1] });
-  if (p === 0 && cur.length) plan.push({ t: 'hop', floor: L.nodes[cur[0]].base });
-  if (p === 0) { const tgt = dc.length ? L.nodes[dc[0]].base : D; plan.push({ t: 'walk', x: tgt.x, y: tgt.y }); }
-  for (let i = p; i < dc.length; i++) plan.push({ t: 'hop', node: dc[i] });
-  plan.push({ t: 'rest', spot: dest });
-  c.plan = plan; c.act = null; c.dest = dest;
-}
-function goal(c, T) {
-  const playing = music.np && music.np.playing;
-  const S = spotDef(c.spot) || {}, rest = S.rest || ['sit'];
-  if (calm.on) return rest.includes('curl') ? 'curl' : 'loaf';
-  if (c.stretchT >= 0) return 'stretch';
-  if (T < c.wakeUntil || c.happyT > 0) return c.kind === 'dog' ? 'sit' : (rest[0] === 'curl' ? 'loaf' : rest[0]);
-  if (playing && c.kind === 'dog' && (T - music.newTrackT) % 120 < 30) return 'sit';   // perks up for a new song
-  if (playing) return c.restPose === 'curl' ? 'loaf' : c.restPose;
-  if (T - c.lastStim > 50) return rest.includes('curl') ? 'curl' : 'loaf';
-  return c.restPose || rest[0];
-}
-// pets on/off (LW.settings.pets): leave the room on foot, come back the same way
-function petsWanted() { return !(LW.settings && LW.settings.pets === false); }
-function syncPets() {
-  const want = petsWanted();
-  for (const c of animals) {
-    if (!want && !c.gone && !c.leaving) { c.leaving = true; c.stretchT = -1; c.wantStretch = false; planTrip(c, 'exit'); c.roamT = 1e9; }
-    else if (want && (c.gone || c.leaving)) {
-      if (c.gone) { placeAnimal(c, 'exit'); c.w.stand = 1; for (const n of POSE_NAMES) c.w[n] = n === 'stand' ? 1 : 0; }
-      c.gone = false; c.leaving = false; c.roamT = rand(30, 60);
-      later(c === cat ? 2.5 : 0.2, () => { if (!c.gone && !c.leaving) planTrip(c, c.home); });
-    }
-  }
-}
-function updateAnimal(c, dt, T) {
-  if (c.gone) return;
-  const playing = music.np && music.np.playing;
-  const S = spotDef(c.spot);
-  if (!c.act && !c.plan.length && !calm.on && c.stretchT < 0 && !c.leaving) {
-    c.restT += dt;
-    c.roamT -= dt * (playing ? 1.2 : 1) * (c.s > 0.5 ? 0.6 : 1) * (S && S.short ? 1.8 : 1);
-    if (c.roamT <= 0) { c.roamT = rand(35, 75); planTrip(c, pickSpot(c)); }
-  }
-  if (calm.on && !c.leaving && (c.plan.length || c.act) && (!c.act || c.act.t !== 'hop')) {
-    // settle: finish where you are (on the floor that's fine too)
-    c.plan = []; c.act = null; c.dest = null;
-    if (c.plat === 'floor' && (!S || S === L.exit || Math.hypot(S.x - c.x, S.y - c.y) > 20)) c.spot = c.kind === 'dog' ? 'rug' : 'rugL';
-  }
-  if (!c.act && c.plan.length) { c.act = c.plan.shift(); c.act.e = 0; }
-  let target = goal(c, T), walking = false;
-  c.air = 0; c.hopPh = null;
-  const a = c.act;
-  if (a) {
-    a.e += dt;
-    const v = c.speed * c.k * (playing ? 1.05 : 1);
-    if (a.t === 'pose') { target = a.pose; if (a.e > a.dur) c.act = null; }
-    else if (a.t === 'walk') {
-      target = 'stand';
-      if (!a.s0) a.s0 = { x: c.x, y: c.y };
-      if (c.w.stand > 0.85 && a.e > 0.45 && !LW.petSeqBusy(c)) {
-        const span = a.x - a.s0.x;
-        if (Math.abs(a.x - c.x) > 1.5) {
-          c.face = Math.sign(a.x - c.x); walking = true;
-          c.x += Math.sign(a.x - c.x) * Math.min(Math.abs(a.x - c.x), v * dt);
-          const u = Math.abs(span) > 20 ? clamp((c.x - a.s0.x) / span, 0, 1) : 1;
-          c.y = lerp(a.s0.y, a.y, smooth(u));   // depth changes as a gentle arc
-          c.gait += dt * (v / c.k) * 0.6 / 20;
-        } else { c.y = approach(c.y, a.y, 5, dt); if (Math.abs(c.y - a.y) < 1) { c.y = a.y; c.act = null; } }
-        c.k = kFloor(c.y);
-      }
-    } else if (a.t === 'hop') {
-      target = 'stand';
-      if (!a.from) {
-        a.from = { x: c.x, y: c.y, k: c.k };
-        if (a.floor) a.to = { x: a.floor.x, y: a.floor.y, k: kFloor(a.floor.y) };
-        else { const N = L.nodes[a.node]; a.to = { x: N.x, y: N.y, k: N.k }; }
-        a.dur = 1.0;
-        c.face = Math.sign(a.to.x - c.x) || c.face;
-      }
-      const t = a.e / a.dur;
-      c.hopPh = t < 0.25 ? 'crouch' : t < 0.85 ? 'air' : 'land'; c.hopU = (t - 0.25) / 0.6;
-      if (t < 0.25) c.crouch = smooth(t / 0.25);
-      else if (t < 0.85) {
-        const u = (t - 0.25) / 0.6, top = Math.min(a.from.y, a.to.y) - 50;
-        const ex = (1 - u) * (1 - u), mid = 2 * u * (1 - u), ee = u * u;
-        c.x = ex * a.from.x + mid * (a.from.x + a.to.x) / 2 + ee * a.to.x;
-        c.y = ex * a.from.y + mid * top + ee * a.to.y;
-        c.k = lerp(a.from.k, a.to.k, u); c.air = Math.sin(u * Math.PI); c.crouch = 0;
-      } else if (t < 1) { c.x = a.to.x; c.y = a.to.y; c.k = a.to.k; c.crouch = 1 - smooth((t - 0.85) / 0.15); }
-      else {
-        c.x = a.to.x; c.y = a.to.y; c.k = a.to.k; c.crouch = 0; c.act = null;
-        if (a.floor) { c.node = null; c.plat = 'floor'; } else { c.node = a.node; c.plat = L.nodes[a.node].plat; }
-        sLand(c);
-      }
-    } else if (a.t === 'rest') {
-      const R = spotDef(a.spot);
-      c.spot = a.spot; c.dest = null; c.restT = 0;
-      c.restPose = R.rest[(Math.random() * R.rest.length) | 0];
-      if (R.face) c.face = R.face; else if (Math.random() < 0.5) c.face = -c.face;
-      if (R.short) c.roamT = rand(18, 32);
-      if (c.wantStretch) { c.wantStretch = false; c.stretchT = 0; }
-      c.act = null;
-      if (a.spot === 'exit') { c.gone = true; c.leaving = false; return; }
-    }
-  } else c.crouch = 0;
-  c.walk = approach(c.walk, walking ? 1 : 0, 8, dt);
-  c.faceS = approach(c.faceS, c.face, 9, dt);
-  if (Math.abs(c.faceS) < 0.12) c.faceS = c.face * 0.12;
-  c.sprT = Math.min(1, (c.sprT == null ? 1 : c.sprT) + dt / (c.sprFd || 0.24));
-  const rate = target === 'curl' ? 1.2 : c.act && c.act.t === 'hop' ? 9 : 3.2;
-  for (const n of POSE_NAMES) c.w[n] = approach(c.w[n], n === target ? 1 : 0, rate, dt);
-  sprSeqStep(c);
-  c.s = c.w.curl;
-  if (c.stretchT >= 0) { c.stretchT += dt; if (c.stretchT > 4.6) { c.stretchT = -1; c.lastStim = T; } }
-  c.happyT = Math.max(0, c.happyT - dt); c.earPerk = Math.max(0, c.earPerk - dt);
-  c.wagK = approach(c.wagK, c.kind === 'dog' && (c.happyT > 0 || (playing && c.s < 0.3)) ? 1 : 0, 3, dt);
-  c.breathP += dt * TAU * (calm.lv > 0.5 ? 0.1 : c.s > 0.5 ? 0.22 : 0.33);
-  c.nodV += (-c.nod * 70 - c.nodV * 10) * dt; c.nod += c.nodV * dt;
-  const hy = c.y - 50 * c.k;
-  c.light = petLight(c.x, hy);
-  c.rimK = fireAt(c.x, hy) * 0.75 * (1 + 0.25 * fire.flick) * (1 - 0.55 * E.day);
-}
-function drawShadow(g, c) {
-  // a soft contact shadow under the body, plus a long faint one thrown away from the fire
-  const air = c.air || 0, sw = (c.kind === 'dog' ? 64 : 52) * c.k * (1 - air * 0.5), sy = c.air > 0 ? c.y + air * 30 * c.k : c.y;
-  const dark = 0.5 * (1 - air) * (0.75 + 0.25 * (1 - E.day));
-  g.save(); g.translate(c.x, sy + 1); g.scale(1, 0.16);
-  const gr = g.createRadialGradient(0, 0, 1, 0, 0, sw);
-  gr.addColorStop(0, `rgba(14,6,3,${dark})`); gr.addColorStop(0.6, `rgba(14,6,3,${dark * 0.4})`); gr.addColorStop(1, 'rgba(14,6,3,0)');
-  g.fillStyle = gr; g.fillRect(-sw, -sw, sw * 2, sw * 2); g.restore();
-  const fk = fireAt(c.x, c.y - 40) * (1 - 0.6 * E.day);
-  if (fk > 0.05 && c.plat === 'floor') {
-    const dx = c.x - L.fireLight.x, away = Math.sign(dx) || 1, len = sw * (1.2 + 0.5 * clamp(Math.abs(dx) / 500, 0, 1));
-    g.save(); g.translate(c.x + away * len * 0.55, sy + 3); g.scale(1, 0.13);
-    const g2 = g.createRadialGradient(0, 0, 1, 0, 0, len);
-    const a2 = Math.min(0.35, fk * 0.35) * (1 - air) * (1 - 0.12 * fire.flick);
-    g2.addColorStop(0, `rgba(10,4,2,${a2})`); g2.addColorStop(1, 'rgba(10,4,2,0)');
-    g.fillStyle = g2; g.fillRect(-len, -len, len * 2, len * 2); g.restore();
-  }
-}
-function drawAnimal(g, c, T) {
-  if (c.gone) return;
-  const sp = spriteFor(c);
-  if (!sp) return;   // sprites still loading
-  drawShadow(g, c);
-  drawAnimalSprite(g, c, sp, T);
-}
-function hitAnimal(c, x, y) { if (c.gone) return false; const lx = (x - c.x) / c.k, ly = (y - c.y) / c.k, half = c.kind === 'dog' ? 75 : 62; return lx > -half && lx < half && ly > -115 && ly < 10; }
-
 // =====================================================================
 //  the fire: painted flames (flipbook) behind a painted log grate with
 //  glowing coals; embers; smoke into the flue; its light on the room
@@ -1088,6 +770,20 @@ const GLOW_RED = sprite(32, [[0, 'rgba(255,120,80,1)'], [0.4, 'rgba(255,80,40,0.
 function ttRect() {
   const im = ART.turntable, T = L.tt, w = T.w, h = im ? w * im.naturalHeight / im.naturalWidth : w * 0.5;
   return { x: T.cx - w / 2, y: T.bot - h, w, h };
+}
+function tintSprite(cv2, im, w, h, light, grade) {
+  const pw = Math.max(1, Math.round(w * U)), ph = Math.max(1, Math.round(h * U));
+  if (cv2.width !== pw || cv2.height !== ph) { cv2.width = pw; cv2.height = ph; }
+  const a = cv2.getContext('2d');
+  a.globalCompositeOperation = 'copy'; a.filter = grade || 'none'; a.drawImage(im, 0, 0, pw, ph); a.filter = 'none';
+  a.globalCompositeOperation = 'multiply'; a.fillStyle = rgba(light.map((v) => clamp(v, 0, 1) * 255)); a.fillRect(0, 0, pw, ph);
+  // light above 1 (close to the fire) lifts the fur a little instead of clipping
+  if (grade) {   // pets: a little occlusion toward the ground they rest on
+    const og = a.createLinearGradient(0, ph * 0.7, 0, ph); og.addColorStop(0, 'rgb(255,255,255)'); og.addColorStop(1, 'rgb(150,140,135)');
+    a.globalCompositeOperation = 'multiply'; a.fillStyle = og; a.fillRect(0, 0, pw, ph);
+  }
+  a.globalCompositeOperation = 'destination-in'; a.drawImage(im, 0, 0, pw, ph);
+  a.globalCompositeOperation = 'source-over';
 }
 function litDraw(g, im, x, y, w, h, lt, key, holder) {
   // an object sprite × the light where it stands (cached per quantized light)
@@ -1432,7 +1128,8 @@ function drawWater(g, T) {
   g.restore();
 }
 function startStretch() {
-  animals.forEach((c, i) => later(i * 0.7, () => { if (c.gone) return; if (c.act && (c.act.t === 'hop' || c.act.t === 'walk')) c.wantStretch = true; else c.stretchT = 0; c.lastStim = nowS(); }));
+  animals.forEach(p=>{if(!p.away&&!p.j)petSystem.state(p,'groom',3)});
+
 }
 function setCalm(on, auto = 0, fromLW = false) {
   const was = calm.on; calm.on = on;
@@ -1635,8 +1332,8 @@ function onDown(px, py) {
   let x = toW(px); const y = toW(py), T = nowS();
   if (MIR) x = W - x;
   if (water && Math.abs(x - L.glass.x) < 18 && y > L.glass.y - 34 && y < L.glass.y + 4) { if (water.out < 0) water.out = 0; sDing(); return; }
-  for (const c of [cat, dog]) if (hitAnimal(c, x, y)) {
-    c.happyT = c.kind === 'dog' ? 3.2 : 2.6; c.wakeUntil = T + 20; c.lastStim = T;
+  const c = petSystem.click(x, y);
+  if (c) {
     if (c.kind === 'cat') sPurr(2.3);
     say(c);
     return;
@@ -1668,7 +1365,7 @@ LW.on('beat', (k) => {
   cat.nodV += 7 * k; dog.nodV += 5 * k;
 });
 LW.on('env', () => { computeTarget(); });
-LW.on('settings', () => { computeTarget(); syncPets(); });
+LW.on('settings', () => { computeTarget(); });
 LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 60); });
 LW.on('nowplaying', onNowPlaying);
 LW.on('reminder', (r) => { if (!r) return; if (r.kind === 'water') startWater(); else if (r.kind === 'stretch') startStretch(); else if (r.kind === 'breathe') setCalm(true, 60); });
@@ -1719,7 +1416,7 @@ function step(dt, T) {
   updateWeather(dt, T);
   updateParticles(dt * calmPace(), T);
   updateWater(dt);
-  for (const c of animals) updateAnimal(c, dt, T);
+  petSystem.step(dt,T);
 }
 function render(T) {
   const g = ctx;
@@ -1740,9 +1437,7 @@ function render(T) {
   drawTurntable(g, T);
   // 4) props + animals, depth sorted (the chair's animals sit on it, after the mug on its arm)
   drawMug(g);
-  const items = L.floorProps.map((p) => ({ y: p.y, draw: () => drawFloorProp(g, p) }));
-  for (const c of animals) items.push({ y: c.plat === 'floor' ? c.y : c.plat === 'seat' || c.plat === 'back' ? 846 : c.y, draw: () => drawAnimal(g, c, T) });
-  items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+  petSystem.draw(g);
   drawWater(g, T);
   drawParticles(g);
   // music tint: the room leans toward the album's colours (subtle)
@@ -1767,10 +1462,7 @@ function rebuild() {
   if (!E) computeTarget();
   E.amb = ambient(); LIGHTS = lights();
   bake(false);
-  for (const c of animals) {
-    if (c.gone) continue;
-    placeAnimal(c, c.spot && L.spots[c.spot] ? c.spot : c.home);
-  }
+  petSystem.reset();
 }
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
@@ -1778,30 +1470,12 @@ computeTarget();
 rebuildArt(false);
 rebuild();
 loadArtFiles();
-loadSpriteSet('dogs/golden', ['walk1', 'walk2', 'sit', 'lie', 'belly-up']);
-loadSpriteSet('cats/orange', ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch']);
-if (!petsWanted()) for (const c of animals) c.gone = true;
 if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
 
-function selfTest(secs = 30) {
-  const ids = animals.map((p) => p.id + ':' + p.coat.base);
-  let err = 0, jumps = 0;
-  const last = animals.map((p) => [p.x, p.y]);
-  for (let f = 0; f < secs * 30; f++) {
-    LW.advance(1 / 30);
-    animals.forEach((p, i) => {
-      if (p.id + ':' + p.coat.base !== ids[i] || animals[i] !== p) err++;
-      if (!p.gone && Math.hypot(p.x - last[i][0], p.y - last[i][1]) > 40) jumps++;
-      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) err++;
-      last[i] = [p.x, p.y];
-    });
-  }
-  return { err, jumps, ids };
-}
-window.__cabin = { get E() { return E; }, breath, breathSt, get L() { return L; }, step, render, dog, cat, animals, music, calm, setCalm, startWater, startStretch, selfTest, planTrip, placeAnimal, onDown, syncPets, get bakeMs() { return bakeMs; }, bake, SPR, ART, PROPS, get snowAcc() { return snowAcc; }, set snowAcc(v) { snowAcc = v; }, fire,
-  prof: { drawFire, drawFireLight, drawOutside, drawSmallLights, drawFrameArt, drawTurntable, drawSleeve, drawCard, drawParticles, drawAnimal, updateAnimal, updateFire, updateWeather } };
+window.__pets=petSystem;
+window.__cabin={pets:petSystem,get L(){return L},get E(){return E},step,render,bake,ART,calm,setCalm,startWater,startStretch};
 })();
 </script>
 </body>

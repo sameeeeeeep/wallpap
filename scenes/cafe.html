@@ -15,6 +15,7 @@
 <script src="lw.js"></script>
 <script src="moon.js"></script>
 <script src="pet-motion.js"></script>
+<script src="pets.js"></script>
 <script>
 'use strict';
 (() => {
@@ -736,6 +737,7 @@ const WM = 12;   // margin around the window canvases (room for parallax)
 function setWinT(g) { const w = L.win; g.setTransform(U, 0, 0, U, -(w.x0 - WM) * U, -(w.y0 - WM) * U); }
 
 function bakeRoom() {
+  roomCv.petRevision=(roomCv.petRevision||0)+1;
   albCv.width = cv.width; albCv.height = cv.height;
   const a = albCv.getContext('2d');
   VT(a);
@@ -2152,695 +2154,32 @@ function noteGlyph(g, x, y, s, kind) {
 //  pets — each owns its coat (frozen) and its pose state. No shared
 //  scratch canvases: they're drawn straight onto the frame with paths.
 // =====================================================================
-const CAT_COAT = Object.freeze({ base: '#9094a4', light: '#bfc2cf', shade: '#64687c', stripe: '#575a6d', white: '#f6f2ea', eye: '#b6cf66', nose: '#e3949e', ear: '#efaab2', outline: '#2a2a36', pad: '#ec9eab' });
-const DOG_COAT = Object.freeze({ collar: '#b8323c', tag: '#e2b850', base: '#d99c58', light: '#f2cb8c', shade: '#a96d37', cream: '#f8ead0', ear: '#b9773c', outline: '#4b2c17', nose: '#2b1d19', eye: '#2a1912', tongue: '#ea8790', brow: '#f4d7a4' });
-const COAT_RGB = new Map();
-function coatRGB(coat) { if (!COAT_RGB.has(coat)) { const o = {}; for (const k in coat) o[k] = hex(coat[k]); COAT_RGB.set(coat, Object.freeze(o)); } return COAT_RGB.get(coat); }
-function petPal(coat, m) { const c = coatRGB(coat), o = {}; for (const k in c) o[k] = rgba(mul(c[k], m)); return o; }
-
-const POSE_KEYS = ['bx', 'by', 'brx', 'bry', 'ba', 'hx', 'hy', 'hr', 'chx', 'chy', 'chrx', 'chry', 'p1x', 'p1y', 'p2x', 'p2y', 'hdx', 'hdy', 'hrx', 'hry', 'tilt', 'ear', 'eye', 'tbx', 'tby', 'hind'];
-const blendP = (a, b, t) => { const o = {}; for (const k of POSE_KEYS) o[k] = lerp(a[k] || 0, b[k] || 0, t); return o; };
-const CAT_A = { bx: 0, by: -25, brx: 47, bry: 24, ba: 0.03, hx: -27, hy: -26, hr: 24, chx: 30, chy: -27, chrx: 17, chry: 20, p1x: 64, p1y: -5, p2x: 54, p2y: -6, hdx: 45, hdy: -65, hrx: 28, hry: 25, tilt: 0, ear: 0, eye: 1, tbx: -47, tby: -14, hind: 0 };
-const CAT_S = { bx: 0, by: -21, brx: 50, bry: 21, ba: -0.01, hx: -28, hy: -23, hr: 22, chx: 30, chy: -20, chrx: 16, chry: 16, p1x: 58, p1y: -5, p2x: 50, p2y: -6, hdx: 53, hdy: -36, hrx: 28, hry: 24, tilt: 0.2, ear: 0.7, eye: 0, tbx: -50, tby: -12, hind: 0 };
-const CAT_X = { bx: 10, by: -22, brx: 57, bry: 20, ba: -0.14, hx: -27, hy: -40, hr: 23, chx: 46, chy: -17, chrx: 16, chry: 16, p1x: 96, p1y: -5, p2x: 88, p2y: -6, hdx: 70, hdy: -42, hrx: 28, hry: 24, tilt: -0.12, ear: 0.5, eye: 0.1, tbx: -45, tby: -34, hind: 0 };
-const CAT_U = { bx: -4, by: -29, brx: 44, bry: 25, ba: 0.4, hx: -28, hy: -26, hr: 25, chx: 34, chy: -52, chrx: 17, chry: 21, p1x: 44, p1y: -5, p2x: 40, p2y: -5, hdx: 40, hdy: -98, hrx: 28, hry: 25, tilt: -0.08, ear: -0.25, eye: 1, tbx: -46, tby: -16, hind: 0 };
-const DOG_A = { bx: 0, by: -30, brx: 58, bry: 30, ba: 0.02, hx: -36, hy: -31, hr: 30, chx: 38, chy: -34, chrx: 22, chry: 26, p1x: 80, p1y: -7, p2x: 69, p2y: -8, hdx: 57, hdy: -77, hrx: 32, hry: 28, tilt: 0, ear: 0, eye: 1, tbx: -64, tby: -18, hind: 0 };
-const DOG_S = { bx: 0, by: -26, brx: 64, bry: 26, ba: 0, hx: -38, hy: -26, hr: 27, chx: 36, chy: -24, chrx: 20, chry: 20, p1x: 74, p1y: -6, p2x: 63, p2y: -7, hdx: 70, hdy: -37, hrx: 32, hry: 27, tilt: 0.12, ear: 0.4, eye: 0, tbx: -64, tby: -15, hind: 0 };
-const DOG_B = { bx: 2, by: -44, brx: 60, bry: 25, ba: -0.32, hx: -40, hy: -62, hr: 26, chx: 44, chy: -22, chrx: 20, chry: 20, p1x: 102, p1y: -7, p2x: 92, p2y: -8, hdx: 82, hdy: -48, hrx: 32, hry: 28, tilt: -0.12, ear: 0.15, eye: 1, tbx: -62, tby: -66, hind: 1 };
-
-function makePet(kind) {
-  const p = {
-    s: 0, blinkT: rand(1, 4), blink: 0, earTw: 0, earTwV: 0, earT: rand(3, 8),
-    yawn: 0, yawnT: -1, stretchT: -1, happyT: 0, lastStim: nowS(), wakeUntil: 0, nap: kind === 'cat' ? rand(28, 40) : rand(40, 60),
-    lookX: 0.4, lookY: 0, breathP: rand(0, 6), tailN: kind === 'cat' ? 10 : 7, reach: 0, rx: 0, ry: 0, watch: 0, startle: 0,
-    tiltT: 0, wag: 0, pant: 0, earSw: 0, earSwV: 0, nextYawn: rand(50, 110), headPrev: null, P: null, F: null,
-    batT: -1, up: 0, sighT: -1, sigh: 0, roll: null, vibe: 0, bobT: 9, bobS: 0.5, bobSide: 1, lean: 0,
-    // roaming
-    x: 0, y: 0, k: PK0_INIT, face: kind === 'cat' ? 1 : -1, faceT: 0, flip: 0, fore: 1, plat: kind === 'cat' ? 'seat' : 'floor',
-    plan: [], act: null, doing: null, arrivedT: 0, holdUntil: 0, urge: null, walk: 0, walkPh: 0, hopT: 0, squint: 0,
-    wagPh: 0, wagKick: 0, nextSigh: rand(30, 60), light: [1, 1, 1], headW: [0, 0], bb: null, tintKey: '', blinkDur: 0.16,
-    vis: { pose: 'sit', prev: null, fade: 1, sx: 1, sy: 1, rot: 0, bob: 0, lid: 0, curve: 1, wagA: 0 },
-  };
-  // its own tinted sprite canvases — never shared with the other pet
-  Object.defineProperty(p, 'tintC', { value: {}, writable: false });
-  Object.defineProperty(p, 'tintDirty', { value: {}, writable: false });
-  p.tailA = new Float32Array(p.tailN); p.tailV = new Float32Array(p.tailN);
-  Object.defineProperty(p, 'kind', { value: kind, writable: false, enumerable: true });
-  Object.defineProperty(p, 'coat', { value: kind === 'cat' ? CAT_COAT : DOG_COAT, writable: false, enumerable: true });
-  return p;
+function addEll(p,x,y,rx,ry,rot=0){p.moveTo(x+rx*Math.cos(rot),y+rx*Math.sin(rot));p.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),rot,0,TAU)}
+const petSystem=LW.pets.create({scene:'cafe',roster:['grey', 'golden'],stage:petStage});
+const animals=petSystem.items;
+const [cat,dog]=animals,pets=animals;
+function petStage(){
+ const lay=LW.layout||{},c=lay.clear||[0,.72],clr=MIR?[1-c[1],1-c[0]]:c;
+ return {floor:[[[80,805],[W-80,805],[W-80,943],[80,943]]],bounds:[80,805,W-80,943],scale:[[772,1],[946,1.3]],
+ ledges:[{id:'seat',x0:L.seat.x0+50,x1:L.seat.x1-50,y:L.seat.gy,depth:790,scale:1}],
+ links:[[{surf:'floor',x:L.catHome.x+50,y:835},{surf:'seat',x:L.catHome.x},'cat']],
+ homes:[{x:L.catHome.x,surf:'seat',state:'sleep'},{x:L.rug.cx-20,y:L.rug.cy+8,state:'sleep'}],
+ spots:[{id:'window',x:L.catHome.x,y:L.seat.gy,surf:'seat',kind:'bed',species:'cat'},{id:'rug',x:L.rug.cx,y:L.rug.cy,kind:'bed'},{id:'player',...L.dogPlayer,kind:'sun'}],
+ exits:[{x:W+180,y:920}],clear:clr.map(v=>v*W),light:lightAt,night:1-E.day,
+ occluders:[{depth:990,draw:g=>{
+  LW.pets.plate(g,roomCv,[[0,946],[W,946],[W,1000],[0,1000]]);
+  const {x,y}=L.latte,k=L.fg;
+  LW.pets.plate(g,roomCv,[[x-28*k,y-36*k],[x-20*k,y-42*k],[x+20*k,y-42*k],[x+28*k,y-36*k],[x+26*k,y-15*k],[x+16*k,y-4*k],[x-16*k,y-4*k],[x-26*k,y-15*k]]);
+  const c=L.candle;LW.pets.plate(g,roomCv,[[c.x-17*k,c.y-40*k],[c.x+17*k,c.y-40*k],[c.x+17*k,c.y],[c.x-17*k,c.y]]);
+ }}]};
 }
-const PK0_INIT = 1.42;
-const cat = makePet('cat'), dog = makePet('dog');
-const pets = Object.freeze([cat, dog]);
-
-// ---- rig geometry ----------------------------------------------------------
-function ik(ax, ay, bx, by, l1, l2, bend) {
-  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1;
-  const dd = Math.min(d, l1 + l2 - 0.01);
-  const a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
-  const ux = dx / d, uy = dy / d;
-  let nx = -uy, ny = ux;
-  if ((nx >= 0 ? 1 : -1) !== bend) { nx = -nx; ny = -ny; }
-  return [ax + ux * a + nx * h, ay + uy * a + ny * h];
-}
-function addEll(p, x, y, rx, ry, rot = 0) { p.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); p.ellipse(x, y, rx, ry, rot, 0, TAU); }
-function addQuad(p, a, b, c, d) {
-  const area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
-  if (area < 0) { const t = b; b = d; d = t; }
-  p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(c[0], c[1]); p.lineTo(d[0], d[1]); p.closePath();
-}
-function addTri(p, a, b, c) {
-  const area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
-  if (area < 0) { const t = b; b = c; c = t; }
-  p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(c[0], c[1]); p.closePath();
-}
-function limb(pts, ws) {
-  const p = new Path2D();
-  for (let i = 0; i < pts.length; i++) addEll(p, pts[i][0], pts[i][1], ws[i] / 2, ws[i] / 2);
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
-    const d = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / d, ny = (x1 - x0) / d, w0 = ws[i] / 2, w1 = ws[i + 1] / 2;
-    addQuad(p, [x0 + nx * w0, y0 + ny * w0], [x1 + nx * w1, y1 + ny * w1], [x1 - nx * w1, y1 - ny * w1], [x0 - nx * w0, y0 - ny * w0]);
-  }
-  return p;
-}
-function tailPath(p, seg) {
-  const pts = [[p.P.tbx, p.P.tby]];
-  let x = p.P.tbx, y = p.P.tby;
-  for (let i = 0; i < p.tailN; i++) { x += Math.cos(p.tailA[i]) * seg; y += Math.sin(p.tailA[i]) * seg; pts.push([x, y]); }
-  const path = new Path2D();
-  path.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; path.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); }
-  path.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
-  return { path, pts };
-}
-function stepTail(p, targetFn, dt, kS0 = 60, dmp = 10) {
-  const n = p.tailN, sub = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / sub;
-  for (let s = 0; s < sub; s++) for (let i = 0; i < n; i++) {
-    const kS = kS0 - i * 3.5;
-    p.tailV[i] += ((targetFn(i) - p.tailA[i]) * kS - p.tailV[i] * dmp) * h;
-    p.tailA[i] += p.tailV[i] * h;
-  }
-}
-function drawParts(g, parts, OW, outline, rims) {
-  g.lineJoin = 'round'; g.lineCap = 'round';
-  // rim light: a copy of the silhouette edge nudged toward each light, drawn UNDER the
-  // dark outline — it peeks out as a thin glowing edge on the lit side only
-  if (rims) for (const r of rims) {
-    if (r.a < 0.01) continue;
-    g.save(); g.translate(-r.dx * 0.75, -r.dy * 0.75); g.strokeStyle = rgba(r.c, r.a); g.lineWidth = OW * 1.7;
-    for (const pt of parts) if (pt.rim) g.stroke(pt.path);
-    g.restore();
-  }
-  g.strokeStyle = outline;
-  for (const pt of parts) { g.lineWidth = pt.stroke ? pt.width + OW * 2 : OW * 2; g.stroke(pt.path); }
-  for (const pt of parts) {
-    if (pt.stroke) { g.strokeStyle = pt.stroke; g.lineWidth = pt.width; g.stroke(pt.path); if (pt.after) pt.after(g); g.strokeStyle = outline; continue; }
-    if (pt.own) { g.strokeStyle = outline; g.lineWidth = OW * 1.6; g.stroke(pt.path); }
-    g.fillStyle = pt.fill; g.fill(pt.path);
-    if (pt.after) pt.after(g);
-  }
-}
-function petRims(p, warmDx, warmDy) {
-  const lv = E.lamp * (1 - calm.lv * 0.6), cool = E.city * (1 - E.day);
-  const beatK = 1 + 0.25 * beat.level;
-  return [
-    { c: [255, 190, 120], a: Math.min(0.6, (0.14 + 0.36 * lv) * beatK), dx: warmDx, dy: warmDy },
-    { c: [140, 170, 240], a: 0.3 * cool * (p.kind === 'cat' ? 1 : 0.4), dx: p.kind === 'cat' ? 0 : 1.5, dy: 2.4 },
-  ];
-}
-
-// ---- CAT -----------------------------------------------------------------
-function drawCat(g, c) {
-  if (drawPetSprite(g, c)) return;
-  if (!c.P) return;
-  const P = c.P, F = c.F, pal = petPal(c.coat, c.light), OW = 2.3;
-  g.save();
-  g.translate(c.x, c.y + c.vis.bob); g.rotate(c.vis.rot); g.scale(c.face * c.k / 1.5 * c.vis.sx * 1.4, c.k / 1.5 * c.vis.sy * 1.4);
-  const parts = [];
-  // tail (behind)
-  const tp = tailPath(c, 9.2);
-  parts.push({ path: tp.path, stroke: pal.base, width: 11.5, after: (gg) => {
-    gg.save(); gg.setLineDash([5, 8]); gg.lineDashOffset = -4; gg.strokeStyle = pal.stripe; gg.lineWidth = 10.5; gg.stroke(tp.path); gg.restore();
-    const e = tp.pts[tp.pts.length - 1], e2 = tp.pts[tp.pts.length - 2];
-    gg.strokeStyle = pal.stripe; gg.lineWidth = 11.5; gg.beginPath(); gg.moveTo(lerp(e2[0], e[0], 0.4), lerp(e2[1], e[1], 0.4)); gg.lineTo(e[0], e[1]); gg.stroke();
-  } });
-  // far front leg + paw
-  const sh2 = [P.chx - 6, P.chy + 4];
-  parts.push({ path: limb([sh2, [P.p2x - 8, P.p2y - 3]], [12, 9.5]), fill: pal.shade });
-  const fp = new Path2D(); addEll(fp, P.p2x, P.p2y, 9, 5.4);
-  parts.push({ path: fp, fill: pal.shade });
-  // body union
-  const body = new Path2D();
-  addEll(body, P.bx, P.by, P.brx, P.bry, -P.ba);
-  addEll(body, P.hx, P.hy, P.hr, P.hr * 0.98);
-  addEll(body, P.chx, P.chy, P.chrx, P.chry);
-  const bg = g.createLinearGradient(0, Math.min(P.by - P.bry, P.hy - P.hr) - 4, 0, 0);
-  bg.addColorStop(0, pal.light); bg.addColorStop(0.45, pal.base); bg.addColorStop(1, pal.shade);
-  parts.push({ path: body, fill: bg, rim: true, after: (gg) => {
-    gg.save(); gg.clip(body);
-    gg.strokeStyle = pal.stripe; gg.lineCap = 'round';
-    gg.save(); gg.translate(P.bx, P.by); gg.rotate(-P.ba);
-    for (let i = 0; i < 5; i++) { const x = -P.brx * 0.3 + i * P.brx * 0.24; gg.lineWidth = 5 - i * 0.4; gg.beginPath(); gg.moveTo(x - 3, -P.bry - 4); gg.quadraticCurveTo(x + 5, -P.bry * 0.35, x - 1, P.bry * 0.05); gg.stroke(); }
-    gg.restore();
-    gg.lineWidth = 3.6; for (let i = 0; i < 3; i++) { gg.beginPath(); gg.arc(P.hx + 2, P.hy + 2, P.hr * (0.32 + 0.27 * i), Math.PI * 0.95, Math.PI * 1.62); gg.stroke(); }
-    // white bib + belly
-    gg.fillStyle = pal.white; gg.beginPath(); gg.ellipse(P.chx + 6, P.chy - 2, P.chrx * 0.62, P.chry * 0.8, 0.2, 0, TAU); gg.fill();
-    gg.beginPath(); gg.ellipse(P.bx + 10, 1, P.brx * 0.55, 6, 0, 0, TAU); gg.fill();
-    gg.restore();
-  } });
-  // tucked hind paw
-  const hp = new Path2D(); addEll(hp, P.hx + 20, -4.5, 9, 5);
-  parts.push({ path: hp, fill: pal.white, own: true });
-  // near front leg (reaching or resting)
-  const sh1 = [P.chx + 2, P.chy + 2];
-  let paw = [P.p1x, P.p1y];
-  if (c.reach > 0.01) paw = [lerp(paw[0], c.rx, c.reach), lerp(paw[1], c.ry, c.reach)];
-  const wrist = [paw[0] - 7 * (1 - c.reach), paw[1] - 2];
-  const l1 = lerp(22, 27, c.up || 0), l2 = lerp(24, 31, c.up || 0);
-  const el = c.reach > 0.05 ? ik(sh1[0], sh1[1], wrist[0], wrist[1], l1, l2, 1) : [lerp(sh1[0], wrist[0], 0.5), lerp(sh1[1], wrist[1], 0.5) + 2];
-  const legP = limb([sh1, el, wrist], [13, 11, 9.5]);
-  parts.push({ path: legP, fill: pal.base, own: true, after: (gg) => {
-    // white sock
-    gg.save(); gg.clip(legP); gg.fillStyle = pal.white; gg.beginPath(); gg.arc(wrist[0], wrist[1], 9, 0, TAU); gg.fill(); gg.restore();
-  } });
-  const pp = new Path2D();
-  const pawAng = c.reach > 0.3 ? Math.atan2(paw[1] - el[1], paw[0] - el[0]) * c.reach : 0;
-  addEll(pp, paw[0], paw[1], 9.6 + c.reach * 0.6, 5.8 + c.reach * 2.2, pawAng);
-  parts.push({ path: pp, fill: pal.white, own: true, after: (gg) => {
-    if (c.reach > 0.35) {
-      gg.fillStyle = pal.pad; gg.globalAlpha = smooth((c.reach - 0.35) / 0.4);
-      gg.beginPath(); gg.ellipse(paw[0] - 1, paw[1] + 1.5, 3.4, 2.6, pawAng, 0, TAU); gg.fill();
-      for (const [dx, dy] of [[-4.6, -3], [-0.6, -4.6], [3.6, -3.4], [6, -0.6]]) { const ca = Math.cos(pawAng), sa = Math.sin(pawAng); gg.beginPath(); gg.arc(paw[0] + dx * ca - dy * sa, paw[1] + dx * sa + dy * ca, 1.4, 0, TAU); gg.fill(); }
-      gg.globalAlpha = 1;
-    } else {
-      gg.strokeStyle = 'rgba(60,50,60,0.35)'; gg.lineWidth = 1;
-      gg.beginPath(); gg.moveTo(paw[0] + 3, paw[1] - 4); gg.lineTo(paw[0] + 3.6, paw[1] - 1); gg.moveTo(paw[0] + 6.5, paw[1] - 3.4); gg.lineTo(paw[0] + 6.8, paw[1] - 0.8); gg.stroke();
-    }
-  } });
-  // head: ears behind, then skull + cheek fluff
-  const hx = P.hdx, hy = P.hdy, fx = hx + F.ht * 7;
-  for (const side of [-1, 1]) {
-    const e = clamp(P.ear + (side > 0 ? c.earTw : c.earTw * 0.3), -0.4, 1.3);
-    const ex = hx + side * 14.5 + F.ht * 4, ey = hy - P.hry * 0.55;
-    const ang = side * (0.28 + e * 0.9) + P.tilt;
-    const hgt = 25 * (1 - Math.max(0, e) * 0.22) * (1 + Math.max(0, -e) * 0.15), hw = 12;
-    const rot = (x, y) => [ex + x * Math.cos(ang) - y * Math.sin(ang), ey + x * Math.sin(ang) + y * Math.cos(ang)];
-    const a1 = rot(-hw, 5), a2 = rot(hw, 5), tip = rot(side * 1.2, -hgt), c1 = rot(-hw * 0.72, -hgt * 0.5), c2 = rot(hw * 0.62, -hgt * 0.58);
-    const ep = new Path2D(); ep.moveTo(a1[0], a1[1]); ep.quadraticCurveTo(c1[0], c1[1], tip[0], tip[1]); ep.quadraticCurveTo(c2[0], c2[1], a2[0], a2[1]); ep.closePath();
-    const i1 = rot(-hw * 0.55, 2), i2 = rot(hw * 0.5, 2), it = rot(side, -hgt * 0.72), q1 = rot(-hw * 0.4, -hgt * 0.42), q2 = rot(hw * 0.32, -hgt * 0.48);
-    const ip = new Path2D(); ip.moveTo(i1[0], i1[1]); ip.quadraticCurveTo(q1[0], q1[1], it[0], it[1]); ip.quadraticCurveTo(q2[0], q2[1], i2[0], i2[1]); ip.closePath();
-    const tu = [[rot(0, 3), rot(-hw * 0.2, -hgt * 0.38)], [rot(-hw * 0.25, 3), rot(-hw * 0.48, -hgt * 0.28)], [rot(hw * 0.2, 3), rot(hw * 0.1, -hgt * 0.33)]];
-    parts.push({ path: ep, fill: pal.base, after: (gg) => { gg.fillStyle = pal.ear; gg.fill(ip); gg.strokeStyle = pal.white; gg.lineWidth = 1; gg.globalAlpha = 0.7; gg.beginPath(); tu.forEach(([a, b]) => { gg.moveTo(a[0], a[1]); gg.lineTo(b[0], b[1]); }); gg.stroke(); gg.globalAlpha = 1; } });
-  }
-  const head = new Path2D();
-  addEll(head, hx, hy, P.hrx, P.hry, P.tilt);
-  for (const s of [-1, 1]) {
-    addEll(head, hx + s * P.hrx * 0.64 + F.ht * 3, hy + P.hry * 0.45, 12.5, 10);
-    const bx = hx + s * P.hrx * 0.9 + F.ht * 2, by = hy + P.hry * 0.3;
-    addTri(head, [bx, by - 6], [bx + s * 8.5, by + 3], [bx - s, by + 7]);
-    addTri(head, [bx - s * 2, by + 2], [bx + s * 6, by + 10], [bx - s * 4, by + 11]);
-  }
-  const hg = g.createLinearGradient(0, hy - P.hry, 0, hy + P.hry + 10);
-  hg.addColorStop(0, pal.light); hg.addColorStop(0.5, pal.base); hg.addColorStop(1, pal.shade);
-  parts.push({ path: head, fill: hg, rim: true, after: (gg) => {
-    gg.save(); gg.clip(head);
-    gg.strokeStyle = pal.stripe; gg.lineCap = 'round'; gg.lineWidth = 3.2;
-    for (const dx of [-6.5, 0, 6.5]) { gg.beginPath(); gg.moveTo(fx + dx * 0.9, hy - P.hry + 2); gg.lineTo(fx + dx, hy - P.hry * 0.42); gg.stroke(); }
-    for (const s of [-1, 1]) for (const dy of [4, 9]) { gg.beginPath(); gg.moveTo(hx + s * P.hrx * 1.02, hy + dy - 2); gg.lineTo(hx + s * P.hrx * 0.72, hy + dy); gg.stroke(); }
-    // white blaze + muzzle
-    gg.fillStyle = pal.white; gg.beginPath(); gg.moveTo(fx, hy - 2); gg.quadraticCurveTo(fx - 9, hy + 8, fx - 16, hy + 28); gg.lineTo(fx + 16, hy + 28); gg.quadraticCurveTo(fx + 9, hy + 8, fx, hy - 2); gg.fill();
-    gg.restore();
-  } });
-  drawParts(g, parts, OW, pal.outline, petRims(c, 2.6, 3));
-  drawCatFace(g, P, F, pal);
-  g.restore();
-}
-function drawCatFace(g, P, F, pal) {
-  const hy = P.hdy, fx = P.hdx + F.ht * 7, ey = hy + 3, sep = 12.4;
-  g.fillStyle = pal.white;
-  g.beginPath(); g.ellipse(fx - 4.4, hy + 14.5, 5.8, 4.2, 0, 0, TAU); g.ellipse(fx + 4.4, hy + 14.5, 5.8, 4.2, 0, 0, TAU); g.fill();
-  g.fillStyle = 'rgba(255,140,160,0.3)';
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(fx + s * (sep + 4), ey + 10, 5.5, 3, 0, 0, TAU); g.fill(); }
-  const e = F.eye, wide = F.wide || 1;
-  for (const s of [-1, 1]) {
-    const ex = fx + s * sep, far = (F.ht > 0.35 && s < 0) || (F.ht < -0.35 && s > 0);
-    const rx = 7 * (far ? 0.86 : 1) * wide, ry = 7.6 * wide;
-    if (F.happy > 0.5) {
-      g.strokeStyle = pal.outline; g.lineWidth = 2.2; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(ex - rx, ey + 2.5); g.quadraticCurveTo(ex, ey - 5.5, ex + rx, ey + 2.5); g.stroke();
-    } else if (e >= 0.2) {
-      const rye = ry * e, oy = ry * (1 - e) * 0.5;
-      const ep = new Path2D(); ep.ellipse(ex, ey + oy, rx, rye, s * -0.08, 0, TAU);
-      const ig = g.createRadialGradient(ex, ey + oy + rye * 0.35, 1, ex, ey + oy, rx * 1.1);
-      ig.addColorStop(0, rgba(mix3(hex(CAT_COAT.eye), [255, 255, 235], 0.35))); ig.addColorStop(1, pal.eye);
-      g.fillStyle = ig; g.fill(ep);
-      g.save(); g.clip(ep);
-      const pw = lerp(1.6, rx * 0.8, F.dil), ph = rye * 0.88;
-      const px = ex + F.lx * 2.4, py = ey + oy + F.ly * 1.5;
-      g.fillStyle = '#15111a'; g.beginPath(); g.ellipse(px, py, pw, ph, 0, 0, TAU); g.fill();
-      const lg = g.createLinearGradient(0, ey + oy - rye, 0, ey + oy);
-      lg.addColorStop(0, 'rgba(20,18,30,0.55)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = lg; g.fillRect(ex - rx, ey + oy - rye, rx * 2, rye);
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(px - 2.5, py - rye * 0.42, 2.3, 0, TAU); g.fill();
-      g.globalAlpha = 0.8; g.beginPath(); g.arc(px + 2.3, py + rye * 0.3, 1.1, 0, TAU); g.fill(); g.globalAlpha = 1;
-      g.restore();
-      g.strokeStyle = pal.outline; g.lineCap = 'round';
-      g.lineWidth = 2.2; g.beginPath(); g.ellipse(ex, ey + oy, rx, rye, s * -0.08, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
-      g.lineWidth = 1; g.beginPath(); g.ellipse(ex, ey + oy, rx, rye, s * -0.08, Math.PI * 0.12, Math.PI * 0.88); g.stroke();
-    } else {
-      g.strokeStyle = pal.outline; g.lineWidth = 2; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(ex - rx, ey + 1); g.quadraticCurveTo(ex, ey + 5.5, ex + rx, ey + 1); g.stroke();
-      g.lineWidth = 1; g.beginPath(); g.moveTo(ex + s * rx * 0.9, ey + 2); g.lineTo(ex + s * (rx + 3), ey + 3.5); g.stroke();
-    }
-  }
-  const ny = hy + 12;
-  g.fillStyle = pal.nose; g.beginPath(); g.moveTo(fx - 3.6, ny - 1.8); g.quadraticCurveTo(fx, ny - 3.6, fx + 3.6, ny - 1.8); g.quadraticCurveTo(fx + 1.6, ny + 2.4, fx, ny + 2.4); g.quadraticCurveTo(fx - 1.6, ny + 2.4, fx - 3.6, ny - 1.8); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(fx - 1, ny - 1.6, 1.3, 0.7, 0, 0, TAU); g.fill();
-  const mo = F.mouth;
-  if (mo > 0.08) {
-    g.fillStyle = '#6e2f3a'; g.beginPath(); g.ellipse(fx, ny + 7 + mo * 3, 3.4 + mo * 2.6, 1.8 + mo * 6, 0, 0, TAU); g.fill();
-    g.fillStyle = '#ea8a98'; g.beginPath(); g.ellipse(fx, ny + 9 + mo * 6, 2.6 + mo * 1.4, 1.2 + mo * 2.2, 0, 0, TAU); g.fill();
-    if (mo > 0.5) { g.fillStyle = '#fff'; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(fx + s * 3.6, ny + 5); g.lineTo(fx + s * 2.6, ny + 8.5); g.lineTo(fx + s * 1.8, ny + 5); g.fill(); } }
-  } else {
-    g.strokeStyle = pal.outline; g.lineWidth = 1.3; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(fx, ny + 2.4); g.lineTo(fx, ny + 4); g.quadraticCurveTo(fx - 0.6, ny + 6.6, fx - 4.2, ny + 5.6); g.moveTo(fx, ny + 4); g.quadraticCurveTo(fx + 0.6, ny + 6.6, fx + 4.2, ny + 5.6); g.stroke();
-  }
-  g.strokeStyle = 'rgba(255,252,245,0.55)'; g.lineWidth = 0.85;
-  g.beginPath();
-  for (const s of [-1, 1]) for (let i = 0; i < 3; i++) { const y0 = ny + 3 + i * 2.4, x0 = fx + s * 8; g.moveTo(x0, y0); g.quadraticCurveTo(x0 + s * 12, y0 - 2 + i * 1.5, x0 + s * 26, y0 - 4 + i * 4.2); }
-  g.stroke();
-}
-
-// ---- DOG -----------------------------------------------------------------
-function drawDog(g, d) {
-  if (drawPetSprite(g, d)) return;
-  if (!d.P) return;
-  const P = d.P, F = d.F, pal = petPal(d.coat, d.light), OW = 2.4;
-  const rims = petRims(d, -2.6, 3);
-  g.save();
-  g.translate(d.x, d.y + d.vis.bob); g.rotate(d.vis.rot); g.scale(-d.face * d.k / 1.6 * d.vis.sx * 1.4, d.k / 1.6 * d.vis.sy * 1.4);
-  // rolling over: squash flat, swap to the belly-up pose, unsquash
-  const q = d.roll ? d.roll.q : 0;
-  if (q > 0) { g.rotate(-0.08 * q); g.scale(1 + 0.1 * q, 1 - 0.38 * q); }
-  if (d.roll && d.roll.belly) { drawDogBelly(g, d, P, F, pal, OW, rims); g.restore(); return; }
-  const parts = [];
-  // tail: fluffy plume
-  const tp = tailPath(d, 9.5);
-  parts.push(dogTailPart(d, tp, pal));
-  // far hind leg (only shows in the bow)
-  const hip = [P.hx + 6, P.hy + 10];
-  if (P.hind > 0.02) {
-    const fpw = [P.hx - 8, 0];
-    const kn = ik(hip[0], hip[1], fpw[0], fpw[1] - 6, 26, 28, 1);
-    parts.push({ path: limb([hip, kn, [fpw[0], fpw[1] - 6]], [20 * P.hind, 13 * P.hind, 11 * P.hind]), fill: pal.shade });
-    const fp = new Path2D(); addEll(fp, fpw[0] + 3, -4.5, 10 * P.hind, 5.5 * P.hind); parts.push({ path: fp, fill: pal.shade });
-  }
-  // far front leg + paw
-  const sh2 = [P.chx - 8, P.chy + 6];
-  parts.push({ path: limb([sh2, [P.p2x - 9, P.p2y - 3]], [15, 12]), fill: pal.shade });
-  const fp2 = new Path2D(); addEll(fp2, P.p2x, P.p2y, 11, 6.5); parts.push({ path: fp2, fill: pal.shade });
-  // body
-  const body = new Path2D();
-  addEll(body, P.bx, P.by, P.brx, P.bry, -P.ba);
-  addEll(body, P.hx, P.hy, P.hr, P.hr * 0.96);
-  addEll(body, P.chx, P.chy, P.chrx, P.chry);
-  const bg = g.createLinearGradient(0, Math.min(P.by - P.bry, P.hy - P.hr) - 4, 0, 0);
-  bg.addColorStop(0, pal.light); bg.addColorStop(0.5, pal.base); bg.addColorStop(1, pal.shade);
-  parts.push({ path: body, fill: bg, rim: true, after: (gg) => {
-    gg.save(); gg.clip(body);
-    gg.fillStyle = pal.cream; gg.beginPath(); gg.ellipse(P.chx + 10, P.chy - 6, P.chrx * 0.6, P.chry * 0.75, 0.3, 0, TAU); gg.fill();
-    // chest ruff
-    gg.strokeStyle = pal.cream; gg.lineWidth = 2; gg.globalAlpha = 0.8;
-    gg.beginPath(); for (let i = 0; i < 4; i++) { const y = P.chy - 10 + i * 7; gg.moveTo(P.chx + 2, y); gg.quadraticCurveTo(P.chx + 10, y + 3, P.chx + 6, y + 7); } gg.stroke(); gg.globalAlpha = 1;
-    // soft fur tufts along the back
-    gg.strokeStyle = pal.light; gg.globalAlpha = 0.45; gg.lineWidth = 2;
-    gg.save(); gg.translate(P.bx, P.by); gg.rotate(-P.ba);
-    for (let i = 0; i < 7; i++) { const x = -P.brx * 0.75 + i * P.brx * 0.24; gg.beginPath(); gg.moveTo(x, -P.bry + 3); gg.quadraticCurveTo(x + 4, -P.bry + 8, x + 1, -P.bry + 12); gg.stroke(); }
-    gg.restore(); gg.globalAlpha = 1;
-    gg.strokeStyle = pal.shade; gg.globalAlpha = 0.5; gg.lineWidth = 2; gg.beginPath(); gg.arc(P.hx + 6, P.hy + 4, P.hr * 0.75, -2.4, -0.9); gg.stroke(); gg.globalAlpha = 1;
-    gg.restore();
-  } });
-  // near hind: tucked paw (lying) / standing leg (bow)
-  if (P.hind > 0.02) {
-    const npw = [P.hx + 6, 0];
-    const kn = ik(hip[0] + 4, hip[1], npw[0], npw[1] - 6, 26, 28, 1);
-    parts.push({ path: limb([[hip[0] + 4, hip[1]], kn, [npw[0], npw[1] - 6]], [22 * P.hind, 14 * P.hind, 11.5 * P.hind]), fill: pal.base, own: true });
-  }
-  if (P.hind < 0.6) {
-    const th = 1 - P.hind / 0.6;
-    parts.push({ path: limb([[P.hx + 2, P.hy + 2], [P.hx + 18, -10], [P.hx + 24, -6]], [30 * th, 16 * th, 12 * th]), fill: pal.base, own: true, after: (gg) => { gg.strokeStyle = pal.light; gg.globalAlpha = 0.35; gg.lineWidth = 2; gg.beginPath(); gg.arc(P.hx + 2, P.hy + 2, 12, -2.2, -0.4); gg.stroke(); gg.globalAlpha = 1; } });
-  }
-  const hp = new Path2D(); addEll(hp, lerp(P.hx + 28, P.hx + 9, P.hind), -5, 11, 6); parts.push({ path: hp, fill: pal.cream, own: true });
-  // near front leg + paw
-  const sh1 = [P.chx + 2, P.chy + 4];
-  parts.push({ path: limb([sh1, [P.p1x - 9, P.p1y - 3]], [16, 12.5]), fill: pal.base, own: true });
-  const fp1 = new Path2D(); addEll(fp1, P.p1x, P.p1y, 11.5, 6.8);
-  parts.push({ path: fp1, fill: pal.cream, own: true, after: (gg) => { gg.strokeStyle = 'rgba(90,60,40,0.35)'; gg.lineWidth = 1; gg.beginPath(); for (const dx of [2, 6]) { gg.moveTo(P.p1x + dx, P.p1y - 5.5); gg.lineTo(P.p1x + dx + 0.5, P.p1y - 2); } gg.stroke(); } });
-  // a red collar with a little brass tag, just under the chin
-  const cx2 = lerp(P.chx, P.hdx, 0.45) + 2, cy2 = lerp(P.chy, P.hdy, 0.5) + 16;
-  const col = new Path2D(); col.moveTo(cx2 - 15, cy2 - 4); col.quadraticCurveTo(cx2, cy2 + 6, cx2 + 16, cy2 - 3);
-  parts.push({ path: col, stroke: pal.collar, width: 5.5, after: (gg) => {
-    gg.fillStyle = pal.tag; gg.beginPath(); gg.arc(cx2 + 1, cy2 + 6.5, 3.6, 0, TAU); gg.fill();
-    gg.fillStyle = 'rgba(255,250,220,0.6)'; gg.beginPath(); gg.arc(cx2, cy2 + 5.5, 1.2, 0, TAU); gg.fill();
-  } });
-  dogHeadParts(parts, P, F, pal);
-  drawParts(g, parts, OW, pal.outline, rims);
-  dogEarsFace(g, d, P, F, pal, OW);
-  g.restore();
-}
-function dogTailPart(d, tp, pal) {
-  return { path: tp.path, stroke: pal.base, width: 16, after: (gg) => {
-    gg.save(); gg.translate(0, -3); gg.strokeStyle = pal.light; gg.lineWidth = 6; gg.globalAlpha = 0.7; gg.stroke(tp.path); gg.restore();
-    gg.strokeStyle = pal.light; gg.lineWidth = 1.4; gg.beginPath();
-    for (let i = 2; i < tp.pts.length - 1; i++) { const [x, y] = tp.pts[i]; const a = d.tailA[Math.min(i, d.tailN - 1)] + 1.57; gg.moveTo(x + Math.cos(a) * 6, y + Math.sin(a) * 6); gg.lineTo(x + Math.cos(a) * 10 - Math.cos(a - 1.57) * 3, y + Math.sin(a) * 10 - Math.sin(a - 1.57) * 3); }
-    gg.stroke();
-  } };
-}
-function dogHeadParts(parts, P, F, pal) {
-  const hx = P.hdx, hy = P.hdy, fx = hx + F.ht * 6;
-  const head = new Path2D();
-  addEll(head, hx, hy, P.hrx, P.hry, P.tilt);
-  for (const s of [-1, 1]) addEll(head, hx + s * P.hrx * 0.6 + F.ht * 3, hy + P.hry * 0.5, 15, 11.5);
-  addEll(head, fx, hy + 14, 17, 12.5);
-  const hg = new Path2D(); // (gradient made lazily in after)
-  parts.push({ path: head, fill: pal.base, rim: true, after: (gg) => {
-    gg.save(); gg.clip(head);
-    const gr = gg.createLinearGradient(0, hy - P.hry, 0, hy + P.hry + 10);
-    gr.addColorStop(0, pal.light); gr.addColorStop(0.55, pal.base); gr.addColorStop(1, pal.shade);
-    gg.fillStyle = gr; gg.fillRect(hx - 60, hy - 60, 120, 120);
-    gg.fillStyle = pal.cream; gg.beginPath(); gg.ellipse(fx, hy + 15, 16, 12, 0, 0, TAU); gg.fill();
-    gg.beginPath(); gg.moveTo(fx - 3, hy - P.hry + 6); gg.quadraticCurveTo(fx, hy + 2, fx + 3, hy - P.hry + 6); gg.lineTo(fx + 6, hy + 6); gg.lineTo(fx - 6, hy + 6); gg.closePath(); gg.globalAlpha = 0.55; gg.fill(); gg.globalAlpha = 1;
-    // a little forehead fluff
-    gg.strokeStyle = pal.light; gg.lineWidth = 1.6; gg.globalAlpha = 0.8;
-    gg.beginPath(); for (const dx of [-4, 0, 4]) { gg.moveTo(fx + dx, hy - P.hry + 1); gg.quadraticCurveTo(fx + dx + 2, hy - P.hry + 5, fx + dx - 1, hy - P.hry + 9); } gg.stroke(); gg.globalAlpha = 1;
-    gg.restore();
-  } });
-}
-function dogEarsFace(g, d, P, F, pal, OW, flop) {
-  const hx = P.hdx, hy = P.hdy;
-  for (const s of [-1, 1]) {
-    const ax = hx + s * (P.hrx * 0.7) + F.ht * 3, ay = hy - P.hry * 0.62;
-    const sw = d.earSw * (s > 0 ? 1 : 0.8) + P.tilt;
-    const lift = (F.perk || 0) * 0.5 - P.ear * 0.15;
-    g.save(); g.translate(ax, ay - lift * 4); g.rotate(s * (0.22 - lift) + sw + (flop ? s * 0.6 + Math.PI : 0));
-    const ep = new Path2D();
-    ep.moveTo(-s * 6, -4); ep.bezierCurveTo(s * 14, -8, s * 18, 18, s * 10, 32); ep.bezierCurveTo(s * 4, 40, -s * 6, 34, -s * 6, 22); ep.closePath();
-    g.lineJoin = 'round'; g.strokeStyle = pal.outline; g.lineWidth = OW * 2; g.stroke(ep);
-    g.fillStyle = pal.ear; g.fill(ep);
-    g.strokeStyle = pal.shade; g.globalAlpha = 0.5; g.lineWidth = 1.6; g.beginPath(); g.moveTo(s * 2, 4); g.quadraticCurveTo(s * 8, 18, s * 5, 30); g.stroke(); g.globalAlpha = 1;
-    g.restore();
-  }
-  drawDogFace(g, P, F, pal);
-}
-// belly-up: four paws in the air, wiggling; head upside down with the tongue out
-function drawDogBelly(g, d, P0, F0, pal, OW, rims) {
-  const wig = d.roll.wig || 0, T = nowS();
-  const parts = [];
-  // tail sweeping the rug
-  const base = [-58, -14], tp = (() => { const pts = [base]; let x = base[0], y = base[1]; for (let i = 0; i < d.tailN; i++) { x += Math.cos(d.tailA[i]) * 9.5; y += Math.sin(d.tailA[i]) * 9.5; pts.push([x, y]); } const path = new Path2D(); path.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length - 1; i++) path.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2); path.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); return { path, pts }; })();
-  parts.push(dogTailPart(d, tp, pal));
-  const leg = (hx2, hy2, px, py, far, w0) => {
-    const kn = [lerp(hx2, px, 0.5) + 6, lerp(hy2, py, 0.5) + 2];
-    parts.push({ path: limb([[hx2, hy2], kn, [px, py]], [w0, 12, 10.5]), fill: far ? pal.shade : pal.base, own: !far });
-    const pw = new Path2D(); addEll(pw, px, py - 3, 9.5, 7, 0.3); parts.push({ path: pw, fill: far ? pal.shade : pal.cream, own: !far, pads: !far });
-  };
-  const w1 = Math.sin(T * 6.1) * 5, w2 = Math.sin(T * 5.3 + 1) * 5, w3 = Math.sin(T * 6.7 + 2) * 4, w4 = Math.sin(T * 5.9 + 3) * 4;
-  leg(-40, -34, -52 + w1, -70, true, 18); leg(30, -36, 40 + w2, -72, true, 15);
-  const body = new Path2D();
-  addEll(body, 0, -24, 60, 24); addEll(body, -38, -26, 26, 24); addEll(body, 36, -26, 22, 22);
-  parts.push({ path: body, fill: pal.base, rim: true, after: (gg) => {
-    gg.save(); gg.clip(body);
-    gg.fillStyle = pal.cream; gg.beginPath(); gg.ellipse(2, -38, 46, 13, 0, 0, TAU); gg.fill();
-    gg.fillStyle = 'rgba(255,170,170,0.35)'; gg.beginPath(); gg.ellipse(-6, -40, 14, 5, 0, 0, TAU); gg.fill();
-    gg.fillStyle = pal.shade; gg.globalAlpha = 0.5; gg.beginPath(); gg.ellipse(0, -6, 58, 9, 0, 0, TAU); gg.fill(); gg.globalAlpha = 1;
-    gg.restore();
-  } });
-  leg(-28, -38, -32 + w3, -76, false, 19); leg(42, -38, 56 + w4, -76, false, 16);
-  drawParts(g, parts, OW, pal.outline, rims);
-  // head upside down at the front, ears flopped onto the rug
-  const P = Object.assign({}, P0, { hdx: 0, hdy: 0, tilt: 0 });
-  const F = Object.assign({}, F0, { happy: 1, pant: 1, pantW: 0.5 + 0.5 * Math.sin(T * 12), ht: 0.1 });
-  g.save(); g.translate(72, -24); g.rotate(Math.PI - 0.35 + 0.08 * wig);
-  const hp = []; dogHeadParts(hp, P, F, pal); drawParts(g, hp, OW, pal.outline, null);
-  dogEarsFace(g, d, P, F, pal, OW, true);
-  g.restore();
-}
-function drawDogFace(g, P, F, pal) {
-  const hy = P.hdy, fx = P.hdx + F.ht * 6, ey = hy - 1;
-  g.fillStyle = 'rgba(255,140,140,0.22)';
-  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(fx + s * 20, ey + 10, 5.5, 3, 0, 0, TAU); g.fill(); }
-  for (const s of [-1, 1]) {
-    const ex = fx + s * 13.5;
-    // eyebrow dots
-    g.fillStyle = pal.brow; g.beginPath(); g.ellipse(ex + s * 1.5, ey - 10 - (F.brow || 0) * 3, 3.6, 2.3, s * -0.2, 0, TAU); g.fill();
-    if (F.happy > 0.5) {
-      g.strokeStyle = pal.outline; g.lineWidth = 2.3; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(ex - 5.5, ey + 2); g.quadraticCurveTo(ex, ey - 5, ex + 5.5, ey + 2); g.stroke();
-    } else if (F.eye > 0.2) {
-      const r = 5.8, ry = r * F.eye;
-      g.fillStyle = pal.eye; g.beginPath(); g.ellipse(ex, ey + (r - ry) * 0.5, r, ry, 0, 0, TAU); g.fill();
-      g.save(); g.beginPath(); g.ellipse(ex, ey + (r - ry) * 0.5, r, ry, 0, 0, TAU); g.clip();
-      const px = ex + F.lx * 1.6, py = ey + F.ly * 1.2;
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(px - 1.8, py - 2.2, 2.2, 0, TAU); g.fill();
-      g.globalAlpha = 0.8; g.beginPath(); g.arc(px + 2, py + 1.8, 1, 0, TAU); g.fill(); g.globalAlpha = 1;
-      g.restore();
-    } else {
-      g.strokeStyle = pal.outline; g.lineWidth = 2; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(ex - 5.5, ey + 1); g.quadraticCurveTo(ex, ey + 5, ex + 5.5, ey + 1); g.stroke();
-    }
-  }
-  // nose
-  const ny = hy + 8;
-  g.fillStyle = pal.nose; g.beginPath(); g.moveTo(fx - 7, ny - 3); g.quadraticCurveTo(fx, ny - 6.5, fx + 7, ny - 3); g.quadraticCurveTo(fx + 5, ny + 4, fx, ny + 4.5); g.quadraticCurveTo(fx - 5, ny + 4, fx - 7, ny - 3); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.5)'; g.beginPath(); g.ellipse(fx - 2, ny - 2.6, 2.4, 1.1, -0.2, 0, TAU); g.fill();
-  // mouth
-  const pant = F.pant || 0, mo = F.mouth || 0;
-  g.strokeStyle = pal.outline; g.lineWidth = 1.5; g.lineCap = 'round';
-  if (pant > 0.1 || mo > 0.1) {
-    const op = Math.max(pant * (0.6 + 0.4 * F.pantW), mo);
-    g.fillStyle = '#5a2a2a'; g.beginPath(); g.moveTo(fx - 8, ny + 7); g.quadraticCurveTo(fx, ny + 9 + op * 10, fx + 8, ny + 7); g.quadraticCurveTo(fx, ny + 10, fx - 8, ny + 7); g.fill(); g.stroke();
-    g.fillStyle = pal.tongue; g.beginPath(); g.ellipse(fx + 0.5, ny + 11 + op * 5, 4.6, 3 + op * 4, 0, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(160,60,70,0.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(fx + 0.5, ny + 10); g.lineTo(fx + 0.5, ny + 12 + op * 6); g.stroke();
-  } else {
-    g.beginPath(); g.moveTo(fx, ny + 4.5); g.lineTo(fx, ny + 7); g.quadraticCurveTo(fx - 1, ny + 10, fx - 6, ny + 8.5); g.moveTo(fx, ny + 7); g.quadraticCurveTo(fx + 1, ny + 10, fx + 6, ny + 8.5); g.stroke();
-  }
-}
-
-// ---- pet sprites (art/sprites — illustrated, all facing RIGHT) ----------------
-// Metadata is in sprite px: ax = body centre (the pet's x), the bottom row is the
-// floor contact, eyes = [x, y, rx, ry] (for blink / squint lids), head = [x, y]
-// (hearts, z's, sighs), tail = a polygon around the tail + its root (the dog wags).
-const SPR = {
-  cat: { dir: 'art/sprites/cats/grey/', scale: 0.56, poses: {
-    walk1: { ax: 196, eyes: [[306, 47, 5.2, 5.8]], head: [298, 58] },
-    walk2: { ax: 200, eyes: [[307, 47, 5.2, 5.8]], head: [300, 58] },
-    sit: { ax: 70, eyes: [[48.6, 51, 9, 8], [89.4, 51, 9, 8]], head: [70, 58] },
-    sleep: { ax: 123, eyes: [], head: [44, 104] },
-  } },
-  dog: { dir: 'art/sprites/dogs/golden/', scale: 0.57, poses: {
-    walk1: { ax: 146, eyes: [[213, 38, 4.8, 6.6]], head: [200, 52], tail: { poly: [[0, 0], [50, 0], [52, 70], [46, 86], [36, 96], [0, 96]], piv: [45, 84] } },
-    walk2: { ax: 132, eyes: [[187.6, 37, 4.8, 6.6]], head: [178, 52], tail: { poly: [[0, 0], [50, 0], [50, 72], [44, 88], [34, 98], [0, 98]], piv: [46, 86] } },
-    sit: { ax: 84, eyes: [[74, 41, 7.4, 8], [113, 41, 7.4, 8]], head: [94, 58], tail: { poly: [[0, 104], [37, 104], [37, 178], [28, 196], [0, 196]], piv: [40, 182] } },
-    lie: { ax: 124, eyes: [], head: [208, 78] },
-    'belly-up': { ax: 128, eyes: [], head: [226, 86] },
-  } },
-};
-for (const kind of ['cat', 'dog']) {
-  const S = SPR[kind]; S.img = {}; S.n = 0; S.ok = false; S.seq = null;
-  if (new URLSearchParams(location.search).get('noart') === '1') continue;
-  S.seq = LW.petSeqLoad('art/sprites/', S.dir.slice(12, -1));   // drawn in-between frames (t/), see sprSeqSync
-  S.cyc = LW.petCycleLoad('art/sprites/', S.dir.slice(12, -1));   // drawn gait cycles (cycle/), see sprCycSync
-  const names = Object.keys(S.poses);
-  for (const name of names) {
-    const im = new Image();
-    im.onload = () => { S.img[name] = dehalo(im); if(name==='walk1') S.scale=LW.petUnit(kind,im); if (++S.n === names.length) S.ok = true; };
-    im.onerror = () => {};
-    im.src = S.dir + name + '.png';
-  }
-}
-// Drawn in-between frames: once loaded, lay them out between the poses they join and
-// register them as extra poses (anchor + head interpolated, no eyelids / tail wag).
-const SEQ_POSE = { cat: { walk1: 'walk1', sit: 'sit', sleep: 'sleep' }, dog: { walk1: 'walk1', sit: 'sit', sleep: 'lie' } };
-const isCyc = (n) => /^(walk|run)-\d/.test(n);
-const seqFam = (kind, n) => (n === 'walk2' || isCyc(n) ? 'walk1' : n === SEQ_POSE[kind].sleep ? 'sleep' : n.startsWith('jump-') ? 'jump' : n);
-function sprSeqSync(kind) {
-  const S = SPR[kind], T = S.seq;
-  if (!T || T.synced || !S.ok) return;
-  const done = LW.petSeqPrep(T, (f) => {
-    const n = SEQ_POSE[kind][f], im = S.img[n];
-    return im ? { im, k: LW.petPoseScale(kind, n, S.img.walk1, im), fa: S.poses[n].ax / im.width } : null;
-  }, dehalo);
-  for (const n in T.img) if (!S.poses[n]) {
-    const im = T.img[n], near = SEQ_POSE[kind][im.petNear], nm = S.poses[near], ni = S.img[near];
-    const mx = n.endsWith('~m') !== (n.startsWith('turn-') && +n[5] > 2);   // head on the other side?
-    const hx = nm.head[0] / ni.width;
-    S.img[n] = im; S.poses[n] = { ax: im.petFa * im.width, eyes: [], head: [(mx ? 1 - hx : hx) * im.width, nm.head[1] / ni.height * im.height] };
-  }
-  T.synced = done;
-}
-// Drawn gait cycles: laid out against walk1 (same torso point under the anchor), registered
-// as poses with walk1's head mark (no eyelids / tail wag while striding).
-function sprCycSync(kind) {
-  const S = SPR[kind], C = S.cyc;
-  if (!C || C.synced || !S.ok) return;
-  const w1 = S.img.walk1, m1 = S.poses.walk1;
-  const done = LW.petCyclePrep(C, { im: w1, k: 1, fa: m1.ax / w1.width }, dehalo);
-  for (const n in C.img) if (!S.poses[n]) {
-    const im = C.img[n];
-    S.img[n] = im; S.poses[n] = { ax: im.petFa * im.width, eyes: [], head: [m1.head[0] / w1.width * im.width, m1.head[1] / w1.height * im.height] };
-  }
-  C.synced = done;
-}
-// the cut-outs carry a pale, soft fringe from background removal: drop it once at load
-// so the pets sit in the room instead of looking like stickers
-function dehalo(im) {
-  try {
-    const c = newCanvas(im.naturalWidth, im.naturalHeight), g = c.getContext('2d', { willReadFrequently: true });
-    g.drawImage(im, 0, 0);
-    const d = g.getImageData(0, 0, c.width, c.height), a = d.data;
-    for (let i = 3; i < a.length; i += 4) { const v = a[i]; if (v < 255) a[i] = v <= 165 ? 0 : Math.min(255, (v - 165) * 5.7); }
-    g.putImageData(d, 0, 0);
-    return c;
-  } catch (e) { return im; }   // (a tainted canvas just keeps the original)
-}
-// a soft rim of light on the edge of a pet that faces the brighter side of the room (lamps at night,
-// the window by day): computed with the pet's own tint, so it costs nothing per frame
-function rimFor(p) {
-  const lL = lum(lightAt(p.x - 70, p.y - 40)), lR = lum(lightAt(p.x + 70, p.y - 40)), hi = Math.max(lL, lR);
-  const k = clamp((hi - 0.42) * 0.9, 0, 0.32) * clamp(Math.abs(lL - lR) * 8, 0.35, 1);
-  const warm = clamp(E.lamp * (1 - E.day * 0.7), 0, 1), c = mix3([214, 228, 255], [255, 196, 132], warm);
-  return { s: (lL > lR ? 1 : -1) * p.face, k: Math.round(k * 20) / 20, c };
-}
-function addRim(p, g, img, R) {
-  if (!R || R.k < 0.04) return;
-  const w = g.canvas.width, h = g.canvas.height, t = p.rimC || (p.rimC = document.createElement('canvas'));
-  if (t.width !== w || t.height !== h) { t.width = w; t.height = h; }
-  const q = t.getContext('2d'), d = Math.max(2, w * 0.022);
-  q.globalCompositeOperation = 'source-over'; q.clearRect(0, 0, w, h); q.drawImage(img, 0, 0);
-  q.globalCompositeOperation = 'destination-out'; q.drawImage(img, R.s * d, d * 0.35);
-  q.globalCompositeOperation = 'source-in'; q.fillStyle = rgba(R.c); q.fillRect(0, 0, w, h);
-  g.globalCompositeOperation = 'lighter'; g.globalAlpha = R.k; g.drawImage(t, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-}
-// each pet re-tints its OWN canvases to the room light (only when that light changes)
-function tinted(p, name) {
-  const img = SPR[p.kind].img[name], R = p.rim || null;
-  const key = p.light.map((v) => Math.round(clamp(v, 0, 1) * 48)).join(',') + (R ? '|' + R.s + R.k + R.c.map((v) => v | 0) : '');
-  if (key !== p.tintKey) { p.tintKey = key; for (const n in p.tintC) p.tintDirty[n] = true; }
-  let c = p.tintC[name];
-  if (!c) { c = p.tintC[name] = document.createElement('canvas'); c.width = img.width; c.height = img.height; p.tintDirty[name] = true; }
-  if (p.tintDirty[name]) {
-    const g = c.getContext('2d'), w = c.width, h = c.height;
-    g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h); g.drawImage(img, 0, 0);
-    g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(p.light.map((v) => clamp(v * 0.96, 0, 1) * 255)); g.fillRect(0, 0, w, h);
-    g.globalCompositeOperation = 'destination-in'; g.drawImage(img, 0, 0);
-    g.globalCompositeOperation = 'source-over';
-    addRim(p, g, img, R);
-    p.tintDirty[name] = false;
-  }
-  return c;
-}
-const spritesOn = (p) => SPR[p.kind].ok;
-
-// ---- where they can be ---------------------------------------------------------
-const PK0 = 1.0;                                             // scale at the back wall
-const floorK = (y) => PK0 + clamp((y - 772) / 174, 0, 1) * 0.3;  // nearer → bigger
-function surf(plat) {
-  if (plat === 'seat') return { y: L.seat.gy, k: PK0, x0: L.seat.x0 + 165, x1: L.mug.x - 85, fy: 808 };
-  if (plat === 'player') return L.playerPlat;
-  return null;
-}
-const isPlaying = () => !!(music.np && music.np.playing);
-const floorX = (x) => { const [a, b] = clearW(); return clamp(x, Math.max(80, a + 60), Math.min(L.RZ, b) - 80); };
-// a resting spot is fine if it's in the free band of the desktop and clear of the host's avoid boxes
-const restOK = (d) => { const [a, b] = clearW(); return d.x > a + 30 && d.x < b - 30 && !inAvoid(d.x, d.plat === 'floor' ? d.y : (surf(d.plat) || { y: d.y }).y); };
-function choices(p) {
-  const playing = isPlaying(), wet = E.rain > 0.2 || E.snow > 0.2, night = E.day < 0.4;
-  const o = p === cat ? dog : cat;
-  if (p.kind === 'cat') {
-    const dogDown = o.plat === 'floor' && !o.act && !o.plan.length && o.vis.pose === 'lie';
-    return [
-      { id: 'nap', dest: { plat: 'seat', x: L.catHome.x }, rest: 'sleep', dur: [60, 120], w: playing ? 0.5 : 1.1 },
-      { id: 'rain', dest: { plat: 'seat', x: L.win.x0 + L.win.w * 0.38 }, rest: 'sit', look: 'window', dur: [30, 60], w: wet ? 2.6 : 0.8 },
-      { id: 'pillows', dest: { plat: 'seat', x: L.seat.x0 + 175 }, rest: 'sleep', dur: [50, 100], w: 0.7 },
-      { id: 'player', dest: { plat: 'player', x: L.playerPlat.x }, rest: playing ? 'sit' : 'sleep', look: 'record', dur: [30, 70], w: playing ? 2.4 : 0.7 },
-      { id: 'dog', dest: { plat: 'floor', x: floorX(o.x - o.face * 120), y: clamp(o.y + 10, 800, 900) }, rest: 'sleep', dur: [30, 70], w: dogDown ? 0.9 : 0 },
-      { id: 'wander', dest: { plat: 'floor', x: floorX(rand(L.win.x0 + 40, L.RZ - 140)), y: rand(815, 880) }, rest: 'sit', dur: [10, 22], w: 0.8 },
-    ];
-  }
-  const cs = surf(o.plat);
-  return [
-    { id: 'rug', dest: { plat: 'floor', x: floorX(L.rug.cx - 20), y: L.rug.cy + 8 }, rest: 'lie', dur: [50, 110], w: 1.1 },
-    { id: 'player', dest: { plat: 'floor', x: L.dogPlayer.x, y: L.dogPlayer.y }, rest: 'lie', dur: [60, 130], w: playing ? 3.5 : 0.2 },
-    { id: 'nook', dest: { plat: 'floor', x: L.nook.x, y: L.nook.y }, rest: 'lie', dur: [60, 120], w: night ? 1.2 : 0.7 },
-    { id: 'door', dest: { plat: 'floor', x: L.doorSpot.x, y: L.doorSpot.y, door: true }, rest: 'sit', dur: [5, 9], w: 0.45 },
-    { id: 'cat', dest: { plat: 'floor', x: floorX(o.x + (o.x > L.RZ * 0.5 ? -110 : 110)), y: cs ? cs.fy + 14 : clamp(o.y + 12, 800, 900) }, rest: 'sit', look: 'cat', dur: [10, 20], w: 0.8 },
-    { id: 'window', dest: { plat: 'floor', x: floorX(L.win.x0 + L.win.w * 0.62), y: 822 }, rest: 'lie', dur: [30, 70], w: 0.7 },
-  ];
-}
-function spotTaken(dest, o) {
-  const d = o.doing && o.doing.dest ? o.doing.dest : { plat: o.plat, x: o.x, y: o.y };
-  if (d.plat !== dest.plat) return false;
-  return Math.abs(d.x - dest.x) < 130 && (dest.plat !== 'floor' || Math.abs((d.y || 0) - dest.y) < 60);
-}
-function chooseAct(p) {
-  const C = choices(p), o = p === cat ? dog : cat;
-  let tot = 0;
-  for (const c of C) {
-    if (p.doing && c.id === p.doing.id) c.w *= 0.12;
-    if (spotTaken(c.dest, o) || ((c.id === 'dog' || c.id === 'cat') && (o.away || o.leaving))) c.w = 0;
-    if (!restOK(c.dest) && c.id !== 'door') c.w *= 0.02;
-    tot += Math.max(0, c.w);
-  }
-  let r = Math.random() * tot;
-  for (const c of C) { r -= Math.max(0, c.w); if (r <= 0) return c; }
-  return C[0];
-}
-// a plan is a list of acts: walk (along a surface or the floor) and hop (between them)
-function floorWalk(plan, x0, y0, x1, y1, door) {
-  // depth changes are gentle arcs: never more depth than ~0.75 of the sideways travel
-  const dy = Math.abs(y1 - y0), dx = Math.abs(x1 - x0), lim = door ? L.doorSpot.x + 20 : L.RZ - 80;
-  if (dy > 12 && dy * 1.35 > dx) {
-    let s = Math.sign(x1 - x0) || (x0 < W * 0.35 ? 1 : -1);
-    let mx = x0 + s * dy * 1.35;
-    if (mx < 80 || mx > lim) { s = -s; mx = x0 + s * dy * 1.35; }
-    plan.push({ t: 'walk', x: clamp(mx, 80, lim), y: (y0 + y1) / 2 });
-  }
-  plan.push({ t: 'walk', x: x1, y: y1 });
-}
-function route(p, dest) {
-  const plan = [];
-  let plat = p.plat, x = p.x, y = p.y;
-  if (plat !== 'floor' && plat !== dest.plat) {
-    const s = surf(plat), dir = Math.sign(dest.x - x) || 1;
-    const lx = floorX(x + dir * 60), ly = s.fy + rand(0, 14);
-    plan.push({ t: 'hop', plat: 'floor', x: lx, y: ly });
-    plat = 'floor'; x = lx; y = ly;
-  }
-  if (dest.plat === 'floor') floorWalk(plan, x, y, dest.x, dest.y, dest.door);
-  else if (plat === 'floor') {
-    const s = surf(dest.plat), dir = Math.sign(dest.x - x) || 1;
-    const tx = floorX(dest.x - dir * 60);
-    floorWalk(plan, x, y, tx, s.fy);
-    plan.push({ t: 'hop', plat: dest.plat, x: dest.x, y: s.y });
-  } else { const s = surf(plat); plan.push({ t: 'walk', x: clamp(dest.x, s.x0, s.x1), y: s.y }); }
-  return plan;
-}
-function startAct(p, c, T) {
-  p.doing = { id: c.id, dest: c.dest, rest: c.rest, look: c.look, dur: rand(c.dur[0], c.dur[1]), until: 0, arrived: false, settle: rand(3, 7), ph: rand(0, 30) };
-  p.plan = route(p, c.dest); p.act = null;
-}
-function setFace(p, f) {
-  if (!f || f === p.face || p.flip) return;
-  p.faceT = f; p.flip = 0.001;
-  // on its feet with a drawn turn sheet: face the new way at once and let the frames
-  // turn it (the flip timer still holds the walk), instead of the squash-through-edge-on
-  const T = SPR[p.kind].seq;
-  p.flipDrawn = !!(T && T.has('turn') && spritesOn(p) && seqFam(p.kind, p.vis.pose) === 'walk1');
-  if (p.flipDrawn) p.face = f;
-}
-
-// ---- behaviour ----------------------------------------------------------------
+const floorX=x=>clamp(x,80,L.RZ-80),floorK=y=>1+clamp((y-772)/174,0,1)*.3,PK0=1;
+function placePets(){petSystem.reset();}
+function hitPet(p,x,y){return petHit(p,x,y);}
+function startRoll(p){petSystem.state(p,'groom',3);}
+const petsOn=()=>![false,0,'false','0'].includes(LW.settings.pets);
+const petIn=p=>p.away?0:1;
+function petHit(p,x,y){const b=petSystem.box(p);return !p.away&&x>b[0]&&x<b[2]&&y>b[1]&&y<b[3];}
 const calm = { on: false, t: 0, lv: 0, auto: 0, br: { phase: 'in', k: 0, level: 0 }, still: 0, wt: 0 };
 // 0 empty … 1 full lungs: LW.breathState on the same clock as lw.js's on-screen breathing guide
 function breath() { return calm.br.level; }
@@ -2860,226 +2199,6 @@ function stepBreathSteam(dt) {
 }
 function ptrW() { return { x: toWX(LW.pointer.x), y: toWY(LW.pointer.y) }; }
 let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
-function restPose(p, T) {
-  const isCat = p.kind === 'cat', playing = isPlaying(), d = p.doing, sleepP = isCat ? 'sleep' : 'lie';
-  if (p.roll) return 'belly-up';
-  if (calm.on) return sleepP;
-  if (T < p.wakeUntil || p.happyT > 0) return 'sit';
-  if (!d) return 'sit';
-  const since = T - (p.arrivedT || T);
-  if (d.rest === 'sit') return !playing && T - p.lastStim > 55 && d.id !== 'door' && since > 20 ? sleepP : 'sit';
-  if (since < d.settle) return 'sit';
-  // lying spots: when music plays they sit up and vibe for a while, then doze again
-  if (playing && (d.id === 'player' || !isCat) && ((since + d.ph) % 55) < 22) return 'sit';
-  return sleepP;
-}
-// ---- Pets on/off (LW.settings.pets): off → they hop down and wander out of the frame on the
-// right (past the floor lamp) and stay away; on → they stroll back in from there.
-const petsOn = () => { const v = LW.settings.pets; return !(v === false || v === 0 || v === '0' || v === 'false'); };
-const EXIT = () => ({ x: W + 110, y: 842 });
-function startLeave(p) {
-  p.leaving = true; p.urge = null; p.stretchT = -1; p.roll = null;
-  const e = EXIT();
-  p.doing = { id: 'leave', dest: { plat: 'floor', x: e.x, y: e.y, door: true }, rest: 'sit', dur: 1e9, until: 0, arrived: false, settle: 1, ph: 0 };
-  if (!(p.act && p.act.t === 'hop')) p.act = null;
-  p.plan = route(p, p.doing.dest);
-}
-function startReturn(p) {
-  p.leaving = false; p.stretchT = -1;
-  if (p.away) { const e = EXIT(); Object.assign(p, { away: false, plat: 'floor', x: e.x, y: e.y, k: floorK(e.y), face: -1, flip: 0, act: null, plan: [] }); }
-  p.doing = null; p.holdUntil = 0; p.wakeUntil = 0;
-}
-// how much of a pet is in the room (fades as it walks out past the right edge)
-const petIn = (p) => (p.away ? 0 : clamp((W + 70 - p.x) / 90, 0, 1));
-function updatePet(p, dt, T) {
-  const isCat = p.kind === 'cat', playing = isPlaying(), SP = SPR[p.kind];
-  if (!petsOn()) { if (!p.leaving && !p.away) startLeave(p); }
-  else if (p.leaving || p.away) startReturn(p);
-  if (p.away) { p.bb = null; return; }
-  p.happyT = Math.max(0, p.happyT - dt); p.tiltT = Math.max(0, p.tiltT - dt);
-  p.squint = Math.max(0, p.squint - dt * 1.5); p.hopT = Math.max(0, p.hopT - dt);
-  // ---- brain: pick the next spot when the current stay is over --------------------
-  let idle = !p.act && !p.plan.length;
-  if (p.leaving && idle) { p.away = true; p.leaving = false; p.bb = null; return; }
-  if (idle && p.doing && !p.doing.arrived) {
-    p.doing.arrived = true; p.arrivedT = T; p.doing.until = T + p.doing.dur;
-    if (p.doing.look === 'record') setFace(p, Math.sign(L.colC - p.x) || -1);
-  }
-  if (idle && !calm.on && p.stretchT < 0 && !p.roll && T > p.holdUntil && !p.leaving) {
-    const sleeping = p.vis.pose === 'sleep' || p.vis.pose === 'lie';
-    if (p.urge && T >= p.urge.at) {
-      const c = choices(p).find((q) => q.id === p.urge.id); p.urge = null;
-      if (c && (!p.doing || p.doing.id !== c.id)) { if (sleeping) { p.wakeUntil = T + 2.4; p.holdUntil = T + 1.6; p.urge = { id: c.id, at: T + 1.6 }; } else startAct(p, c, T); }
-    } else if (!p.doing || T > p.doing.until) {
-      if (sleeping) { p.wakeUntil = T + 3; p.holdUntil = T + 2.4; if (Math.random() < 0.35) p.stretchT = 0; if (p.doing) p.doing.until = T + 2.4; }
-      else startAct(p, chooseAct(p), T);
-    }
-  }
-  if (!p.act && p.plan.length && (!calm.on || p.leaving)) { p.act = p.plan.shift(); p.act.e = 0; }
-  if (calm.on && !p.act && !p.leaving) p.plan.length = 0;
-  // ---- turning around (a quick squash through edge-on) ---------------------------
-  let flipK = 1;
-  if (p.flip) { p.flip += dt / 0.34; if (p.flip >= 0.5 && p.face !== p.faceT) p.face = p.faceT; if (p.flip >= 1) p.flip = 0; else if (!p.flipDrawn) flipK = 0.78 + 0.22 * Math.abs(Math.cos(p.flip * Math.PI)); }
-  // ---- current act --------------------------------------------------------------
-  let walking = false, fore = 1, hop = null;
-  const a = p.act;
-  if (a) {
-    a.e += dt;
-    if (a.t === 'walk') {
-      const dx = a.x - p.x, dy = a.y - p.y, dist = Math.hypot(dx, dy * 2.4);
-      if (dist < 1.5) { p.x = a.x; p.y = a.y; p.act = null; }
-      else {
-        if (Math.abs(dx) > 4) setFace(p, Math.sign(dx));
-        if (!p.flip && a.e > 0.45 && !LW.petSeqBusy(p)) {
-          walking = true;
-          const v = (isCat ? 58 : 66) * p.k * (playing ? 1.06 : 1), st = Math.min(dist, v * dt);
-          p.x += dx / dist * st; p.y += dy / dist * st;
-          if (p.plat === 'floor') p.k = floorK(p.y);
-          fore = lerp(0.62, 1, Math.abs(dx) / dist);
-          p.walkPh += st / ((isCat ? 15 : 17) * p.k);
-          p.gd = (p.gd || 0) + st / p.k;   // ground covered (sprite units) → the drawn gait cycle
-        }
-      }
-    } else if (a.t === 'hop') {
-      if (!a.from) {
-        a.from = { x: p.x, y: p.y, k: p.k }; a.k1 = a.plat === 'floor' ? floorK(a.y) : surf(a.plat).k;
-        if (Math.abs(a.x - p.x) > 8) setFace(p, Math.sign(a.x - p.x));
-        a.fl = 0.44 + Math.hypot(a.x - p.x, a.y - p.y) / 640; a.e = 0;
-      }
-      if (p.flip) a.e = 0;
-      const tC = 0.34, tF = a.fl, tL = 0.3;
-      if (a.e < tC) hop = { ph: 'crouch', u: a.e / tC };
-      else if (a.e < tC + tF) {
-        const u = (a.e - tC) / tF, y0 = a.from.y, y1 = a.y;
-        const top = Math.min(y0, y1) - (30 + 0.1 * Math.abs(y1 - y0));
-        const c = 2 * top - (y0 + y1) / 2;
-        p.x = lerp(a.from.x, a.x, u);
-        p.y = (1 - u) * (1 - u) * y0 + 2 * u * (1 - u) * c + u * u * y1;
-        p.k = lerp(a.from.k, a.k1, u);
-        const vy = 2 * (1 - u) * (c - y0) + 2 * u * (y1 - c);
-        hop = { ph: 'fly', u, pitch: clamp(Math.atan2(vy, Math.abs(a.x - a.from.x) + 60) * 0.5, -0.5, 0.5) };
-      } else if (a.e < tC + tF + tL) {
-        if (!a.landed) { a.landed = true; p.x = a.x; p.y = a.y; p.k = a.k1; p.plat = a.plat; }
-        hop = { ph: 'land', u: (a.e - tC - tF) / tL };
-      } else { p.plat = a.plat; p.act = null; }
-    }
-  }
-  idle = !p.act && !p.plan.length;
-  p.fore = approach(p.fore, fore, 6, dt);
-  p.walk = approach(p.walk, walking ? 1 : 0, 10, dt);
-  // ---- stretch (wellbeing) waits until they're settled ----------------------------
-  let st = 0;
-  if (p.stretchT >= 0 && idle) {
-    p.stretchT += dt; const t = p.stretchT, D = 4.6;
-    st = t < 1.2 ? smooth(t / 1.2) : t < D - 1.2 ? 1 : 1 - smooth((t - (D - 1.2)) / 1.2);
-    if (t > D) { p.stretchT = -1; p.lastStim = T; }
-  }
-  // ---- belly-up roll (dog) -------------------------------------------------------
-  if (p.roll) { p.roll.t += dt; p.lastStim = T; if (p.roll.t > 3.8) { p.roll = null; p.happyT = Math.max(p.happyT, 1.2); } }
-  // ---- what we look like this frame -------------------------------------------------
-  let pose;
-  sprSeqSync(p.kind); sprCycSync(p.kind);
-  const seqT = spritesOn(p) ? SP.seq : null;
-  if (hop && seqT && seqT.has('jump')) pose = LW.petJumpFrame(hop.ph === 'fly' ? 'air' : hop.ph, hop.u);
-  else if (hop) pose = hop.ph === 'fly' ? 'walk2' : 'walk1';
-  else if (walking || (a && a.t === 'walk')) {
-    // drawn cycle frame by distance (settles onto a contact while it waits to set off)
-    const gf = spritesOn(p) && SP.cyc ? LW.petGait(p, SP.cyc, p.gd || 0, SP.scale * SP.img.walk1.height, 'walk', { dt }) : null;
-    pose = gf && SP.img[gf] ? gf : (Math.floor(p.walkPh) % 2) ? 'walk2' : 'walk1';
-  }
-  else if (st > 0.02) pose = 'walk1';
-  else pose = restPose(p, T);
-  // drawn in-between frames replace the crossfade (pose change, turn) where the set has them
-  const seqF = LW.petSeqStep(p, seqT, seqFam(p.kind, pose), p.flip ? p.faceT : p.face, nowS());
-  if (seqF && SP.img[seqF]) pose = seqF;
-  const V = p.vis;
-  if (pose !== V.pose) {
-    const anim = (n) => n === 'walk1' || n === 'walk2' || isCyc(n), sw = LW.petSwap(SP.img[V.pose], SP.img[pose], anim(V.pose), anim(pose));
-    if (sw === 'cut') { if (!(anim(pose) && anim(V.pose))) V.fade = 1; V.pose = pose; }
-    else { V.prev = V.pose; V.pose = pose; V.fade = 0; V.fadeDur = sw === 'quick' ? 0.12 : 0.45; }
-  }
-  V.fade = Math.min(1, V.fade + dt / (V.fadeDur || 0.45));
-  const resting = idle && !hop && !walking;
-  p.vibe = playing && resting && V.pose === 'sit' && !calm.on ? music.lv : 0;
-  // breathing, beat nod, little hops
-  p.breathP += dt * TAU * (calm.lv > 0.5 ? 0.1 : (V.pose === 'sleep' || V.pose === 'lie') ? 0.22 : 0.32);
-  const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(p.breathP);
-  p.bobT += dt;
-  const dip = p.bobT < 0.09 ? p.bobT / 0.09 : Math.exp(-(p.bobT - 0.09) * 6.5);
-  p.lean = approach(p.lean, p.bobSide * 0.035, 4, dt);
-  let sx = 1, sy = 1 + (V.pose === 'sleep' || V.pose === 'lie' ? 0.02 : 0.011) * (1 + 0.7 * calm.lv) * br, rot = 0, bob = 0;   // calm: sleeping breaths sync to the guide
-  if (p.vibe > 0.01) { sy -= 0.028 * dip * (0.55 + 0.6 * p.bobS) * p.vibe; rot += p.lean * p.vibe; }
-  if (p.walk > 0.01 && !hop && !isCyc(V.pose)) bob = -Math.abs(Math.sin(p.walkPh * Math.PI)) * 2.2 * p.k * p.walk;   // (a drawn cycle carries its own bob)
-  if (hop) {
-    if (hop.ph === 'crouch') { sy *= 1 - 0.12 * smooth(hop.u); sx *= 1 + 0.05 * smooth(hop.u); }
-    else if (hop.ph === 'fly') { sx *= 1.05; sy *= 1.03; rot += hop.pitch * p.face; }
-    else { const q = Math.sin(hop.u * Math.PI); sy *= 1 - 0.1 * q; sx *= 1 + 0.05 * q; }
-  }
-  if (st > 0) { sx *= 1 + 0.13 * st; sy *= 1 - 0.13 * st; rot += 0.07 * st * p.face; }
-  if (p.hopT > 0) bob -= Math.sin((1 - p.hopT / 0.42) * Math.PI) * 9 * p.k;   // a happy little bounce
-  const tilt = p.tiltT > 0 ? Math.sin(clamp((1.6 - p.tiltT) / 1.6, 0, 1) * Math.PI) : 0;
-  rot += 0.07 * tilt * p.face;
-  if (p.roll) rot += Math.sin(T * 6.5) * 0.05;
-  // ---- eyes: blinks, slow cat blinks, content lids, happy squints on beats -------------
-  p.blinkT -= dt;
-  if (p.blinkT <= 0) { p.blinkDur = p.blink = isCat && resting && Math.random() < 0.3 ? 0.9 : 0.17; p.blinkT = rand(2.4, 6); }
-  p.blink = Math.max(0, p.blink - dt);
-  let lid = 0, curve = 1;
-  if (p.blink > 0) { const u = 1 - p.blink / p.blinkDur; lid = p.blinkDur > 0.5 ? Math.min(1, Math.sin(u * Math.PI) * 1.5) * 0.88 : Math.sin(u * Math.PI); }
-  if (p.doing && resting && V.pose === 'sit' && p.doing.rest !== 'sit') { const left = (p.arrivedT || T) + p.doing.settle - T; if (left < 1.6 && left > 0) lid = Math.max(lid, 0.55 * (1 - left / 1.6)); }
-  const happy = Math.max(p.happyT > 0 ? 1 : 0, p.squint);
-  if (happy > 0.25) { lid = Math.max(lid, 0.62 + 0.12 * happy); curve = -1; }
-  // ---- dog's tail: wags when happy / walking / vibing, thumps on beats -------------------
-  if (!isCat) {
-    const wt = p.happyT > 0 || p.roll ? 1 : walking ? 0.45 : p.vibe > 0.1 ? 0.3 : (p.doing && p.doing.id === 'cat' && resting) ? 0.6 : V.pose === 'sit' ? 0.12 : 0;
-    p.wag = approach(p.wag, wt, 3, dt);
-    p.wagPh += dt * TAU * (p.happyT > 0 ? 4.2 : 2.6);
-    p.wagKick = Math.max(0, p.wagKick - dt * 3);
-  }
-  const wagA = isCat ? 0 : (p.wag * 0.26 + p.wagKick * 0.22) * Math.sin(p.wagPh);
-  Object.assign(V, { sx: sx * p.fore * flipK, sy, rot, bob, lid, curve, wagA });
-  // ---- odds and ends -------------------------------------------------------------
-  if (!isCat && resting && V.pose === 'lie' && !calm.on) {   // a big contented sigh now and then
-    p.nextSigh -= dt;
-    if (p.nextSigh <= 0) { p.nextSigh = rand(35, 80); sighPuff(p); sSigh(); }
-  }
-  p.s = V.pose === 'sleep' || V.pose === 'lie' ? 1 : 0;
-  p.light = lightAt(p.x, p.y - 50 * p.k);
-  if (!p.rimT || T - p.rimT > 0.5) { p.rimT = T; p.rim = rimFor(p); }
-  // head + hit box in world space
-  const m = SP.poses[V.pose] || SP.poses.sit, im = SP.img[V.pose];
-  if (spritesOn(p) && im) {
-    const s = SP.scale * p.k * LW.petPoseScale(p.kind,V.pose,SP.img.walk1,SP.img[V.pose]);
-    p.headW = [p.x + p.face * (m.head[0] - m.ax) * s, p.y + (m.head[1] - im.height) * s];
-    const xa = p.x - p.face * m.ax * s, xb = p.x + p.face * (im.width - m.ax) * s;
-    p.bb = { x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: p.y - im.height * s, y1: p.y + 6 };
-  } else {
-    p.headW = [p.x + p.face * 50 * p.k, p.y - 70 * p.k];
-    p.bb = { x0: p.x - 85 * p.k, x1: p.x + 85 * p.k, y0: p.y - 110 * p.k, y1: p.y + 6 };
-  }
-  if (!spritesOn(p)) fallbackPose(p, dt, T, st);
-}
-// procedural fallback (until the sprites have loaded): the original lying rig
-function fallbackPose(p, dt, T, st) {
-  const isCat = p.kind === 'cat';
-  p.fs = approach(p.fs || 0, p.s, 1.6, dt);
-  const A = isCat ? CAT_A : DOG_A, S = isCat ? CAT_S : DOG_S, X = isCat ? CAT_X : DOG_B;
-  let P = blendP(A, S, smooth(p.fs));
-  if (st > 0) P = blendP(P, X, st);
-  const br = Math.sin(p.breathP);
-  P.bry *= 1 + 0.035 * br; P.by -= 0.7 * br; P.hdy -= 0.6 * br * (1 - p.fs);
-  const awake = 1 - p.fs;
-  const F = { ht: (isCat ? 0.35 : 0.3) * awake, eye: clamp(P.eye * (1 - p.vis.lid), 0, 1), happy: p.vis.curve < 0 ? 1 : 0, lx: 0.3, ly: 0.1, dil: 0.5, wide: 1, mouth: 0, brow: 0, perk: 0, pant: 0, pantW: 0 };
-  if (p.fs > 0.6) F.eye = 0;
-  const n = p.tailN;
-  const tgt = isCat
-    ? (i) => { const t = i / (n - 1); return lerp(Math.PI - 0.12, Math.PI * 0.5 + 0.1, smooth((t - 0.1) / 0.55)) + Math.sin(T * 0.7) * 0.1 * smooth((t - 0.35) / 0.65); }
-    : (i) => { const t = i / (n - 1); return Math.PI - 0.42 + t * 1.15 + p.wag * 0.5 * Math.sin(T * TAU * 3 - i * 0.35) * (0.3 + t); };
-  if (!p.tailInit) { for (let i = 0; i < n; i++) p.tailA[i] = tgt(i); p.tailInit = true; }
-  stepTail(p, tgt, dt, isCat ? 48 : 70, isCat ? 8 : 9);
-  p.P = P; p.F = F;
-}
-
 // =====================================================================
 //  beat sync (LW.music levels + LW 'beat' events), the dangling fairy light,
 //  dog sighs/rolls, sprite drawing
@@ -3132,50 +2251,6 @@ function sighPuff(p) {
   const [nx, ny] = p.headW, dir = p.face;
   for (let i = 0; i < 5; i++) steam.push({ x: nx + dir * 14 * p.k, y: ny + 8 * p.k, vx: dir * rand(18, 34), vy: rand(-6, 4), t: 0, life: rand(1, 1.6), r: rand(3, 6), ph: rand(0, 6), a: 0.12 });
 }
-// draw one pet as its illustrated sprite (false → caller draws the procedural fallback)
-function drawPetSprite(g, p) {
-  if (!spritesOn(p)) return false;
-  const V = p.vis;
-  const f=LW.poseFrame(V.prev,V.pose,V.fade),S=SPR[p.kind];
-  if(f.layers.length===1)drawPose(g,p,V.pose,1);
-  else {
-    g.save();g.translate(p.x,p.y+V.bob);g.rotate(V.rot);g.scale(p.face*V.sx,V.sy);g.globalAlpha=GA;
-    LW.petComposite(g,p,f.layers.map(layer=>{
-      const im=S.img[layer.pose],m=S.poses[layer.pose],sc=S.scale*p.k*LW.petPoseScale(p.kind,layer.pose,S.img.walk1,im);
-      return {image:tinted(p,layer.pose),x:-m.ax*sc,y:(-im.height+1)*sc,w:im.width*sc,h:im.height*sc,alpha:layer.alpha};
-    }));g.restore();
-  }
-  return true;
-}
-function drawPose(g, p, name, alpha) {
-  const S = SPR[p.kind], m = S.poses[name], img = S.img[name];
-  if (!img || alpha <= 0.01) return;
-  const V = p.vis, c = tinted(p, name), s = S.scale * p.k * LW.petPoseScale(p.kind,name,S.img.walk1,img), h = img.height;
-  g.save();
-  g.translate(p.x, p.y + V.bob); g.rotate(V.rot); g.scale(p.face * s * V.sx, s * V.sy); g.translate(-m.ax, -h + 1);
-  g.globalAlpha = alpha * GA;
-  if (m.tail && Math.abs(V.wagA) > 0.003) {
-    // the tail is cut out along its polygon and swung about its root
-    const tp = new Path2D(); m.tail.poly.forEach(([x, y], i) => (i ? tp.lineTo(x, y) : tp.moveTo(x, y))); tp.closePath();
-    const rest = new Path2D(); rest.rect(-4, -4, c.width + 8, c.height + 8); rest.addPath(tp);
-    g.save(); g.clip(rest, 'evenodd'); g.drawImage(c, 0, 0); g.restore();
-    const [px, py] = m.tail.piv;
-    g.save(); g.translate(px, py); g.rotate(V.wagA); g.translate(-px, -py); g.clip(tp); g.drawImage(c, 0, 0); g.restore();
-  } else g.drawImage(c, 0, 0);
-  // eyelids: the fur just above each eye slides down over it (exactly the sprite's colours)
-  if (V.lid > 0.04) for (const [ex, ey, rx, ry] of m.eyes) {
-    const edge = ey - ry * 1.12 + 2.24 * ry * Math.min(1, V.lid), bend = ry * 0.42 * V.curve;
-    g.save();
-    g.beginPath(); g.ellipse(ex, ey, rx * 1.22, ry * 1.18, 0, 0, TAU); g.clip();
-    g.beginPath(); g.moveTo(ex - rx * 1.4, ey - ry * 1.5); g.lineTo(ex + rx * 1.4, ey - ry * 1.5); g.lineTo(ex + rx * 1.4, edge - bend * 0.35); g.quadraticCurveTo(ex, edge + bend, ex - rx * 1.4, edge - bend * 0.35); g.closePath(); g.clip();
-    g.drawImage(c, 0, 2.5 * ry);
-    g.restore();
-    g.strokeStyle = `rgba(42,28,24,${0.85 * alpha * GA})`; g.lineWidth = Math.max(1.1, rx * 0.26); g.lineCap = 'round';
-    g.beginPath(); g.moveTo(ex - rx * 1.08, edge - bend * 0.35); g.quadraticCurveTo(ex, edge + bend, ex + rx * 1.08, edge - bend * 0.35); g.stroke();
-  }
-  g.restore();
-}
-
 // =====================================================================
 //  particles: steam, notes, hearts
 // =====================================================================
@@ -3643,8 +2718,7 @@ function drawWater(g) {
   g.restore();
 }
 function startStretch(text) {
-  cat.stretchT = 0; later(0.6, () => (dog.stretchT = 0));
-  cat.lastStim = dog.lastStim = nowS();
+  animals.forEach(p=>{if(!p.away&&!p.j)petSystem.state(p,'groom',3)});
   chalkOverride = { head: 'stretch break', text: text || 'roll your shoulders', until: nowS() + 14 };
   updateChalk();
 }
@@ -3890,22 +2964,7 @@ function onDown(px, py) {
   if (!L) return;
   const x = toWX(px), y = toWY(py), T = nowS();
   if (water && x > L.glass.x - 50 && x < L.glass.x + 260 && y > L.glass.y - 130 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
-  if (hitCat(x, y)) {
-    cat.happyT = 2.6; cat.wakeUntil = T + 20; cat.lastStim = T; sPurr(2.6);
-    if (!cat.act) cat.hopT = 0.42;
-    soundWord(cat, 'purr');
-    return;
-  }
-  { const [bx, by] = dangleBulb(); if (Math.hypot(x - bx, y - by) < 22) { dangle.om += 0.45 * (x < bx ? 1 : -1); sTink(); return; } }
-  if (hitDog(x, y)) {
-    dog.wakeUntil = T + 20; dog.lastStim = T;
-    // lying down → sometimes a roll onto his back for belly rubs
-    if (!dog.roll && !dog.act && !dog.plan.length && dog.vis.pose === 'lie' && dog.stretchT < 0 && Math.random() < 0.45) { startRoll(dog); sBoof(); soundWord(dog, 'woof'); return; }
-    dog.happyT = 2.4; dog.tiltT = 1.6; sBoof();
-    if (!dog.act) dog.hopT = 0.42;
-    soundWord(dog, 'woof');
-    return;
-  }
+  if(petSystem.click(x,y)){sPurr(2);return;}
   const t = L.tt, j = L.juke;
   const onPlayer = L.mode === 'jukebox'
     ? x > j.x - j.w / 2 && x < j.x + j.w / 2 && y > j.top - 10 && y < j.base
@@ -3990,7 +3049,7 @@ function step(dt, T) {
     const tx = inside ? clamp((pw.x - W / 2) / (W / 2), -1, 1) : 0, ty = inside ? clamp((pw.y - 500) / 500, -1, 1) : 0;
     par.x = approach(par.x, tx, 1.4, dt); par.y = approach(par.y, ty, 1.4, dt);
   }
-  for (const p of pets) updatePet(p, dt, T);
+  petSystem.step(dt,T);
   chalkFade = Math.min(1, chalkFade + dt / 1.8);
   if (chalkOverride && T > chalkOverride.until) { chalkOverride = null; updateChalk(); }
   if (L.pulled) { L.pulled.t += dt; if (L.pulled.t > 1) L.pulled = null; }
@@ -4049,29 +3108,7 @@ function render(T) {
     ctx.fillStyle = rgba(mul([230, 220, 200], lightAt(x, y))); ctx.fillRect(x - 1, y - 18 * k, sw + 2, sh * 0.6);
   }
   drawDangle(ctx, T);
-  // pets + soft contact shadows
-  // (nearer one last; each pet only ever draws itself)
-  const order = cat.y <= dog.y ? [cat, dog] : [dog, cat];
-  for (const p of order) {
-    const pin = petIn(p);
-    if (pin <= 0.002) continue;
-    const lying = p.vis.pose === 'sleep' || p.vis.pose === 'lie' || p.vis.pose === 'belly-up';
-    const sw = (p === cat ? (lying ? 62 : 48) : (lying ? 78 : 58)) * p.k * (0.6 + 0.4 * p.fore);
-    const air = clamp((p.act && p.act.t === 'hop' && !p.act.landed ? 1 : 0), 0, 1);
-    if (!air) {
-      // a tight contact shadow under the paws, and a softer one cast away from the brighter side
-      const lL = lum(lightAt(p.x - 60, p.y - 30)), lR = lum(lightAt(p.x + 60, p.y - 30)), lc = lum(p.light || [0.5, 0.5, 0.5]);
-      const dir = clamp((lL - lR) * 6, -1, 1), cast = clamp(0.25 + lc * 0.5, 0.25, 0.6);
-      ctx.save(); ctx.translate(p.x + dir * sw * 0.32, p.y + 1); ctx.scale(1.25, 0.16);
-      ctx.globalAlpha = 0.3 * cast * pin; ctx.drawImage(DARK, -sw, -sw, sw * 2, sw * 2); ctx.restore();
-      ctx.save(); ctx.translate(p.x, p.y + 0.5); ctx.scale(0.72, 0.09);
-      ctx.globalAlpha = 0.55 * pin; ctx.drawImage(DARK, -sw, -sw, sw * 2, sw * 2); ctx.restore();
-      ctx.globalAlpha = 1;
-    }
-    GA = pin;
-    if (p === cat) drawCat(ctx, p); else drawDog(ctx, p);
-    GA = 1; ctx.globalAlpha = 1;
-  }
+  petSystem.draw(ctx);
   // candle flames (always lit at night; the main light in calm mode)
   const cand = Math.max(1 - E.day * 0.8, calm.lv);
   const fk = 1 + 0.08 * Math.sin(T * 11) * Math.sin(T * 3.7) + 0.04 * Math.sin(T * 23);
@@ -4120,6 +3157,7 @@ function rebuild() {
   bakeBeads();
   initCups();
   initMotes();
+  petSystem.reset();
   // breath caption on the floor just right of the rug: clear of the pets, the cups, the Dock along the bottom
   // edge and the right-hand widget zone
   { const bx = devX(L.rug.cx + L.rug.rx + 80) / cv.width, [c0, c1] = (LW.layout && LW.layout.clear) || [0, 0.72];
@@ -4130,23 +3168,11 @@ function rebuild() {
   placePets();
 }
 // (re)place the pets at home — only on boot / resize / when the painted room arrives
-function placePets() {
-  for (const p of pets) if (p.away || p.leaving) { p.away = true; p.leaving = false; p.plan = []; p.act = null; }
-  if (!cat.away) { cat.plat = 'seat'; cat.x = L.catHome.x; cat.y = L.seat.gy; cat.k = PK0; cat.face = 1;
-  }
-  if (!dog.away) { dog.plat = 'floor'; dog.x = floorX(L.rug.cx - 20); dog.y = L.rug.cy + 8; dog.k = floorK(dog.y); dog.face = -1; }
-  for (const p of pets) {
-    if (p.away) continue;
-    p.plan = []; p.act = null; p.flip = 0; p.urge = null;
-    p.doing = { id: p === cat ? 'nap' : 'rug', dest: { plat: p.plat, x: p.x, y: p.y }, rest: p === cat ? 'sleep' : 'lie', dur: rand(14, 28), until: 0, arrived: false, settle: rand(3, 6), ph: 0 };
-  }
-}
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
 LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 60); });
 computeTarget();
 E.amb = envAmb();
-if (!petsOn()) for (const p of pets) p.away = true;   // pets off from the start: nobody home
 rebuild();
 if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
 if (LW.calm) setCalm(true);
@@ -4160,26 +3186,8 @@ function benchRaw(n = 120, flushEach = false) {
   return { perFrameTotal: +((performance.now() - t0) / n).toFixed(2), jsOnly: +(js / n).toFixed(2) };
 }
 function bench(n = 120) { if (!LW.virtual) return { perfMs }; const t0 = Date.now(); LW.advance(n / 30); return (Date.now() - t0) / n; }
-function selfTest(secs = 60) {
-  // identity (kind + coat never change, array never reordered, tint canvases never shared),
-  // no teleports (per-frame movement stays small), and that they actually roam
-  const ids = pets.map((p) => p.kind + ':' + p.coat.base), tc = pets.map((p) => p.tintC);
-  let err = 0, jumps = 0, maxStep = 0, rightLong = 0;
-  const seen = pets.map(() => new Set()), last = pets.map((p) => [p.x, p.y]), rzT = pets.map(() => 0);
-  for (let f = 0; f < secs * 30; f++) {
-    LW.advance(1 / 30);
-    pets.forEach((p, i) => {
-      if (p.kind + ':' + p.coat.base !== ids[i] || pets[i] !== p || p.tintC !== tc[i]) err++;
-      const d = Math.hypot(p.x - last[i][0], p.y - last[i][1]); maxStep = Math.max(maxStep, d); if (d > 60) jumps++;   // (the end of a drop off the seat is ~35px/frame)
-      last[i] = [p.x, p.y];
-      if (p.doing && p.doing.arrived) seen[i].add(p.doing.id);
-      rzT[i] = p.x > L.RZ && !p.away && !p.leaving ? rzT[i] + 1 / 30 : 0; if (rzT[i] > 15) rightLong++;
-    });
-  }
-  if (tc[0] === tc[1]) err++;
-  return { err, ids, jumps, maxStep: +maxStep.toFixed(1), rightLong, spots: seen.map((s) => [...s]), where: pets.map((p) => p.kind + '@' + p.plat + ':' + Math.round(p.x) + ',' + Math.round(p.y)) };
-}
-window.__cafe = { cars, get carMetres() { return CAR_LEN; }, amb: AMB, get E() { return E; }, get L() { return L; }, ART, rebuild, beat, dangle, startRoll, cat, dog, music, calm, setCalm, startWater, startStretch, bench, benchRaw, selfTest, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, bake, onDown };
+window.__pets=petSystem;
+window.__cafe={pets:petSystem,get L(){return L},get E(){return E},step,render,bake,ART,calm,setCalm,startWater,startStretch};
 })();
 </script>
 </body>

@@ -2,7 +2,7 @@
 
 All sprites face RIGHT (flip horizontally for left), transparent PNG, ~130–450 px.
 Walking plays the drawn gait cycles in `cycle/` (below), chosen by distance travelled; walk1/walk2 remain the
-standing pose and the fallback two-frame gait for a set without a cycle.
+standing reference poses. The shared runtime holds still if a complete walking cycle is missing.
 
 | Folder | Poses |
 |---|---|
@@ -31,7 +31,7 @@ Same facing (RIGHT), tightly cropped, transparent.
 | jump | crouch → spring → apex → reach → landing crouch | hops between surfaces |
 
 Which sets have them is listed once in `LW.PET_SEQ_HAS` (`scenes/pet-motion.js`); a missing sheet just
-falls back to the crossfade. Frame size and foot anchor are not stored in the art: `LW.petSeqPrep`
+falls back to a one-silhouette tuck-and-cut (never a crossfade). Frame size and foot anchor are not stored in the art: `LW.petSeqPrep`
 interpolates them at load between the poses each sheet joins (the jump crouch is sized to the walking
 body length).
 

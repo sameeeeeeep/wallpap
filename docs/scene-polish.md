@@ -781,3 +781,36 @@ of extracting private functions from Cats. Added common-roster, heading, panda-l
 cross-species clearance, takeoff-scale, shadow, and exit/re-entry regressions.
 `node --test tests/*.cjs`: 54 passing at this step. Scene/control/visual acceptance is
 tracked separately and remains in progress until the full matrix is signed off below.
+
+### All eight scene integrations and visual acceptance
+
+Cats, Café, Records, Ramen, Rooftop, Speakeasy, Cabin and Grass now use `scenes/pets.js`.
+Removed their separate pet loaders, navigation, pose and drawing implementations;
+Grass retains a thin GPU adapter which consumes the same tinted frames and contact
+shadows. Scenes declare floor unions, depth scale, perches/jump links, activity spots,
+homes/exits, prop occluders and lighting. The seven-member roster is immutable; pandas
+remain private to Grass, using lateral-only routes because no depth sheets were added.
+The host's existing scene selection/Pets settings are unchanged; no Swift files changed.
+
+Visual fixes during the WKWebView review:
+- Registered the dog's selected planted paws without the golden frame-2 torn-leg warp.
+- Kept the first jump crouch at the current supporting scale and cut directly into its
+  registered sheet. Landing and crouch now retain destination/source depth respectively;
+  resetting the landing timer must not put a foreground cat behind Santorini's bowl.
+- Added foreground plate masks for the café cup/candle/counter, record crates/stand legs,
+  and ramen vending cabinet/stools. Restricted floor routes around furniture footprints.
+- Shared full-body clearance and swept jump reservations prevent cat-on-dog stacking.
+  Pets wait at narrow encounters; the broad-floor swap test requires actual completion.
+- Completed the rooftop's accessible front floor and covered chair/crate resting spots.
+  Exit queues yield lateral space to their leader so angled aisle turns cannot deadlock.
+- Preserved panda walking lanes for water/cursor interactions, and cached their shared
+  frame between the grass-depth and sprite render passes. Static foreground masks are
+  cached per room-paint revision; tiny props no longer re-clip a full room each frame.
+
+Reproduction is documented in `tools/pets-shared/README.md`. The evidence directory is
+`shots/pets-shared/`: noon/midnight sequences for every scene, close-up motion sheets,
+exact calico takeoff/landing, ultrawide left-widget compositions, toggle/reminder/rain
+reports, and before/after frame-time samples. Raw capture PNGs are deleted after JPEG
+conversion. Tests cover headings, full-body crossing, shadow registration, jump scale
+and depth, prop sorting, lateral pandas and graceful exit/re-entry including a narrow
+queue. Acceptance totals and measured timings are recorded in the evidence README.

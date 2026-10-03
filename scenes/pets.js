@@ -3,6 +3,8 @@
  * const pets = LW.pets.create({scene:'cafe', roster:['grey','golden'], stage:()=>STAGE});
  * pets.step(dt, seconds); pets.draw(ctx); pets.click(x,y); pets.toy(x,y);
  * pets.reset() after a layout change. pets.items is stable (never sort it in place).
+ * Optional scene interactions: pets.trip(p, spot, restPose), pets.state(p, pose, seconds).
+ * pets.walk(p, x, y, {gait,next}) still enforces stage geometry and mutual clearance.
  * pets.draw(ctx, extraOccluders) sorts pets + props together by ground depth.
  * For a GPU scene: pets.frame(p) gives its tinted image/quad/shadow; draw in depth order.
  *
@@ -13,6 +15,7 @@
  *  homes:[{x,y,surf?,state?,dir?}], exits:[{x,y}],
  *  occluders:[{depth,draw(ctx)}], light(x,y):[r,g,b], night:0..1, wet:boolean,
  *  clear:[x0,x1], avoid:[[x,y,w,h]], bounds:[x0,y0,x1,y1], slope?:.55}
+ * Optional count limits visible members; supplies:{food,water} holds bowl levels 0..1.
  * A ledge's y is its paw baseline; depth is its supporting floor, used for scale/sorting.
  * Links are the ONLY legal jumps between surfaces ('floor' is the default surface).
  * Floor polygons are a union; every path segment is sampled inside them. All travel is
@@ -138,7 +141,7 @@ function create({scene,roster,stage}){
    scale:opt.scale||1,mission:null,head:[0,0],headW:[0,0],happyT:0,awake:0,blocked:0,opt};
  });
  const ledge=id=>(S.ledges||[]).find(l=>l.id===id);
- const depth=p=>p.j?lerp(p.j.d0,p.j.d1,clamp(p.t/p.j.dur)):p.surf==='floor'?p.y:(ledge(p.surf)?.depth??p.y);
+ const depth=p=>p.j?(p.state==='jumpPrep'?p.j.d0:p.state==='land'?p.j.d1:lerp(p.j.d0,p.j.d1,clamp(p.t/p.j.dur))):p.surf==='floor'?p.y:(ledge(p.surf)?.depth??p.y);
  const size=(p,y=p.y,surf=p.surf)=>p.scale*(surf==='floor'?scaleAt(y,S.scale):(ledge(surf)?.scale??scaleAt(ledge(surf)?.depth??y,S.scale)));
  function box(p,x=p.x,y=p.y,z=p.z,k=size(p,y)){
   const a=p.asset,w=a.img.walk1,wide=w?w.width*a.unit:p.spec.height*1.8;
@@ -167,29 +170,30 @@ function create({scene,roster,stage}){
   return x>=a+p.spec.height*p.k*.6&&x<=b-p.spec.height*p.k*.6&&!(S.avoid||[]).some(r=>overlap(box(p,x,y),[r[0],r[1],r[0]+r[2],r[1]+r[3]],0));
  }
  function directions(p){return p.asset.cyc.has('walk-f')&&p.asset.cyc.has('walk-b')}
- function validPath(p,pts,exit=false){
+ function validPath(p,pts,exit=false,avoidPets=true){
   for(let i=1;i<pts.length;i++){
    const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/12));
-   for(let j=1;j<=n;j++){const x=lerp(a[0],b[0],j/n),y=lerp(a[1],b[1],j/n);if(!allowed(p,x,y,p.surf,exit)||!free(p,x,y,p.surf,false))return false;}
+   for(let j=1;j<=n;j++){const x=lerp(a[0],b[0],j/n),y=lerp(a[1],b[1],j/n);if(!allowed(p,x,y,p.surf,exit)||(avoidPets&&!free(p,x,y,p.surf,false)))return false;}
   }return true;
  }
- function plan(p,x,y,exit=false){
+ function plan(p,x,y,exit=false,ignorePets=false){
+  const valid=pts=>validPath(p,pts,exit,!ignorePets);
   if(p.surf!=='floor'||!directions(p))y=p.y;
   const a=[p.x,p.y],b=[x,y],slope=S.slope||.55;
   let candidates=headings(a,b,slope,directions(p));
-  let best=candidates.filter(q=>validPath(p,q,exit)).sort((a,b)=>length(a)-length(b))[0];
+  let best=candidates.filter(q=>valid(q)).sort((a,b)=>length(a)-length(b))[0];
   if(!best&&p.surf==='floor'&&directions(p)){
    // Route around pets/props using visibility candidates; every edge still uses drawn headings.
    const bounds=S.bounds||[0,0,1600,1000],ys=[bounds[1]+10,bounds[3]-10];
    for(const o of items)if(o!==p&&!o.away){const b=box(o),h=p.spec.height*size(p);ys.push(b[1]-18,b[3]+h*1.3+18)}
    for(const yy of ys)for(const xx of [a[0],b[0],(a[0]+b[0])/2]){
     const m=[xx,clamp(yy,bounds[1],bounds[3])];
-    for(const q of headings(a,m,slope,true))if(validPath(p,q,exit))for(const r of headings(m,b,slope,true)){
-     const v=[...q,...r.slice(1)];if(validPath(p,v,exit)&&(!best||length(v)<length(best)))best=v;
+    for(const q of headings(a,m,slope,true))if(valid(q))for(const r of headings(m,b,slope,true)){
+     const v=[...q,...r.slice(1)];if(valid(v)&&(!best||length(v)<length(best)))best=v;
     }
    }
   }
-  return best?{pts:best.filter((p,i,a)=>!i||Math.hypot(p[0]-a[i-1][0],p[1]-a[i-1][1])>.01),i:1}:null;
+  return best?{pts:best.filter((p,i,a)=>!i||Math.hypot(p[0]-a[i-1][0],p[1]-a[i-1][1])>.01),i:1}:ignorePets?null:plan(p,x,y,exit,true);
  }
  function state(p,name,dur=rand(4,10)){
   if(p.away&&name!=='away')return;
@@ -231,7 +235,7 @@ function create({scene,roster,stage}){
   p.j={x0:p.x,y0:p.y,x1:x,y1:y,s0:p.surf,s1:surf,d0,d1,k0:size(p),k1:size(p,y,surf),view:dir.view,key,
    dur:.36+Math.abs(y-p.y)*.0007+Math.abs(x-p.x)*.00055,h:34+Math.max(0,p.y-y)*.32,next};
   if(!flightClear(p,p.j)){p.j=null;return false;}
-  p.dir=dir.face;p.goal={x,y,surf};p.sequence=null;p.prev=null;LW.petJumpLand(p);state(p,'jumpPrep',.34);return true;
+  p.dir=dir.face;p.goal={x,y,surf};p.sequence=null;p.prev=null;LW.petJumpLand(p);state(p,'jumpPrep',.34);pose(p,0);return true;
  }
  function trip(p,target,rest='sit'){
   if(p.away)return false;
@@ -249,7 +253,8 @@ function create({scene,roster,stage}){
   function leg(q){
    const ab=route.shift();if(!ab)return walk(q,dest.x,dest.y,{next:finish});
    const [a,b]=ab,ay=a.surf==='floor'?a.y:ledge(a.surf).y,by=b.surf==='floor'?b.y:ledge(b.surf).y;
-   walk(q,a.x,ay,{next:r=>{if(!jump(r,b.x,by,b.surf,leg)){r.goal=null;state(r,'sit',2)}}});
+   const start=a.surf==='floor'?floorPoint(a.x,ay):[a.x,ay];
+   walk(q,...start,{next:r=>{if(!jump(r,b.x,by,b.surf,leg)){r.goal=null;state(r,'sit',2)}}});
   }leg(p);return true;
  }
  function leave(p){
@@ -267,20 +272,30 @@ function create({scene,roster,stage}){
   const y=directions(p)?e.y:p.y;
   if(Math.abs(p.y-y)>1){
    const xs=[];for(let x=S.bounds[0]+5;x<S.bounds[2];x+=10)if(allowed(p,x,y,'floor'))xs.push(x);
-   xs.sort((a,b)=>Math.abs(a-p.x)-Math.abs(b-p.x));let x=xs[0];
+   const forward=Math.sign(e.x-p.x)||1,ideal=p.x+forward*Math.abs(y-p.y)/(S.slope||.55);
+   xs.sort((a,b)=>Math.abs(a-ideal)-Math.abs(b-ideal));let x=xs[0];
    for(const q of xs)if(plan(p,q,y)){x=q;break;}
    if(x!=null)walk(p,x,y,{next:leave});else state(p,'sit',1);return;
   }
   walk(p,e.x,y,{next:gone,exit:true});
  }
+ function yieldExit(p){
+  if(p.mission!=='leave'||p.waited<3||p.surf!=='floor')return false;
+  const e=(S.exits||[])[p.id%(S.exits||[]).length];if(!e)return false;
+  const ahead=items.some(o=>o!==p&&!o.away&&o.mission==='leave'&&Math.abs(e.x-o.x)<Math.abs(e.x-p.x)&&Math.abs(o.x-p.x)<400);
+  if(!ahead)return false;
+  const x=p.x-Math.sign(e.x-p.x)*120;
+  if(!validPath(p,[[p.x,p.y],[x,p.y]]))return false;
+  return walk(p,x,p.y,{next:leave});
+ }
  function think(p){
   if(p.mission==='enter')return;
   p.goal=null;if(!wanted(p))return leave(p);if(p.mission==='qa')return state(p,'stand',1e9);
-  const spots=(S.spots||[]).filter(s=>(!s.species||s.species===p.kind)&&clearRest(p,s.x,s.y??ledge(s.surf)?.y));
+  const spots=(S.spots||[]).filter(s=>(directions(p)||s.surf||Math.abs(s.y-p.y)<1)&&(!s.species||s.species===p.kind)&&clearRest(p,s.x,s.y??ledge(s.surf)?.y));
   if(S.wet){const safe=spots.filter(s=>s.kind==='shelter');for(const sp of safe)if(trip(p,sp,'shelter'))return;}
   if(LW.calm){const beds=spots.filter(s=>s.kind==='bed'||s.kind==='shelter');for(const sp of beds)if(trip(p,sp,'sleep'))return;return state(p,'sleep',rand(25,60));}
   for(const kind of ['food','water'])if((kind==='food'?p.hunger:p.thirst)>.6){
-   const sp=spots.find(s=>s.kind===kind);if(sp&&trip(p,sp,kind==='food'?'eat':'drink'))return;
+   const sp=spots.find(s=>s.kind===kind&&(!S.supplies||S.supplies[kind]>.01));if(sp&&trip(p,sp,kind==='food'?'eat':'drink'))return;
   }
   const sl=clamp(p.lazy*.2+p.awake/500+(S.night||0)*.2),r=Math.random();
   if(r<.45){const b=S.bounds,pt=nearest(p,rand(b[0]+20,b[2]-20),rand(b[1],b[3]));if(pt&&walk(p,...pt,{gait:r<.035?'run':'walk'}))return;}
@@ -325,18 +340,18 @@ function create({scene,roster,stage}){
   }else if(p.state==='move'){
    if(!p.asset.cyc.has('walk')){pose(p,dt);return;}
    if(p.sequence||(p.prev&&p.poseT<.24)){pose(p,dt);return;}
-   if(!p.path){p.waited+=dt;if(p.waited>5&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;state(p,'sit',2);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.8){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}pose(p,dt);return;}
+   if(!p.path){p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;state(p,'sit',2);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.8){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}pose(p,dt);return;}
    const path=p.path,to=path.pts[path.i];
    if(!to){const next=p.next;p.path=null;p.goal=null;state(p,'stand',.4);if(next)next(p);else think(p);pose(p,dt);return;}
-   const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy),speed=(p.gait==='run'?175:48)*p.k*(LW.calm?.6:1);
+   const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy),speed=(p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
    const d=Math.min(dist,speed*dt),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
    if(free(p,x,y,p.surf,false)){
     p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=d/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
     if(dist<=d+.01){path.i++;LW.petJumpLand(p);}
-   }else{p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}
+   }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;state(p,'sit',1);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}
   }else{
-   if(p.state==='eat')p.hunger=Math.max(0,p.hunger-dt*.04);else p.hunger=Math.min(1,p.hunger+dt/18000);
-   if(p.state==='drink')p.thirst=Math.max(0,p.thirst-dt*.06);else p.thirst=Math.min(1,p.thirst+dt/10800);
+   if(p.state==='eat'){p.hunger=Math.max(0,p.hunger-dt*.04);if(S.supplies)S.supplies.food=Math.max(0,S.supplies.food-dt*.005);}else p.hunger=Math.min(1,p.hunger+dt/18000);
+   if(p.state==='drink'){p.thirst=Math.max(0,p.thirst-dt*.06);if(S.supplies)S.supplies.water=Math.max(0,S.supplies.water-dt*.003);}else p.thirst=Math.min(1,p.thirst+dt/10800);
    if(p.state==='sleep')p.awake=Math.max(0,p.awake-dt*4);
    if(p.t>=p.dur)think(p);
   }
@@ -415,6 +430,21 @@ function create({scene,roster,stage}){
 }
 // Re-use an already lit scene plate inside a prop silhouette, retaining the caller's
 // world transform for its mask (works with mirrored / letterboxed scene canvases).
-function plate(g,cv,poly){g.save();g.beginPath();poly.forEach(([x,y],i)=>i?g.lineTo(x,y):g.moveTo(x,y));g.closePath();g.clip();g.setTransform(1,0,0,1,0,0);g.drawImage(cv,0,0);g.restore();}
+// Increment sourceCanvas.petRevision after repainting it; masks are baked once per revision.
+const plateMasks=new WeakMap();
+function plate(g,cv,poly){
+ const m=g.getTransform(),pts=poly.map(([x,y])=>[m.a*x+m.c*y+m.e,m.b*x+m.d*y+m.f]);
+ const x=Math.max(0,Math.floor(Math.min(...pts.map(p=>p[0])))),y=Math.max(0,Math.floor(Math.min(...pts.map(p=>p[1]))));
+ const w=Math.min(cv.width,Math.ceil(Math.max(...pts.map(p=>p[0]))))-x,h=Math.min(cv.height,Math.ceil(Math.max(...pts.map(p=>p[1]))))-y;
+ if(w<=0||h<=0)return;
+ let cache=plateMasks.get(cv);const version=cv.petRevision||0;
+ if(!cache||cache.version!==version||cache.width!==cv.width||cache.height!==cv.height){cache={version,width:cv.width,height:cv.height,images:new Map()};plateMasks.set(cv,cache);}
+ const key=pts.flat().join(',');let im=cache.images.get(key);
+ if(!im){im=document.createElement('canvas');im.width=w;im.height=h;const q=im.getContext('2d');
+  q.beginPath();pts.forEach(([a,b],i)=>i?q.lineTo(a-x,b-y):q.moveTo(a-x,b-y));q.closePath();q.clip();
+  q.drawImage(cv,x,y,w,h,0,0,w,h);cache.images.set(key,im);
+ }
+ g.save();g.setTransform(1,0,0,1,0,0);g.drawImage(im,x,y);g.restore();
+}
 LW.pets={ROSTER,create,plate,geometry:{inside,headings,scaleAt,overlap}};
 })();

@@ -105,7 +105,7 @@ let breathB = null, lowB = null;      // breathing bowl (back centre) and the de
 
 // ───────────────────────── lighting by time / weather ─────────────────────────
 const KF = {
-  night: { wall: [[5, 5, 8], [11, 10, 13], [24, 17, 13]], table: [[30, 21, 15], [11, 8, 6]], pool: [150, 80, 35, 0.2],
+  night: { wall: [[18, 23, 34], [28, 31, 40], [40, 34, 31]], table: [[48, 40, 36], [28, 28, 34]], pool: [150, 80, 35, 0.2],
     shaft: [150, 172, 225], shaftA: 0.55, candle: 1, sky: [[4, 8, 22], [14, 22, 46]], moon: 1, stars: 1, grade: [0.95, 0.9, 0.9], amb: 0.85 },
   dawn: { wall: [[10, 8, 10], [19, 14, 13], [32, 22, 16]], table: [[40, 28, 19], [14, 10, 7]], pool: [170, 95, 50, 0.14],
     shaft: [255, 188, 150], shaftA: 0.8, candle: 0.75, sky: [[52, 62, 112], [246, 168, 122]], moon: 0.15, stars: 0.1, grade: [1, 0.93, 0.9], amb: 1 },
@@ -2466,6 +2466,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000);
   lastT = now; lastDraw = now;
   update(dt, now);
+  if (!LW.focused) return;   // paused (Pause / energy): the auto-play keeps the bowls singing, the picture stays still
   if (light.weather === 'rain' || light.weather === 'storm') updateDrops(dt);
   draw(now);
 }

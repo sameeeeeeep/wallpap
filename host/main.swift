@@ -198,10 +198,16 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             want = engaged && (cursorOnDesktop || now - lastDesktopActivity < limit)
         }
         if panelOpen { want = true; lastDesktopActivity = now }
+        if userPaused { want = false }
         setEngaged(want)
     }
     func setEngaged(_ want: Bool) {
-        if want != engaged { engaged = want; windows.forEach { $0.js("__lw('focus',\(want))") }; panelHostIfLoaded?.push() }
+        if want != engaged {
+            engaged = want
+            let why = want ? "" : (userPaused ? "user" : (energyMode == "battery" && onBattery ? "battery" : "away"))
+            windows.forEach { $0.js("__lw('pauseReason','\(why)'); __lw('focus',\(want))") }
+            panelHostIfLoaded?.push()
+        }
     }
     func touchDesktop(click: Bool = false) {
         lastDesktopActivity = CACurrentMediaTime()
@@ -458,13 +464,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         if now != onBattery { onBattery = now; checkEngagement(); rebuildMenu() }
     }
 
+    /// Pause = a soft pause: the scene stays loaded but stops drawing and shows a small
+    /// "Paused · click to continue" pill (scenes that play audio — e.g. bowls auto-play — keep sounding).
+    /// A click on the desktop continues.
     func applyPause() {
-        if paused {
-            windows.forEach { $0.freeze() }
-        } else if windows.contains(where: { $0.frozen }) {
-            windows.forEach { $0.unfreeze() }
-            loadScene()
-        }
+        if windows.contains(where: { $0.frozen }) { windows.forEach { $0.unfreeze() }; loadScene() }   // legacy hard freeze
+        windows.forEach { $0.js("__lw('pauseReason','\(paused ? "user" : "")')") }
+        setEngaged(!paused && engaged); if !paused { setEngaged(true); lastDesktopActivity = CACurrentMediaTime() }
         rebuildMenu()
     }
 
@@ -684,8 +690,11 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     var downOnDesktop = false
     func onButton(_ type: String) {
-        if paused { return }
         let p = NSEvent.mouseLocation
+        if paused {   // a click on the desktop continues a paused wallpaper
+            if type == "down", isDesktop(at: p) { userPaused = false; applyPause() }
+            return
+        }
         if type == "down" {
             downOnDesktop = isDesktop(at: p)
             cursorOnDesktop = downOnDesktop

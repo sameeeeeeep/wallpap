@@ -499,9 +499,26 @@
   // still look like a wallpaper. A desktop click resumes it (host energy modes).
   blurCSS.textContent = 'html{background:#000}';
   document.head.appendChild(blurCSS);
+  // Paused pill: the scene keeps its last frame (no blur) and says so, with how to continue.
+  let pausePill = null;
+  function showPausePill(on) {
+    if (!pausePill) {
+      pausePill = document.createElement('div');
+      pausePill.style.cssText = 'position:fixed;z-index:2147483645;left:28px;bottom:28px;display:flex;align-items:center;gap:9px;padding:8px 13px 8px 11px;border-radius:999px;background:rgba(20,26,24,.62);color:#eef2ec;font:500 12px/1.2 -apple-system,system-ui,sans-serif;letter-spacing:.01em;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 0 0 .5px rgba(255,255,255,.14),0 4px 18px rgba(0,0,0,.25);opacity:0;transform:translateY(6px);transition:opacity .5s ease,transform .5s ease;pointer-events:none';
+      document.body.appendChild(pausePill);
+    }
+    if (on) {
+      const why = LW.pauseReason === 'battery' ? 'Paused to save battery' : LW.pauseReason === 'away' ? 'Resting while you’re away' : 'Paused';
+      pausePill.innerHTML = '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 5v10M13 5v10"/></svg><span>' + why + '</span><span style="opacity:.6">· click to continue</span>';
+      const left = (LW.layout && LW.layout.side) === 'left';   // keep clear of the widgets
+      pausePill.style.left = left ? 'auto' : '28px'; pausePill.style.right = left ? '28px' : 'auto';
+      setTimeout(() => { pausePill.style.opacity = '1'; pausePill.style.transform = 'none'; }, 30);   // rAF is stopped while paused
+    } else { pausePill.style.opacity = '0'; pausePill.style.transform = 'translateY(6px)'; }
+  }
   function setFocused(on) {
     if (LW.focused === on) return;
     LW.focused = on;
+    showPausePill(!on);
     document.documentElement.classList.toggle('lw-unfocused', !on);
     LW.emit('focus', on);
     if (on) LW._resumeFrames();
@@ -661,6 +678,7 @@
     if (type === 'ambient') { LW.setSoundscape(x); return; }
     if (type === 'settings') { Object.assign(LW.settings, x || {}); LW.emit('settings', LW.settings); return; }
     if (type === 'action') { LW.emit('action', x); return; }
+    if (type === 'pauseReason') { LW.pauseReason = x || ''; return; }
     if (type === 'layout') { LW.layout = Object.assign({}, LW.layout, x || {}); LW.emit('layout', LW.layout); return; }
     if (type === 'env') { LW.setEnv(x); return; }
     if (type === 'reminder') { LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }

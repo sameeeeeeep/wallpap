@@ -46,11 +46,13 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] No text bubbles/emojis; sound words only (meow/purr) [polish agents]
 - [ ] Plausibility audit of every element in every scene (incl. koi, bowls, train, cymatics, drive) [agents]
 - [~] Layout-aware retrofit: koi/bowls/train/cabin done; cymatics/drive/visualizers in their agents
-- [x] Train skins: Indian Sleeper, Shinkansen, Swiss Alpine, Orient Express (live crossfade) + Indian rail-joint rhythm; passers-by art parked in art-src/train/deferred-people
+- [x] Train skins: Indian Sleeper, Shinkansen, Swiss Alpine, Orient Express (live crossfade) + Indian rail-joint rhythm; rare passers-by integrated from deferred art with per-skin lighting, floor anchors and foreground occlusion
 - [x] Airport scene (kit plate add-on) — measured departures, parked aircraft, occlusion, night lights; packed locally and WebKit verified.
 - [x] Realistic plate pipeline + Marine Drive, Taj Mahal, Hillside Valley — six new generated masters, reproducible kit packaging, water/exposure masks, day/night + wide/mirrored/weather screenshots inspected.
 - [ ] Illustrative "SimCity" living city (traffic, day/night)
 - [~] Codex art over procedural fakes: done in cabin/café/records/speakeasy/rooftop/ramen/train/bowls; rooftop + ramen day plates aligned and verified
+
+- [x] P2 Train passers-by: all four skins, rare/calm gait, foreground masks, layout avoidance; screenshots inspected.
 
 ## Web + marketing
 - [x] Landing page: scroll story, picker above scene, demo songs + player, auto-tour, make-a-scene + community, new pricing/FAQ (local, not pushed)

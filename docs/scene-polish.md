@@ -551,3 +551,13 @@ Built-in image prompts (all 1536×1024; no copied frames/characters):
 Inspected WebKit `shots/p2-{marine,taj,valley}-{day,night}.png` plus contact sheets; corrected pale leftover sky regions
 and the valley horizon mask after visual review. Night checks include mirrored layout, ultrawide, rain and snow.
 All captures report no JS errors. All 32 Node tests pass. All three packed locally; no publishing or installed-app changes.
+
+## 2026-10-03 — P2 Train passers-by
+Activated parked eight-frame chaiwala/salaryman sequences from `art-src/train/deferred-people` in
+`scenes/art/train/people`. Indian uses chaiwala; Shinkansen, Swiss and Orient use the suited traveller. Floor-anchored
+walking takes 30 seconds, with 155–217 seconds between crossings after an initial 55-second delay. Calm slows the walk;
+skin changes cancel/restart safely. Cached lightAt tint incorporates each skin's lamp color and window daylight.
+Each skin's alpha foreground mask removes the walker behind near seat backs, doorway edges or rails. Shared carriage
+rocking, soft contact shadow, graded approach to clear-zone/avoid boundaries; no text. No new generation prompts.
+Inspected `shots/p2-train-{indian,shinkansen,swiss,orient,occlusion,avoid}.png` and contact sheets, covering daylight,
+night, left/off layouts and an explicit avoid region. No JS errors; Node suite 32/32. Installed app untouched.

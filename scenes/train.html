@@ -242,6 +242,43 @@ function loadArtSlots() {
 }
 const artMode = () => !!(A('night') || A('day'));
 
+// Rare foreground aisle crossings. Source gait anchors retain a fixed floor contact.
+const PASSER_META = {"chaiwala": {"h": 617, "frames": [[0, 2, 280, 615, 143.6], [284, 0, 207, 617, 138.9], [495, 6, 230, 611, 129.0], [729, 0, 272, 617, 170.8], [1005, 4, 295, 613, 152.5], [1304, 0, 222, 617, 136.2], [1530, 2, 224, 615, 138.4], [1758, 0, 266, 617, 178.3]]}, "salaryman": {"h": 602, "frames": [[0, 0, 273, 602, 124.6], [277, 1, 216, 601, 114.6], [497, 1, 187, 601, 85.8], [688, 1, 197, 601, 99.0], [889, 1, 281, 601, 140.1], [1174, 1, 218, 601, 117.9], [1396, 0, 192, 602, 95.1], [1592, 2, 202, 600, 103.8]]}};
+const passer = {wait:55, age:-1, count:0, direction:1, tintKey:'', tint:null, layer:null};
+for(const name of ['chaiwala','salaryman',...SKIN_ORDER.map(s=>'fore-mask-'+s)])loadImg('art/train/people/'+name);
+function stepPasser(dt){
+ if(!artMode())return;
+ if(passer.age<0){passer.wait-=dt;if(passer.wait<=0){passer.age=0;passer.direction=passer.count++%2?-1:1;}}
+ else {passer.age+=dt*(1-calm.lv*.35);if(passer.age>30){passer.age=-1;passer.wait=155+(passer.count%3)*31;}}
+}
+function drawPasser(g){
+ if(passer.age<0)return;
+ const name=skinId==='indian'?'chaiwala':'salaryman',meta=PASSER_META[name];
+ const im=ART.img['art/train/people/'+name],mask=ART.img['art/train/people/fore-mask-'+skinId];
+ if(!im||!mask)return;
+ const direction=passer.direction,x=direction>0?-210+passer.age*68:1810-passer.age*68;
+ const height=skinId==='indian'?720:740,base=995;
+ const sx=(OX+x*K)/cssW,sy=(base-height*.5)*K/cssH,layout=LW.layout||{clear:[0,.72],avoid:[]};
+ const clear=layout.clear||[0,.72];
+ // Attenuate before reaching widgets or avoid rectangles; never stop and linger there.
+ let opacity=smooth(clamp((sx-clear[0])/.10,0,1))*smooth(clamp((clear[1]-sx)/.10,0,1));
+ for(const [ax,ay,aw,ah] of layout.avoid||[]){if(sy+height*K/cssH*.5>ay&&sy-height*K/cssH*.5<ay+ah){const d=Math.max(ax-sx,sx-ax-aw);opacity*=smooth(clamp(d/.10,0,1));}}
+ if(opacity<.005)return;
+ const light=lightAt(x,base-height*.48).map((v,i)=>clamp(.3+v*.62+E.day*.13,.24,1)*(E.day*.12+.88)*(S.light[i]*.3+.7));
+ const key=name+light.map(v=>Math.round(v*12)).join(',');
+ if(passer.tintKey!==key){
+  const c=passer.tint||newCanvas(im.width,im.height);c.width=im.width;c.height=im.height;
+  const z=c.getContext('2d');z.drawImage(im,0,0);z.globalCompositeOperation='multiply';z.fillStyle=rgba(light.map(v=>Math.round(v*255)));z.fillRect(0,0,c.width,c.height);z.globalCompositeOperation='destination-in';z.drawImage(im,0,0);z.globalCompositeOperation='source-over';passer.tint=c;passer.tintKey=key;
+ }
+ const c=passer.layer||(passer.layer=newCanvas(1600,1000)),z=c.getContext('2d');z.clearRect(0,0,1600,1000);
+ z.fillStyle='rgba(8,7,10,.22)';z.beginPath();z.ellipse(x,base-3,74,13,0,0,TAU);z.fill();
+ const f=meta.frames[Math.floor(passer.age*8)%meta.frames.length],scale=height/meta.h;
+ z.save();z.translate(x,base);z.scale(direction,1);z.drawImage(passer.tint,f[0],f[1],f[2],f[3],-f[4]*scale,-f[3]*scale,f[2]*scale,f[3]*scale);z.restore();
+ // Remove the figure behind each skin's nearest seat backs, door frame and rails.
+ z.globalCompositeOperation='destination-out';z.drawImage(mask,0,0,1600,1000);z.globalCompositeOperation='source-over';
+ g.save();setWR(g);g.globalAlpha=opacity;g.drawImage(c,0,0);g.restore();
+}
+
 // =====================================================================
 //  environment: time of day + weather (glides; never pops)
 // =====================================================================
@@ -2049,6 +2086,7 @@ function step(dt, T) {
   updateEnv(dt);
   if (stretchT >= 0) { stretchT += dt; if (stretchT > 9) stretchT = -1; }
   updateTrain(dt, T);
+  stepPasser(dt);
   // storms: the odd flash over the fields
   flash.t += dt;
   if (E.storm > 0.5 && flash.t > flash.next) { flash.t = 0; flash.next = rand(9, 26); later(rand(1.5, 4), sThunder); }
@@ -2084,6 +2122,7 @@ function render(T, dt) {
   drawWater(ctx);
   drawParticles(ctx);
   drawSweeps(ctx, dt);
+  drawPasser(ctx);
   // Quiet night shading (+ the calm-mode breathing warmth)
   setW(ctx);
   const dim = clamp(.04 * (1 - E.day * .7) + calm.lv * (.54 - .22 * breath()), 0, .8);   // the carriage breathes
@@ -2102,6 +2141,7 @@ function render(T, dt) {
 const xf = { cv: null, a: 0, want: null };
 function applySkin(id) {
   skinId = id; S = SKINS[id];
+  passer.age=-1;passer.wait=55;passer.tintKey="";
   TS = S.track; buildRoute(); applySkinProps();
   tsKey = ''; tsLit.clear(); tsBlur.clear(); deck.cardKey = null; if (train.lampSeen) train.lampSeen.clear();
   AMB.ev.rs = null; for (const ax of RAIL.axles) ax.n = null; train.joint = Math.floor(train.d / 4200);
@@ -2161,7 +2201,7 @@ function selfTest(secs = 60) {
   }
   return {err,maxBirds};
 }
-window.__train = { AMB, get skin() { return skinId; }, setSkin, SKINS, get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, get RT() { return RT; }, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
+window.__train = { passer, previewPasser(age=12){passer.age=age;}, AMB, get skin() { return skinId; }, setSkin, SKINS, get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, get RT() { return RT; }, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

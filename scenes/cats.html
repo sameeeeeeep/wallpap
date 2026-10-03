@@ -1681,9 +1681,11 @@ function wander(c, gait = 'walk') {
   let tx = c.x, ty = c.y, ok = false;
   const pts = claimedPts(c);
   for (let k = 0; k < 10 && !ok; k++) {
-    const depthWalk=Math.random()<.35;
-    const ddx = (Math.random() < 0.5 ? -1 : 1) * (depthWalk?rand(35,100):rand(120, Math.max(180, W * 0.35)));
-    const ddy=depthWalk?(Math.random()<.5?-1:1)*rand(70,140):rand(-.22,.22)*Math.min(Math.abs(ddx),260);
+    // Half the strolls cross the terrace in depth — toward you or away — so the 3/4 front/back walks
+    // actually show. The floor is a shallow band, so head for its far half and keep the step steep.
+    const depthWalk=Math.random()<.5, mid=(L.floorTop+L.floorBot)/2;
+    const ddx = (Math.random() < 0.5 ? -1 : 1) * (depthWalk?rand(25,90):rand(120, Math.max(180, W * 0.35)));
+    const ddy=depthWalk?(c.y>mid?-1:1)*rand(110,(L.floorBot-L.floorTop)*.8):rand(-.22,.22)*Math.min(Math.abs(ddx),260);
     [tx, ty] = floorClamp(restX(c.x + ddx), c.y + ddy);
     ok = spotClear(tx, ty, c, pts);
   }
@@ -2401,7 +2403,7 @@ function update(c, dt, T) {
       }
   }
 
-  if (!calm.on && !c.mission && c.x < L.R - 40 && (c.state === 'sit' || c.state === 'loaf' || c.state === 'groom') && nowS() - lastMove > 75 && Math.random() < dt * 0.04) setState(c, 'sleep', rand(40, 90));
+  if (!calm.on && !c.mission && c.x < L.R - 40 && (c.state === 'sit' || c.state === 'loaf' || c.state === 'groom') && nowS() - lastMove > 150 && Math.random() < dt * 0.03) setState(c, 'sleep', rand(40, 90));
 
   c.blinkT -= dt;
   if (c.blinkT <= 0) { c.blink = 0.14; c.blinkT = Math.random() < 0.2 ? 0.28 : rand(2.2, 6); }

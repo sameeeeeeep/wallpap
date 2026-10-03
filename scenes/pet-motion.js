@@ -164,7 +164,9 @@
     const s=o._petDirection||(o._petDirection={view:'side',face:o.dir||1});
     if(Math.hypot(vx,vy)<1e-6)return s;
     const angle=Math.atan2(Math.abs(vy),Math.abs(vx))*180/Math.PI;
-    const view=angle>(s.view==='side'?40:30)?(vy>0?'f':'b'):'side';
+    // screen angle of a ground-plane heading; depth is foreshortened on screen, so a modest slope already
+    // means the animal is walking well toward/away from the camera
+    const view=angle>(s.view==='side'?30:22)?(vy>0?'f':'b'):'side';
     const face=Math.abs(vx)>1e-4?Math.sign(vx):s.face;
     const n=LW.PET_CYCLE_N[gait]||8,k=Math.floor(phase*n+1e-6)%n;
     if(k===0||(gait==='walk'&&k===4)){s.view=view;s.face=face;}

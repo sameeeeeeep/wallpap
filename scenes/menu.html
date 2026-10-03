@@ -97,6 +97,12 @@ h2 .ci{color:var(--ink-3);margin-right:2px;align-self:center}
 .sub{padding-left:12px;color:var(--ink-2)}
 .note{font-size:10.5px;color:var(--ink-3)}
 .warn{font-size:11px;color:#8a4b2a;text-decoration:underline}
+.tip{display:flex;gap:9px;align-items:flex-start;margin:10px 0 2px;padding:10px 11px;border-radius:11px;background:var(--card);color:var(--ink-2);font-size:11px;line-height:1.4}
+.tip svg{flex:none;margin-top:1px;color:var(--accent)}
+.tip b{color:var(--ink);font-weight:600}
+.tip span{display:flex;gap:6px;margin-top:7px}
+.tip span button{padding:4px 10px;border-radius:999px;background:var(--card-2);color:var(--ink);font-size:11px}
+.tip span button:first-child{background:var(--accent);color:#fff}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .tl{background:var(--card);border-radius:9px;padding:9px 10px;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .15s}
 .tl:hover{background:var(--card-2)}
@@ -246,6 +252,7 @@ function render(state) {
   <div class="now" style="background-image:${thumb(cur.id, cur.thumb)}">
     <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${cur.author && cur.author !== 'wallpap' ? ' · by ' + esc(cur.author) : ''}${S.paused ? ' · paused' : ''}</span></div>
   </div>
+  ${S.clickTip ? `<div class="tip"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l9 6.5-4.2.8 2.5 4.6-1.8 1-2.5-4.6L6 14.5z"/></svg><p>Clicking a scene also slides your windows away. That's the macOS setting <b>Click wallpaper to reveal desktop</b> — set it to <b>Only in Stage Manager</b> to play with scenes freely.<span><button data-a="openDesktopSettings">Open setting</button><button data-a="dismissClickTip">Keep as is</button></span></p></div>` : ''}
   ${sceneActs ? `<div class="acts">${sceneActs}</div>` : ''}
   ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
 

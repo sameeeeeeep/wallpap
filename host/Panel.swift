@@ -52,7 +52,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         "toggleMute", "toggleMusicMode", "toggleBeatSync", "openAutomationSettings", "pickSoundscape:",
         "pickSoundscapeVolume:", "toggleAudioCat:", "pickAudioVol:", "toggleCalm", "pickBreath:", "pickReminder:",
         "remindNow", "pickCompanions:", "togglePause", "pickFps:", "pickEnergy:", "pickAway:", "pickLayoutMode:", "toggleAvoidIcons", "pickBreathReminder:", "toggleRemindersOverApps", "previewReminderCard", "pickSceneCycle:", "pickSceneCycleScope:", "toggleSceneCycleShuffle", "nextSceneNow", "shareApp", "openSubmitScene", "deactivateLicense", "openScenesFolder",
-        "toggleLogin", "reloadScene", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
+        "toggleLogin", "reloadScene", "openDesktopSettings", "dismissClickTip", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
     ]
 
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -171,6 +171,7 @@ extension App {
             "energy": energyMode, "away": awaySeconds, "awayRec": App.awayRecommended, "onBattery": onBattery,
             "awayChoices": App.awayChoices.map { [$0.1, $0.0] },
             "login": login,
+            "clickTip": clickRevealsDesktop && !clickTipDismissed,
         ]
     }
 }

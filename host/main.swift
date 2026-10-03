@@ -293,6 +293,20 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         if musicPermissionDenied { musicPermissionDenied = false; rebuildMenu() }
         return r
     }
+    /// macOS "Click wallpaper to reveal desktop" (Sonoma+): when it's "Always" (the default), every click on a
+    /// scene also slides all windows away. We never change it for the user; the panel offers a one-time tip.
+    var clickRevealsDesktop: Bool {
+        let v = CFPreferencesCopyAppValue("EnableStandardClickToShowDesktop" as CFString, "com.apple.WindowManager" as CFString)
+        return (v as? NSNumber)?.boolValue ?? true
+    }
+    var clickTipDismissed: Bool {
+        get { defaults.bool(forKey: "clickTipDismissed") }
+        set { defaults.set(newValue, forKey: "clickTipDismissed") }
+    }
+    @objc func openDesktopSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Desktop-Settings.extension")!)
+    }
+    @objc func dismissClickTip() { clickTipDismissed = true; panelHostIfLoaded?.push() }
     @objc func openAutomationSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
     }

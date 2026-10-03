@@ -1774,7 +1774,7 @@ function bakeBoard(s) {
 //  straight onto the frame with paths (no shared scratch canvases).
 // =====================================================================
 function addEll(p,x,y,rx,ry,rot=0){p.moveTo(x+rx*Math.cos(rot),y+rx*Math.sin(rot));p.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),rot,0,TAU)}
-const petSystem=LW.pets.create({scene:'records',roster:['orange', 'golden'],stage:petStage});
+const petSystem=LW.pets.create({scene:'records',roster:['orange', 'golden'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items;
 const [cat,dog]=animals,pets=animals;
 function petStage(){
@@ -2414,7 +2414,7 @@ function onDown(px, py) {
   if (!L) return;
   const [x, y] = toWorld(px, py), T = nowS();
   if (water && x > L.glass.x - 140 && x < L.glass.x + 50 && y > L.glass.y - 140 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
-  if(petSystem.click(x,y)){sPurr(2);return;}
+  if(petSystem.click(x,y))return;
   const t = L.tt;
   if (x > t.px0 - 6 && x < t.px1 + 6 && y > t.cy - t.pv * t.q - 34 && y < t.cy + t.pv * t.q + 24) {
     const playing = music.intent ? music.intent.play : !!(music.np && music.np.playing);

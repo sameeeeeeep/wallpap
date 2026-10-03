@@ -872,3 +872,43 @@ checks cover complete sequences, runtime/source geometry and subpixel registered
 stance contacts (same landmark limitation as gaze fix). Runtime loaders now expose
 these assets; FOLLOW behavior and scripted scene verification follow separately.
 Raw generated PNGs removed after lossless master preservation; no installed app changes.
+
+## 2026-10-04 — Shared pet FOLLOW mode
+
+Tap toggles independent picks. The drawn turn/perk/front sit precedes following;
+a tiny gated purr uses the FX bus and the contact shadow is subtly lighter. Eight
+scene adapters supply world-space pointer coordinates and preserve mirror/ultrawide
+transforms. Released pets rest briefly and resume their existing routines.
+
+Cursor targets project onto floor polygons with prop/widget exclusions. Followers
+reserve separate arc slots roughly a body length away, walk/run by distance and
+cursor speed, and travel only lateral or drawn 3/4 headings (steep trips zigzag).
+Drawn angle turns stop translation; surface changes use declared jump links. Cats
+stalk with their drawn creeping gait, wiggle for 0.6–1.1 seconds, then use a locked
+pounce target and a three-second cooldown. Dogs trot, play-bow and bounce. Only one
+follower claims a pounce at a time; moving prey cancels an unlaunched hunt. Slow
+continuous pointer movement is distinguished from an actual rest. Leaving waits
+without dropping picks; pause/reset clears them, and an in-flight release finishes
+its already committed landing without restoring selection.
+
+Verification: **75/75 Node tests pass**, covering pick toggles, stationary perk,
+multiple reservations/no overlap, drawn travel headings, all three exact pounce
+landings, dog bow/bounce, fast/slow pointer behavior, leave/resume/pause/reset,
+full-body prop/widget projection, declared ledge links, release during flight,
+leave during a pending turn and FX muting/routing.
+
+LOOKED at 320 pointer-driven WKWebView snapshots in Santorini Cats and Speakeasy
+(day/night), 120 additional new-angle run/pounce/bounce snapshots, and 48 mirrored
+ultrawide input snapshots across all eight scenes. All four interaction runs show
+twelve total targeted landings with **0 scene-pixel endpoint error**, no reported
+JS errors or overlaps, two picks, release and pause clearing. One 79-frame run hit
+wkshot's 60-second timeout and was rerun successfully to all 80 frames. The Grass
+fixture needed one render after QA placement to refresh its hit regions; its
+actual input check then passed. Pandas retain their existing lateral-only art.
+
+Evidence: `shots/follow/README.md`, `shots/follow/acceptance.json`, and
+`shots/follow-angles/`. Reproduction: `tools/follow/README.md`. Combined with the
+gaze-fix matrix, this task retains **600 verified scene snapshots** as downscaled
+JPEGs. All raw capture/generation PNGs removed; source runtime PNGs retained.
+Approximately 14 GiB free at acceptance. Prompts remain in `art-src/gaze-fix/` and
+`art-src/follow/`. No push, release, app build/install/relaunch or sibling-tree edit.

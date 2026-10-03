@@ -1,0 +1,87 @@
+{
+  "pointer_runs": {
+    "cats/day": {
+      "frames": 80,
+      "landings": 3,
+      "max_error": 0.0,
+      "overlaps": 0,
+      "errors": 0
+    },
+    "cats/night": {
+      "frames": 80,
+      "landings": 3,
+      "max_error": 0.0,
+      "overlaps": 0,
+      "errors": 0
+    },
+    "speakeasy/day": {
+      "frames": 80,
+      "landings": 3,
+      "max_error": 0.0,
+      "overlaps": 0,
+      "errors": 0
+    },
+    "speakeasy/night": {
+      "frames": 80,
+      "landings": 3,
+      "max_error": 0.0,
+      "overlaps": 0,
+      "errors": 0
+    }
+  },
+  "angle_runs": {
+    "cats/day": {
+      "frames": 30,
+      "errors": 0
+    },
+    "cats/night": {
+      "frames": 30,
+      "errors": 0
+    },
+    "speakeasy/day": {
+      "frames": 30,
+      "errors": 0
+    },
+    "speakeasy/night": {
+      "frames": 30,
+      "errors": 0
+    }
+  },
+  "smoke_runs": {
+    "cabin": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "grass": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "ramen": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "cats": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "rooftop": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "speakeasy": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "cafe": {
+      "frames": 6,
+      "pick_release": true
+    },
+    "records": {
+      "frames": 6,
+      "pick_release": true
+    }
+  },
+  "frames": 488,
+  "max_landing_error": 0,
+  "free_gib": 14.78
+}

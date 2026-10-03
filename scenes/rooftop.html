@@ -1366,7 +1366,7 @@ let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
 const hearts = [];
 function petSound() {}
 // One shared roster and engine; this scene supplies geometry and lighting only.
-const petSystem=LW.pets.create({scene:'rooftop',roster:['orange', 'corgi'],stage:petStage});
+const petSystem=LW.pets.create({scene:'rooftop',roster:['orange', 'corgi'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items, [cat,dog]=animals;
 function petStage(){
  const ledges=Object.entries(NAV.surfs).filter(([id])=>id!=='floor').map(([id,l])=>({id,...l,scale:l.k,depth:id==='ledge'?700:780}));
@@ -1568,7 +1568,7 @@ function onDown(px, py) {
   if (!L) return;
   const x = toWX(px), y = toWY(py), T = nowS();
   if (water && Math.abs(x - L.glass.x) < 40 && y > L.glass.y - 70 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; sClink(); return; }
-  for (const an of animals) if (!an.gone && hitAnimal(an, x, y)) { petAnimal(an, T); if (an === cat) sPurr(2.6); else sBoof(); return; }
+  for (const an of animals) if (!an.gone && hitAnimal(an, x, y)) { petAnimal(an, T); return; }
   const R = L.radio;
   if (Math.abs(x - R.x) < R.w / 2 + 14 && y > R.base - 142 && y < R.base + 6) {
     const playing = music.intent ? music.intent.play : !!(music.np && music.np.playing);

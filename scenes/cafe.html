@@ -2155,7 +2155,7 @@ function noteGlyph(g, x, y, s, kind) {
 //  scratch canvases: they're drawn straight onto the frame with paths.
 // =====================================================================
 function addEll(p,x,y,rx,ry,rot=0){p.moveTo(x+rx*Math.cos(rot),y+rx*Math.sin(rot));p.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),rot,0,TAU)}
-const petSystem=LW.pets.create({scene:'cafe',roster:['grey', 'golden'],stage:petStage});
+const petSystem=LW.pets.create({scene:'cafe',roster:['grey', 'golden'],stage:petStage,pointer:ptrW});
 const animals=petSystem.items;
 const [cat,dog]=animals,pets=animals;
 function petStage(){
@@ -2964,7 +2964,7 @@ function onDown(px, py) {
   if (!L) return;
   const x = toWX(px), y = toWY(py), T = nowS();
   if (water && x > L.glass.x - 50 && x < L.glass.x + 260 && y > L.glass.y - 130 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
-  if(petSystem.click(x,y)){sPurr(2);return;}
+  if(petSystem.click(x,y))return;
   const t = L.tt, j = L.juke;
   const onPlayer = L.mode === 'jukebox'
     ? x > j.x - j.w / 2 && x < j.x + j.w / 2 && y > j.top - 10 && y < j.base

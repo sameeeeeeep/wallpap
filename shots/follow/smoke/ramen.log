@@ -1,0 +1,12 @@
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f00.png
+result: {"errors":[],"report":{"time":0,"events":[{"time":0,"picked":true}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":true,"x":1244.8796791443851,"y":863.8181818181818,"state":"picked","frame":"walk1"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f01.png
+result: {"errors":[],"report":{"time":0.5,"events":[{"time":0,"picked":true}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":true,"x":1244.8796791443851,"y":863.8181818181818,"state":"picked","frame":"perk-2"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f02.png
+result: {"errors":[],"report":{"time":1.9999999999999987,"events":[{"time":0,"picked":true}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":true,"x":1253.9480791217431,"y":868.8058018057286,"state":"move","frame":"walk-f-3"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f03.png
+result: {"errors":[],"report":{"time":4.000000000000007,"events":[{"time":0,"picked":true}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":true,"x":1288.8900019146333,"y":888.0238593418175,"state":"move","frame":"stalk-f-4"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f04.png
+result: {"errors":[],"report":{"time":5.199999999999997,"events":[{"time":0,"picked":true},{"time":5.033333333333331,"picked":false}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":false,"x":1305.2971825255524,"y":897.0478086778231,"state":"groom","frame":"stand-sit-3"},"errors":[]}}
+saved /Users/sameeprehlan/Documents/Projects/visuals/livewall/shots/follow/smoke/ramen-f05.png
+result: {"errors":[],"report":{"time":5.999999999999989,"events":[{"time":0,"picked":true},{"time":5.033333333333331,"picked":false}],"bad":[],"start":[1244.8796791443851,863.8181818181818],"pet":{"id":"calico","picked":false,"x":1305.2971825255524,"y":897.0478086778231,"state":"groom","frame":"sit"},"errors":[]}}

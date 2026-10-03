@@ -583,3 +583,26 @@ transitions where necessary (WebKit's CSS clock does not advance with LW.advance
 4.74e-16; invariant tests cover six ratios (including 45:32), both rotations, third pendulum, and 15-bob revival.
 `node --test tests/*.cjs`: 34/34. `swiftc -typecheck -target arm64-apple-macos13 host/*.swift`: passed, existing warnings
 only (including duplicate bowls case). No app rebuild/install, push or release. Other proposed visualizers remain backlog.
+
+## 2026-10-03 — Santorini Cats directional walk art (Codex)
+
+Owner report: diagonal travel showed a side-view cat sliding across the terrace.
+Generated ten new eight-frame strips using the built-in imagegen tool, referencing each
+coat's existing `art-src/cycles/cat-<coat>-walk.png`. Raw outputs:
+`art-src/cycles/cat-<coat>-walk-f.png` and `cat-<coat>-walk-b.png` for orange, black,
+grey, calico and siamese. All 80 installed frames are under the respective
+`scenes/art/sprites/cats/<coat>/cycle/walk-{f,b}-1..8.png` paths.
+
+Exact prompts and original generated-output paths: `art-src/cycles/directions-prompts.json`.
+Prompt structure: same painted shading, fine outline, palette, coat markings, body proportions
+and camera as the supplied side sheet; eight evenly spaced full-body frames in one row;
+three-quarter FRONT walking toward camera/screen-right or three-quarter BACK walking away/
+screen-right; entire torso rotated, near/far legs foreshortened, four-beat walk, complete ears,
+paws and tail, fixed lighting and ground baseline, flat #e6e6e6, no text/props/shadows.
+The tool returned alpha rather than the requested opaque grey. Retained those original sheets
+and cut their alpha directly, avoiding a second chroma extraction and pale fringe.
+`python3 art-src/cycles/cut-directions.py` reproduces the cuts, removes detached speckles,
+and preserves a common vertical extent/baseline per strip. Runtime layout supplies one scale
+per loop relative to the existing standing height. Inspected `shots/cats-dirs/raw-contact.jpg`
+and `installed-contact.jpg`: front/rear body angles are distinct, identities and coat patches
+are consistent. Directional running will use the allowed faster walk fallback; no new run art.

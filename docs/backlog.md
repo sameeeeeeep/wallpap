@@ -89,5 +89,5 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [x] Step 2: per-display native presentation/menus, paused-state restore, conservative fullscreen guard, shared pet occluder, restricted RSS/Atom/link bridge and 15-minute disk cache. Swift typecheck passes (existing duplicate bowls warning); all 60 baseline tests pass.
 - [x] Step 3: Letter Garden (2,116 curated answers), Little Crossings (365 unique offline 5×5 grids, 356 original-clued common entries), news UI. Official candidate URL/terms checks recorded in docs/play-feed-review.md; no commercially permitted source verified, so production allow-list is empty with an honest empty state.
 - [x] Step 4: AdSource/HouseAdSource adapter, fixed contextual first-party promotions, Sponsored rows at news bottom and puzzle completion only, no Pro slot.
-- [ ] Step 5: anonymous counters and undeployed aggregate worker.
+- [x] Step 5: memory-only anonymous daily counts, default-on off switch in both settings surfaces, empty endpoint, aggregate-only Cloudflare/D1 worker and privacy note. Worker not deployed.
 - [ ] Step 6: content/security/functional tests, local app build and WebKit JPEG matrix.

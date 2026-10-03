@@ -67,7 +67,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         "toggleMute", "toggleMusicMode", "toggleBeatSync", "openAutomationSettings", "pickSoundscape:",
         "pickSoundscapeVolume:", "toggleAudioCat:", "pickAudioVol:", "toggleCalm", "pickBreath:", "pickReminder:",
         "remindNow", "pickCompanions:", "togglePause", "pickFps:", "pickEnergy:", "pickAway:", "pickLayoutMode:", "toggleAvoidIcons", "pickBreathReminder:", "toggleRemindersOverApps", "previewReminderCard", "pickSceneCycle:", "pickSceneCycleScope:", "toggleSceneCycleShuffle", "nextSceneNow", "shareApp", "openSubmitScene", "deactivateLicense", "openScenesFolder",
-        "togglePlay", "toggleLogin", "reloadScene", "openDesktopSettings", "dismissClickTip", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
+        "togglePlay", "togglePlayCounts", "toggleLogin", "reloadScene", "openDesktopSettings", "dismissClickTip", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
     ]
 
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -161,7 +161,7 @@ extension App {
         var login = false
         if #available(macOS 13, *) { login = SMAppService.mainApp.status == .enabled }
         return [
-            "playAvailable": playHost.unavailableReason == nil, "playReason": playHost.unavailableReason ?? "", "playOpen": playHost.isOpen,
+            "sharePlayCounts": sharePlayCounts, "playAvailable": playHost.unavailableReason == nil, "playReason": playHost.unavailableReason ?? "", "playOpen": playHost.isOpen,
             "pro": isPro, "scene": sceneID, "categories": categories,
             "scenes": avail.map { s -> [String: Any] in
                 var d: [String: Any] = ["id": s.id, "title": s.title, "cat": s.category, "pro": s.pro, "music": s.music,

@@ -309,6 +309,7 @@ function render(state) {
     <p class="note" style="margin:5px 0 2px">${ENERGY_NOTE[S.energy] || ''}</p>
     ${S.energy === 'away' ? `<div class="row"><span class="note">Pause after</span></div>${chips(S.awayChoices, S.away, 'pickAway', { tag: true })}<p class="note" style="margin-top:3px">${S.away === S.awayRec ? 'Recommended — a good balance of battery and life on screen.' : `Recommended: ${esc(label(S.awayChoices, S.awayRec))}.`}</p>` : ''}
     <div class="row" style="margin-top:8px"><span>Frame rate</span><div style="width:190px">${chips(FPS, S.fps, 'pickFps', { tag: true })}</div></div>
+    <div class="row"><span>Share anonymous usage counts</span>${sw(S.sharePlayCounts !== false, 'togglePlayCounts')}</div><p class="note">Daily totals only. No identifiers, answers or article links.</p>
     <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>`)}
 
   ${sec('acct', S.pro ? 'wallpap Pro' : 'Free plan', S.pro ? 'all looks and features' : 'every scene, default looks', S.pro ? `

@@ -130,5 +130,11 @@ final class PlayHost {
 
 extension App {
     @objc func togglePlay() { playHost.toggle() }
-    func recordPlayEvent(_ event: String) { /* Analytics client installed in step 5. */ }
+    var sharePlayCounts: Bool { defaults.object(forKey: "sharePlayCounts") as? Bool ?? true }
+    @objc func togglePlayCounts() {
+        defaults.set(!sharePlayCounts, forKey: "sharePlayCounts")
+        if sharePlayCounts { playAnalytics.enabled = true } else { playAnalytics.disable() }
+        rebuildMenu()
+    }
+    func recordPlayEvent(_ event: String) { playAnalytics.record(event) }
 }

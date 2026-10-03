@@ -140,6 +140,10 @@ extension NSScreen {
 }
 
 final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSMenuDelegate, CLLocationManagerDelegate {
+    lazy var playAnalytics: PlayAnalytics = {
+        let client = PlayAnalytics(version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.12.1")
+        client.enabled = sharePlayCounts; client.start(); return client
+    }()
     lazy var playHost = PlayHost(app: self)
     var windows: [WallWindow] = []
     var status: NSStatusItem!
@@ -1044,6 +1048,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         let play = NSMenuItem(title: playHost.isOpen ? "Close Play" : "Play…", action: #selector(togglePlay), keyEquivalent: "")
         play.target = self; play.isEnabled = playHost.unavailableReason == nil; play.toolTip = playHost.unavailableReason
         menu.addItem(play)
+        let counts = NSMenuItem(title: "Share anonymous usage counts", action: #selector(togglePlayCounts), keyEquivalent: "")
+        counts.target = self; counts.state = sharePlayCounts ? .on : .off
+        counts.toolTip = "Daily totals only. No identifiers, puzzle answers or article links."
+        menu.addItem(counts)
         if !isPro {
             let up = NSMenuItem(title: "Unlock Pro — $5 one-time…", action: #selector(openPro), keyEquivalent: "")
             up.target = self

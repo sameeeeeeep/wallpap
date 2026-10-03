@@ -1,0 +1,8 @@
+OK swiss-pano-day 2172x724x
+OK shinkansen-pano-day 2172x724x
+OK orient-pano-day 2172x724x
+OK p-salaryman 2172x724x
+OK shinkansen-night 1586x992x
+OK p-chaiwala 2132x738x
+OK swiss-night 1586x992x
+OK orient-night 1586x992x

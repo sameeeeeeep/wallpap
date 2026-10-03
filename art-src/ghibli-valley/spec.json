@@ -1,0 +1,60 @@
+{
+  "id": "ghibli-valley",
+  "title": "Hillside Valley",
+  "style": "painted",
+  "plates": [
+    "day",
+    "dusk",
+    "night",
+    "overcast"
+  ],
+  "scene": "A wide, peaceful pastoral valley landscape painting in early summer. Composition, exactly:\n- Horizon at about 46% from the top of the frame; above it only sky.\n- Far away: soft blue-green distant mountains along the horizon, rising a little higher on the left.\n- Middle distance, left of centre (about 12-45% from the left): a small old European-style hillside town of white and cream houses with red terracotta roofs and one slim church bell tower, nestled on a gentle slope among round green trees.\n- Middle distance, crossing the valley from the left edge to about 72% from the left at about 52-60% from the top: a long old grey-stone railway viaduct with many tall arches over a little winding river; its flat top deck is clearly visible as a long straight line with an EMPTY railway track on it (no train).\n- Foreground left and centre (the lower third): rolling bright-green hills covered in tall, soft, wind-combed meadow grass with a few white and yellow wildflowers, and a winding pale dirt path.\n- Lower-left foreground: a small whitewashed farmhouse with a red roof and a little garden, and TWO tall thin wooden posts standing in the grass a few metres to its right (for a washing line — the line and the laundry are NOT painted).\n- No train, no people, no animals, no laundry, no text.",
+  "sky_area": "the top ~45% of the frame",
+  "calm": "only the soft grassy hillside sloping away, distant hills and plain sky",
+  "space": "Keep the sky, the viaduct deck and the open meadow grass clean: clouds, the train, laundry, birds and fireflies are added live.",
+  "preserve": "hills, meadow, path, town, roofs, church tower, viaduct, river, farmhouse, posts, trees and mountains",
+  "sunset_side": "left",
+  "surfaces": "the meadow grass (glowing gold), the roofs and the viaduct",
+  "light": {
+    "day": "a bright, clear early-summer late morning: warm sunlight from the upper left, soft clean shadows, glowing fresh greens, a luminous pale-to-deep blue sky gradient",
+    "night": "a calm, clear summer night: sky a plain deep blue gradient (no stars, no moon — added live), the whole landscape in cool moonlit blue tones with soft silvery highlights on the grass; warm yellow-orange light glowing from many of the little windows in the town and in the farmhouse windows, two small warm paper lanterns glowing by the farmhouse door, the church tower faintly lit"
+  },
+  "wet": "a soft grey rainy summer day: plain light-grey sky, the grass deep damp green, roofs wet and a little darker with a soft sheen, gentle mist lying in the valley and over the river",
+  "keys": {
+    "sky": "the whole sky (everything above the mountains and hills)",
+    "grass": "all the tall meadow grass on the hills (the grassy areas only — NOT the dirt path, NOT trees, NOT buildings, NOT the viaduct, NOT the far mountains)",
+    "roofs": "every roof surface of every house, the farmhouse and the church tower (the red / terracotta roofs only)",
+    "water": "the little river under the viaduct (its water surface only)",
+    "walls": "the vertical walls of every house, of the farmhouse and of the church tower, the vertical stone sides and arches of the viaduct, and the tree trunks (vertical surfaces only — NOT roofs, NOT grass, NOT the viaduct's flat top deck)"
+  },
+  "sheets": {
+    "clouds": {
+      "bg": "green",
+      "style": "Hand-painted animation background art in the tradition of classic Japanese animated films: gouache, soft confident brushwork, luminous.",
+      "prompt": "Subjects: four huge, separate, fluffy summer cumulus clouds, painted: bright sunlit white tops, soft lavender-blue shadowed undersides with flat bases, crisp cauliflower edges, each a different shape (one tall towering one, one long flat one, two medium round ones), arranged in a 2 x 2 grid, each fully surrounded by the green background with lots of space.",
+      "light": "Lighting: bright sun from the upper left."
+    },
+    "train": {
+      "prompt": "Subjects: a small, charming old-fashioned steam train in pure SIDE VIEW facing LEFT, split into four separate pieces in a single row from left to right with clear gaps between them: 1) a dark green and black steam locomotive with a tall chimney and red wheels, 2) a cream-and-maroon passenger carriage with windows, 3) an identical cream-and-maroon passenger carriage, 4) a small brown goods van. All at the same scale and on the same baseline, no rails, no smoke.",
+      "light": "Lighting: soft sunlight from the upper left."
+    },
+    "laundry": {
+      "bg": "green",
+      "prompt": "Subjects: eight separate pieces of washing hanging from an (invisible) line, each seen from the front, hanging straight down from a perfectly straight, horizontal top edge (as if pegged there), arranged in a 4 columns x 2 rows grid with lots of space: a large white bedsheet, a white pillowcase, a pale blue shirt, a red-and-white striped towel, a yellow summer dress, a small white towel, white socks pair, a light pink blouse. Soft folds, painted.",
+      "light": "Lighting: soft sunlight from the upper left."
+    },
+    "birds": {
+      "prompt": "Subjects: eight barn swallows in flight, arranged in a 4 columns x 2 rows grid, all at the same scale. Top row: seen from BELOW (wings spread, forked tail), four wing-beat frames (wings up, wings level, wings down, wings folded back). Bottom row: pure side view facing LEFT, four wing-beat frames. Dark blue backs, pale bellies, small rust-red throat. Painted.",
+      "light": "Lighting: soft sunlight from above."
+    }
+  },
+  "mask_ops": [
+    {
+      "name": "exposed",
+      "union": [
+        "walls"
+      ],
+      "invert": true
+    }
+  ]
+}

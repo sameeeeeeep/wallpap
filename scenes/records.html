@@ -13,6 +13,7 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script src="pet-motion.js"></script>
 <script>
 /* =====================================================================
@@ -41,6 +42,14 @@
          counter top         y 690…712, x ≥ 750 (cat sits at x ≈ 794)
          turntable platter   centre (958, 651), radius 88 (seen at 0.34 tilt)
          dog bed             centre (200, 824); dog lanes on the rug y ≈ 958
+     bg-overcast.png  day shop under cloud (blended over bg-day by cloud cover)
+     glass-mask.png   alpha = the painted window glass (cut from both paintings)
+     street-night.png / street-night-dry.png / street-day.png   1024² views through the window
+                      (night sky cut at load → live sky + shared moon.js); car-1..3.png passing cars
+     turntable.png    the deck on the counter (record, tonearm, lamp live); dogbed.png, bowls.png
+     LAYOUT: LW.layout side 'left' → drawn mirrored (MIR, upright() for text/art/deck/street); pets only
+     rest inside LW.layout.clear / outside avoid boxes. PETS on/off (LW.settings.pets): they walk out
+     off the left edge along the front of the shop and stay away; back in from there.
      ANIMALS — illustrated sprites come from the shared library
        art/sprites/cats/black/{walk1,walk2,sit,loaf,sleep,stretch}.png  (cat "Licorice")
        art/sprites/dogs/golden/{walk1,walk2,sit,lie,belly-up}.png      (pup "Biscuit")
@@ -130,18 +139,26 @@ function fitText(g, s, maxW) { s = s || ''; if (g.measureText(s).width <= maxW) 
 //  art slots (optional PNGs; procedural fallback is the default)
 // =====================================================================
 const ART = { dir: 'art/records/', img: {} };
-const ART_NAMES = ['bg-night', 'bg-day'];
+// bg-overcast: the day room under cloud (no sun patches); street-*: the painted view through the
+// window (night wet / night dry / day, 1024² plates); car-1..3: passing cars (side view, facing right);
+// turntable: the painted deck on the counter (record, tonearm and lamp stay live)
+const ART_NAMES = ['bg-night', 'bg-day', 'bg-overcast', 'street-night', 'street-night-dry', 'street-day', 'car-1', 'car-2', 'car-3', 'turntable', 'glass-mask', 'dogbed', 'bowls'];
+// dogbed / bowls: the pup's plush bed under the window (its front rim is redrawn over whoever lies in
+// it) and a pair of bowls on a little tray beside it
+// glass-mask: alpha = the painted window's glass (cut out of both paintings so the street shows
+// through, keeping the mullions, the sleeves and the cactus on the sill)
 function loadArtSlots() {
   for (const name of ART_NAMES) {
     try {
       const im = new Image();
-      im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; if (name.startsWith('bg-')) { clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); } };
+      im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); };
       im.onerror = () => {};
       im.src = ART.dir + name + '.png';
     } catch (e) { /* never let a missing asset matter */ }
   }
 }
 const artMode = () => !!(ART.img['bg-night'] || ART.img['bg-day']);
+const streetArt = () => !!(ART.img['street-night'] || ART.img['street-night-dry'] || ART.img['street-day']);
 
 // =====================================================================
 //  environment: time of day + weather (glides; never pops)
@@ -226,12 +243,27 @@ const envSnap = () => [...ENV_KEYS.map((q) => E[q] * (q === 'litFrac' ? 0.5 : 1)
 let dpr = 1, cssW = 1, cssH = 1, K = 1, OX = 0, OY = 0, U = 1, W = 1600;
 const H = 1000;
 let L = null;
-function setW(g, sc = 1) { g.setTransform(U * sc, 0, 0, U * sc, OX * dpr * sc, OY * dpr * sc); }
-const devX = (x) => OX * dpr + x * U, devY = (y) => OY * dpr + y * U;
-const toWorld = (px, py) => [(px - OX) / K, (py - OY) / K];
+// DESKTOP LAYOUT (LW.layout): with the user's widgets on the LEFT the whole shop is drawn mirrored
+// (MIR) so the hero wall, turntable and pets' spots land in the free band and the calm door / booth
+// corner sits under the widgets. Text, artwork, the deck (right-hand tonearm) and the street through
+// the glass are drawn upright().
+let MIR = false;
+function setW(g, sc = 1) { if (MIR) g.setTransform(-U * sc, 0, 0, U * sc, (cv.width - OX * dpr) * sc, OY * dpr * sc); else g.setTransform(U * sc, 0, 0, U * sc, OX * dpr * sc, OY * dpr * sc); }
+const devX = (x) => (MIR ? cv.width - OX * dpr - x * U : OX * dpr + x * U), devY = (y) => OY * dpr + y * U;
+const toWorld = (px, py) => [((MIR ? cssW - px : px) - OX) / K, (py - OY) / K];
+function upright(g, cx, fn) { if (!MIR) return fn(); g.save(); g.translate(cx, 0); g.scale(-1, 1); g.translate(-cx, 0); try { fn(); } finally { g.restore(); } }
+// the free band of the desktop (LW.layout.clear) in world x, and the host's avoid boxes
+function clearW() { const c = (LW.layout && LW.layout.clear) || [0, 0.72], a = toWorld(c[0] * cssW, 0)[0], b = toWorld(c[1] * cssW, 0)[0]; return [Math.min(a, b), Math.max(a, b)]; }
+function inAvoid(x, y) {
+  const A = (LW.layout && LW.layout.avoid) || []; if (!A.length) return false;
+  const px = devX(x) / cv.width, py = devY(y) / cv.height;
+  return A.some(([ax, ay, aw, ah]) => px > ax && px < ax + aw && py > ay && py < ay + ah);
+}
+const restOK = (x, y) => { const [a, b] = clearW(); return x > a + 30 && x < b - 30 && !inAvoid(x, y); };
 function computeLayout() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   cssW = Math.max(1, innerWidth); cssH = Math.max(1, innerHeight);
+  MIR = !!(LW.layout && LW.layout.side === 'left');
   if (cssW * cssH * dpr * dpr > 9.5e6) dpr = Math.sqrt(9.5e6 / (cssW * cssH));
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
@@ -290,6 +322,23 @@ function computeLayout() {
   o.lamp = { x: o.tt.px1 + 112, y: o.counter.back + 6 };
   o.phones = { x: o.lamp.x + 128, y: o.counter.back + 16 };
   o.till = W - 84 > o.phones.x + 170 ? { x: W - 84, y: o.counter.back + 8 } : null;
+  // the painted deck (art/records/turntable.png) standing on the counter: its record, tonearm and
+  // pilot lamp stay live; geometry measured on the art
+  o.tt.a0 = 0; o.tt.pz = 6; o.tt.rz = 4; o.tt.spr = null; o.ledPosA = null;
+  const TS = ART.img.turntable;
+  if (TS && artMode()) {
+    const A = TT_ART, sw = 256, sh = TS.naturalHeight * sw / TS.naturalWidth, feet = o.counter.back + 16;
+    const sx = o.counter.x0 + 104, sy = feet - sh, P = (fx, fy) => [sx + fx * sw, sy + fy * sh];
+    const [pcx, pcy] = P(A.cx, A.cy);
+    Object.assign(o.tt, { R: A.r * sw, q: A.q, cx: pcx, cy: pcy, px0: sx, px1: sx + sw, pv: (feet - pcy) / A.q, spr: { x: sx, y: sy, w: sw, h: sh, im: TS } });
+    const g2t = (fx, fy) => { const [x, y] = P(fx, fy); return { u: x - pcx, v: (y - pcy) / A.q }; };
+    const pv = g2t(A.piv[0], A.piv[1]), rs = g2t(A.rest[0], A.rest[1]);
+    o.tt.piv = pv; o.tt.pz = A.piv[2] * sw; o.tt.rz = A.rest[2] * sw;
+    o.tt.a0 = Math.atan2(rs.u - pv.u, rs.v - pv.v); o.tt.arm = Math.hypot(pv.u, pv.v) * 0.97;
+    o.ledPosA = P(A.led[0], A.led[1]);
+    const phiFor2 = (r) => { let best = 0, bd = 1e9; for (let p = 0; p < 2.4; p += 0.002) { const u = pv.u + Math.sin(o.tt.a0 - p) * o.tt.arm, v = pv.v + Math.cos(o.tt.a0 - p) * o.tt.arm; const d = Math.abs(Math.hypot(u, v) - r); if (d < bd) { bd = d; best = p; } } return best; };
+    o.tt.phiOut = phiFor2(o.tt.R * 0.93); o.tt.phiIn = phiFor2(o.tt.R * 0.5);
+  }
   // dog bed under the window
   o.dog = { x: x0 + Math.min(140, ww * 0.38), y: 822, k: 0.95 };
   o.bed = { cx: o.dog.x + 4, cy: o.dog.y + 2, rx: clamp(ww * 0.3, 104, 124), ry: 30 };
@@ -344,6 +393,15 @@ function computeLayout() {
   const w = o.win;
   o.st = { fac: w.y0 + w.h * 0.7, st: w.y0 + w.h * 0.7 + 14, near: w.y0 + w.h * 0.885 };
   o.st.lampX = w.x0 + w.w * 0.8; o.st.lampY = w.y0 + w.h * 0.2;
+  // painted street plate (square, as tall as the window canvas, centred across it)
+  { const ps = w.h + 4; o.plate = { x: w.x0 + w.w / 2 - ps / 2, y: w.y0 - 2, s: ps }; }
+  o.mU = 25; o.lanes = null;
+  if (streetArt()) {
+    const P = o.plate, py = (f) => P.y + f * P.s;
+    o.st.fac = py(0.64); o.st.st = py(0.69); o.st.near = py(0.9);
+    o.st.lampX = P.x + 0.792 * P.s; o.st.lampY = py(0.352);
+    o.lanes = { far: py(0.775), near: py(0.865) };
+  }
   o.bld = genBuildings(o);
   const pane = [], mw = 12, tb = 12;
   for (let i = 0; i < 3; i++) { const a = w.x0 + (w.w * i) / 3 + (i ? mw / 2 : 0), b = w.x0 + (w.w * (i + 1)) / 3 - (i < 2 ? mw / 2 : 0); pane.push([a, w.y0, b - a, w.th]); }
@@ -385,7 +443,7 @@ function lightAt(x, y) {
 function paintLightMap(g, sc) {
   setW(g, sc);
   g.globalCompositeOperation = 'source-over';
-  g.fillStyle = rgba(E.amb.map((v) => v * 255)); g.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20);
+  g.fillStyle = rgba(E.amb.map((v) => v * 255)); g.fillRect(-2400, -10, W + 4800, H + 20);
   g.globalCompositeOperation = 'lighter';
   for (const l of L.lights) { const lv = lightLevel(l); if (lv > 0.002) ellGrad(g, l.x, l.y, l.rx, l.ry, l.c.map((v) => v * 255), l.k * lv, 10); }
   const w = L.win;
@@ -485,10 +543,17 @@ function bakeRoom() {
     const first = n || d;
     LW.roomImage(g,first,'#302e32','#20191b');
     if (n && d && E.day > 0.01) { g.globalAlpha = E.day; LW.roomImage(g,d,'#302e32','#20191b'); g.globalAlpha = 1; }
+    // overcast / rainy days: the same shop without the patches of sun
+    const ov = ART.img['bg-overcast'], ovK = clamp((E.cloud - 0.3) / 0.55, 0, 1) * clamp(E.day, 0, 1);
+    if (ov && d && ovK > 0.01) { g.globalAlpha = ovK; LW.roomImage(g,ov,'#302e32','#20191b'); g.globalAlpha = 1; }
     else if (!d && E.day > 0.01) { g.globalCompositeOperation = 'screen'; g.fillStyle = rgba([120, 120, 120], E.day * 0.5); g.fillRect(0, 0, 1600, 1000); g.globalCompositeOperation = 'source-over'; }
     LW.roomGrade(g, 0, 0, 1600, 1000, E.day);
     // keep the glass see-through
-    g.globalCompositeOperation = 'destination-out'; L.panes.forEach(([x, y, pw, ph]) => g.fillRect(x, y, pw, ph)); g.globalCompositeOperation = 'source-over';
+    g.globalCompositeOperation = 'destination-out';
+    if (ART.img['glass-mask']) g.drawImage(ART.img['glass-mask'], 0, 0, 1600, 1000); else L.panes.forEach(([x, y, pw, ph]) => g.fillRect(x, y, pw, ph));
+    g.globalCompositeOperation = 'source-over';
+    if (L.tt.spr) paintTTSprite(g); else upright(g, (L.tt.px0 + L.tt.px1) / 2, () => paintTurntableBase(g));
+    paintPetThings(g);
     paintVignette(g);
     return;
   }
@@ -702,7 +767,7 @@ function paintFaceouts(g) {
   }
   // hand-written cards
   const r = mulberry(5);
-  for (const [side, txt] of [['left', 'staff picks'], ['right', 'new in ✶']]) {
+  for (const [side, txt] of [['left', 'staff picks'], ['right', 'new in']]) {
     const lg = L['ledge_' + side]; if (!lg) continue;
     const x = (lg.x0 + lg.x1) / 2, y = 318 + 9;
     g.save(); g.translate(x, y); g.rotate((r() - 0.5) * 0.08);
@@ -915,6 +980,52 @@ function paintCounter(g) {
   g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(x0 - 6, c.top + 12, w + 6, 6);
 }
 const ttP = (u, v, z = 0) => [L.tt.cx + u, L.tt.cy + v * L.tt.q - z];
+// measured on art/records/turntable.png (fractions of its width / height; z = height above the top
+// plate in widths): platter centre, record radius, ellipse ratio, arm pivot, arm rest, pilot lamp
+const TT_ART = { cx: 0.425, cy: 0.283, r: 0.262, q: 0.383, piv: [0.76, 0.184, 0.04], rest: [0.867, 0.324, 0.06], led: [0.772, 0.599] };
+function litSprite(im, x, y, w, h) {
+  const c = newCanvas(im.naturalWidth || im.width, im.naturalHeight || im.height), g = c.getContext('2d');
+  g.drawImage(im, 0, 0);
+  const a = lightAt(x + w / 2, y), b = lightAt(x + w / 2, y + h), gr = g.createLinearGradient(0, 0, 0, c.height);
+  const f = (l) => rgba(l.map((v) => clamp(v * 1.02, 0, 1) * 255));
+  gr.addColorStop(0, f(a)); gr.addColorStop(1, f(b));
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0);
+  return c;
+}
+function paintPetThings(g) {
+  L.bedSpr = null;
+  const B = ART.img.dogbed, W2 = ART.img.bowls;
+  if (B) {
+    const w = 236, h = w * B.naturalHeight / B.naturalWidth, x = L.bed.cx - w * 0.5, y = L.bed.cy - h * 0.6;
+    const c = litSprite(B, x, y, w, h);
+    g.fillStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.ellipse(L.bed.cx, y + h * 0.9, w * 0.5, h * 0.16, 0, 0, TAU); g.fill();
+    g.drawImage(c, x, y, w, h);
+    L.bedSpr = { c, x, y, w, h };
+  }
+  if (W2) {
+    const w = 74, h = w * W2.naturalHeight / W2.naturalWidth, x = L.bed.cx - 118 - w - 6, y = L.bed.cy + 22 - h;
+    if (x > L.win.x0 - 30) {
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(x + w / 2, y + h - 1, w * 0.52, 4, 0, 0, TAU); g.fill();
+      g.drawImage(litSprite(W2, x, y, w, h), x, y, w, h);
+    }
+  }
+}
+// the bed's front rim in front of whoever is lying in it
+function drawBedFront(g, a) {
+  const S = L.bedSpr; if (!S || a.away) return;
+  if (Math.abs(a.x - L.bed.cx) > S.w * 0.45 || Math.abs(a.y - L.bed.cy) > 26) return;
+  const sy = 0.66, c = S.c;
+  g.drawImage(c, 0, c.height * sy, c.width, c.height * (1 - sy), S.x, S.y + S.h * sy, S.w, S.h * (1 - sy));
+}
+function paintTTSprite(g) {
+  const S = L.tt.spr, c = litSprite(S.im, S.x, S.y, S.w, S.h), mx = S.x + S.w / 2;
+  upright(g, mx, () => {
+    g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.ellipse(mx, S.y + S.h - 2, S.w * 0.5, 5, 0, 0, TAU); g.fill();
+    g.drawImage(c, S.x, S.y, S.w, S.h);
+  });
+  L.ledPos = L.ledPosA;
+}
 function paintTurntableBase(g) {
   const t = L.tt, R = t.R, q = t.q;
   const x0 = t.px0, x1 = t.px1, yT0 = t.cy - t.pv * q, yT1 = t.cy + t.pv * q, fh = 22;
@@ -1060,19 +1171,128 @@ function paintEmissive(g) {
 function paintVignette(g) {
   const gr = g.createRadialGradient(W * 0.5, H * 0.55, H * 0.32, W * 0.5, H * 0.55, Math.max(W, H) * 0.82);
   gr.addColorStop(0, 'rgba(10,5,4,0)'); gr.addColorStop(1, `rgba(10,5,4,${0.5 + 0.2 * (1 - E.day)})`);
-  g.globalCompositeOperation = 'source-atop'; g.fillStyle = gr; g.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20);
+  g.globalCompositeOperation = 'source-atop'; g.fillStyle = gr; g.fillRect(-2400, -10, W + 4800, H + 20);
   const tg = g.createLinearGradient(0, 0, 0, 160);
   tg.addColorStop(0, `rgba(8,4,3,${0.6 - 0.25 * E.day})`); tg.addColorStop(1, 'rgba(8,4,3,0)');
-  g.fillStyle = tg; g.fillRect(-OX / K - 10, 0, W + 2 * OX / K + 20, 160);
+  g.fillStyle = tg; g.fillRect(-2400, 0, W + 4800, 160);
   // top-right stays quiet for desktop icons
   const rg = g.createRadialGradient(W, 0, 0, W, 0, 520);
   rg.addColorStop(0, `rgba(8,4,3,${0.35 - 0.15 * E.day})`); rg.addColorStop(1, 'rgba(8,4,3,0)');
-  g.fillStyle = rg; g.fillRect(W - 520, 0, 520 + OX / K + 10, 520);
+  g.fillStyle = rg; g.fillRect(W - 520, 0, 520 + 2400, 520);
   g.globalCompositeOperation = 'source-over';
 }
 
 // ----- the street outside ------------------------------------------------------
-function bakeStreet() { winCanvasSize(streetCv); const g = streetCv.getContext('2d'); setWinT(g); paintStreet(g); }
+function bakeStreet() { winCanvasSize(streetCv); const g = streetCv.getContext('2d'); setWinT(g); if (streetArt()) paintStreetArt(g); else paintStreet(g); bakeCars(); }
+// ---- the painted street (art/records/street-*.png): night wet / night dry crossfade with how wet the
+// road is, day fades in with daylight; the weather then grades it; the live sky + real moon sit behind
+// the roofs of the night plates
+function skyCut(im) {
+  if (!im) return im;
+  if (im._sky) return im._sky;
+  try {
+    const w = im.naturalWidth, h = im.naturalHeight, c = newCanvas(w, h), g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0);
+    const hh = Math.round(h * 0.16), d = g.getImageData(0, 0, w, hh), a = d.data;
+    for (let y = 0; y < hh; y++) for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4, r = a[o], gg = a[o + 1], b = a[o + 2];
+      if (b > r + 14 && b >= gg && r + gg + b < 260) a[o + 3] = Math.round(255 * clamp((y / hh - 0.82) / 0.18, 0, 1));
+    }
+    g.putImageData(d, 0, 0);
+    im._sky = c;
+  } catch (e) { im._sky = im; }
+  return im._sky;
+}
+function paintStreetArt(g) {
+  const P = L.plate, A = ART.img, y = (f) => P.y + f * P.s;
+  const dry = skyCut(A['street-night-dry'] || A['street-night']), wet = skyCut(A['street-night'] || A['street-night-dry']), day = A['street-day'];
+  const im = (q, a) => { if (q && a > 0.003) { g.globalAlpha = Math.min(1, a); g.drawImage(q, P.x, P.y, P.s, P.s); } };
+  const sy1 = y(0.16), sk = g.createLinearGradient(0, P.y, 0, sy1);
+  sk.addColorStop(0, rgba(E.top)); sk.addColorStop(1, rgba(E.bot));
+  g.fillStyle = sk; g.fillRect(P.x, P.y, P.s, sy1 - P.y);
+  if (E.day < 0.5) {
+    const r = mulberry(5), sa = (1 - E.day * 2) * (1 - E.cloud * 0.8);
+    g.fillStyle = `rgba(255,255,240,${0.55 * sa})`;
+    for (let i = 0; i < 30; i++) g.fillRect(P.x + r() * P.s, P.y + r() * 0.12 * P.s, 1.2, 1.2);
+    if (E.moon > 0.05 && LW.drawMoon) LW.drawMoon(g, P.x + 0.5 * P.s, y(0.05), 9, { alpha: E.moon, glow: 0.5, haze: E.cloud * 0.6 + E.fog });
+  }
+  g.globalAlpha = 1;
+  if (dry || wet) { im(dry || wet, 1); if (wet !== dry) im(wet, smooth(E.wet)); }
+  im(day, (dry || wet) ? smooth(clamp((E.day - 0.08) / 0.8, 0, 1)) : 1);
+  g.globalAlpha = 1;
+  if (E.warm > 0.02) { g.globalCompositeOperation = 'soft-light'; g.fillStyle = rgba([255, 170, 110], 0.35 * E.warm); g.fillRect(P.x, P.y, P.s, P.s); }
+  const grey = clamp((E.cloud - 0.2) / 0.8, 0, 1) * clamp(E.day * 1.6, 0, 1) * 0.85;
+  if (grey > 0.01) {
+    g.globalCompositeOperation = 'saturation'; g.fillStyle = `rgba(128,128,128,${0.55 * grey})`; g.fillRect(P.x, P.y, P.s, P.s);
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba([196, 204, 214], grey); g.fillRect(P.x, P.y, P.s, P.s);
+    g.globalCompositeOperation = 'source-over';
+    const sg = g.createLinearGradient(0, P.y, 0, y(0.12)); sg.addColorStop(0, rgba(mix3(E.top, [190, 196, 204], 0.5), grey)); sg.addColorStop(1, rgba(mix3(E.bot, [190, 196, 204], 0.5), 0));
+    g.fillStyle = sg; g.fillRect(P.x, P.y, P.s, y(0.12) - P.y);
+  }
+  g.globalCompositeOperation = 'source-over';
+  const wd = E.wet * clamp(E.day * 1.5, 0, 1);
+  if (wd > 0.02) {
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba([150, 158, 170], wd); g.fillRect(P.x, y(0.68), P.s, P.s * 0.32);
+    g.globalCompositeOperation = 'screen'; const sh = g.createLinearGradient(0, y(0.69), 0, y(0.92));
+    sh.addColorStop(0, rgba([200, 208, 220], 0.28 * wd)); sh.addColorStop(1, rgba([200, 208, 220], 0.05 * wd));
+    g.fillStyle = sh; g.fillRect(P.x, y(0.69), P.s, P.s * 0.23);
+  }
+  g.globalCompositeOperation = 'source-over';
+  if (E.fog > 0.02) { const fc = mix3([70, 78, 92], [205, 210, 215], E.day); g.fillStyle = rgba(fc, 0.55 * E.fog); g.fillRect(P.x, P.y, P.s, y(0.68) - P.y); g.fillStyle = rgba(fc, 0.3 * E.fog); g.fillRect(P.x, y(0.68), P.s, P.s * 0.32); }
+  if (E.snowCover > 0.02) {
+    // snow settles in patches (the cobbles / asphalt show through), thicker on the pavements, with the
+    // two lanes worn darker by the traffic; it builds up with E.snowCover and melts back the same way
+    const sc = smooth(E.snowCover), col = mix3([150, 162, 190], [238, 242, 248], E.day), r = mulberry(17);
+    const blot = (x0, x1, y0, y1, n, a, sz) => { g.fillStyle = rgba(col, a); for (let i = 0; i < n; i++) { const yy = y0 + r() * (y1 - y0), k = 0.5 + 0.5 * (yy - P.y) / P.s; g.beginPath(); g.ellipse(x0 + r() * (x1 - x0), yy, sz * k * (0.6 + r()), sz * k * 0.3 * (0.6 + r()), 0, 0, TAU); g.fill(); } };
+    g.globalCompositeOperation = 'screen'; g.fillStyle = rgba(col.map((v) => v * 0.55), 0.6 * sc); g.fillRect(P.x, y(0.645), P.s, P.s * (1 - 0.645));
+    g.globalCompositeOperation = 'source-over';
+    blot(P.x, P.x + P.s, y(0.645), y(0.69), Math.round(160 * sc), 0.35 * sc, 10);
+    blot(P.x, P.x + P.s, y(0.69), P.y + P.s, Math.round(420 * sc), 0.22 * sc, 16);
+    if (L.lanes) for (const ly of [L.lanes.far, L.lanes.near]) { const tg = g.createLinearGradient(0, ly - 7, 0, ly + 3); tg.addColorStop(0, 'rgba(40,44,56,0)'); tg.addColorStop(0.5, `rgba(40,44,56,${0.35 * sc})`); tg.addColorStop(1, 'rgba(40,44,56,0)'); g.fillStyle = tg; g.fillRect(P.x, ly - 7, P.s, 10); }
+    blot(P.x, P.x + P.s, P.y + P.s * 0.015, P.y + P.s * 0.11, Math.round(70 * sc), 0.5 * sc, 9);   // roofs and sills
+  }
+  if (E.city > 0.05) { g.globalCompositeOperation = 'lighter'; ellGrad(g, L.st.lampX, y(0.665), 60, 18, [255, 200, 130], 0.18 * E.city); g.globalCompositeOperation = 'source-over'; }
+}
+const CAR_LEN = { 1: 3.0, 2: 3.1, 3: 3.7 };   // metres
+let carTint = {};
+function bakeCars() {
+  carTint = {};
+  const sl = skyLight(), lit = mix3(sl, [0.62, 0.5, 0.38], 0.5 * E.city);
+  for (const i of [1, 2, 3]) {
+    const im = ART.img['car-' + i]; if (!im) continue;
+    const c = newCanvas(im.naturalWidth, im.naturalHeight), g = c.getContext('2d');
+    g.drawImage(im, 0, 0);
+    g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lit.map((v) => clamp(v * 1.05, 0, 1) * 255)); g.fillRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0);
+    carTint[i] = c;
+  }
+}
+function drawCarArt(g, c) {
+  const im = carTint[c.i]; if (!im) return;
+  const len = CAR_LEN[c.i] * L.mU * c.k, h = len * im.height / im.width, x = c.x, y = c.y, d = c.dir, n = E.city;
+  g.fillStyle = `rgba(0,0,0,${0.32 + 0.1 * E.day})`; g.beginPath(); g.ellipse(x, y - 1, len * 0.47, 3.2 * c.k, 0, 0, TAU); g.fill();
+  g.save(); g.translate(x, y); g.scale(d, 1);
+  if (E.wet > 0.08) { g.save(); g.scale(1, -0.55); g.globalAlpha = 0.16 * E.wet; g.drawImage(im, -len / 2, -h, len, h); g.restore(); }
+  g.globalAlpha = 1; g.drawImage(im, -len / 2, -h, len, h);
+  g.restore();
+  if (n > 0.05) {
+    const fx = x + d * len * 0.485, fy = y - h * 0.5, bx = x - d * len * 0.49, by = y - h * 0.52;
+    g.globalCompositeOperation = 'lighter';
+    const bg = g.createLinearGradient(fx, 0, fx + d * 150 * c.k, 0);
+    bg.addColorStop(0, rgba([255, 228, 178], 0.2 * n)); bg.addColorStop(1, rgba([255, 228, 178], 0));
+    g.fillStyle = bg; g.beginPath(); g.moveTo(fx, fy - 2); g.lineTo(fx + d * 150 * c.k, fy - 12 * c.k); g.lineTo(fx + d * 150 * c.k, y + 3); g.lineTo(fx, y); g.closePath(); g.fill();
+    drawSpriteRaw(g, GLOW_WARM, fx, fy, 22 * c.k, 0.9 * n);
+    drawSpriteRaw(g, GLOW_PINK, bx, by, 13 * c.k, 0.7 * n);
+    if (E.wet > 0.05) {
+      const rg = g.createLinearGradient(0, y, 0, y + 34 * c.k);
+      rg.addColorStop(0, rgba([255, 220, 170], 0.32 * n * E.wet)); rg.addColorStop(1, rgba([255, 220, 170], 0));
+      g.fillStyle = rg; g.fillRect(fx - 5, y, 10, 34 * c.k);
+    }
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = rgba([255, 246, 222], n); g.beginPath(); g.ellipse(fx - d * 1.5, fy, 2.6 * c.k, 2.2 * c.k, 0, 0, TAU); g.fill();
+    g.fillStyle = rgba([255, 70, 60], 0.9 * n); g.beginPath(); g.ellipse(bx + d * 1.2, by, 1.6 * c.k, 2.2 * c.k, 0, 0, TAU); g.fill();
+  }
+}
 function skyLight() {
   const n = [0.11, 0.12, 0.19], d = [0.94, 0.93, 0.92];
   let m = mix3(n, d, E.day);
@@ -1092,9 +1312,7 @@ function paintStreet(g) {
   if (E.moon > 0.05) {
     const lb = L.bld.find((b) => b.low && b.x0 > w.x0 - 40 && b.x1 < w.x1 + 40) || L.bld.find((b) => b.low);
     const mx = lb ? (lb.x0 + lb.x1) / 2 + 20 : w.x0 + w.w * 0.3, my = lb ? Math.min(lb.top - 60, w.y0 + w.h * 0.12) : w.y0 + w.h * 0.08;
-    ellGrad(g, mx, my, 70, 70, [200, 210, 255], 0.25 * E.moon);
-    g.fillStyle = rgba([238, 236, 222], E.moon); g.beginPath(); g.arc(mx, my, 13, 0, TAU); g.fill();
-    g.fillStyle = rgba(E.top, 0.9 * E.moon); g.beginPath(); g.arc(mx + 6, my - 3, 12, 0, TAU); g.fill();
+    if (LW.drawMoon) LW.drawMoon(g, mx, my, 13, { alpha: E.moon, glow: 0.5, haze: E.cloud * 0.5 + E.fog });   // the shared photoreal moon, real phase
     g.fillStyle = `rgba(255,255,240,${0.6 * E.moon})`;
     for (let i = 0; i < 26; i++) { const sx = x0 + r() * (x1 - x0), sy = y0 + r() * w.h * 0.3; g.fillRect(sx, sy, 1.3, 1.3); }
   }
@@ -1265,6 +1483,7 @@ function bakeFront() {
   setWinT(g);
   const w = L.win, S = L.st, sl = skyLight(), lx = S.lampX, ly = S.lampY;
   const pc = rgba(mul([34, 36, 40], mix3(sl, [1, 1, 1], 0.15)));
+  if (!streetArt()) {   // (the painted street has its own lamp post)
   g.fillStyle = pc;
   g.fillRect(lx - 4, ly + 20, 8, w.y1 - ly); g.fillRect(lx - 8, S.near + 40, 16, w.y1 - S.near);
   g.beginPath(); g.moveTo(lx - 16, ly - 18); g.lineTo(lx + 16, ly - 18); g.lineTo(lx + 11, ly + 16); g.lineTo(lx - 11, ly + 16); g.closePath(); g.fill();
@@ -1272,6 +1491,7 @@ function bakeFront() {
   g.fillRect(lx - 7, ly + 16, 14, 8);
   const lampOn = clamp(E.city * 1.3, 0, 1);
   g.fillStyle = rgba(mix3(mul([120, 120, 110], sl), [255, 226, 170], lampOn)); g.fillRect(lx - 11, ly - 14, 22, 27);
+  }
   g.globalCompositeOperation = 'lighter';
   g.fillStyle = 'rgba(255,255,255,0.025)';
   for (const [a, b2] of [[0.1, 0.16], [0.2, 0.22], [0.58, 0.66]]) { g.beginPath(); g.moveTo(w.x0 + w.w * a, w.y0); g.lineTo(w.x0 + w.w * b2, w.y0); g.lineTo(w.x0 + w.w * b2 - 160, w.y1); g.lineTo(w.x0 + w.w * a - 160, w.y1); g.closePath(); g.fill(); }
@@ -1432,7 +1652,7 @@ function buildSleeve() {
     g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(-15, -12, 32, 30);
     g.fillStyle = '#f6e27a'; g.fillRect(-16, -14, 32, 30);
     g.fillStyle = '#4a3a20'; g.font = `5.6px ${HAND}`; g.textAlign = 'center';
-    g.fillText('put a', 0, -4); g.fillText('record on', 0, 3); g.fillText('♪', 0, 10);
+    g.fillText('put a', 0, -4); g.fillText('record on', 0, 3); g.strokeStyle = '#4a3a20'; noteGlyph(g, -1.5, 11, 0.16, 1);
     g.restore();
   } else if (music.art) {
     g.drawImage(music.art, 0, 0, 100, 100);
@@ -1528,7 +1748,7 @@ function bakeBoard(s) {
     }
   };
   const cream = 'rgba(246,242,234,0.96)';
-  line((s.kind === 'play' ? '♪ ' : '') + s.head, 12, 21, accent, bw - 30);
+  line(s.head, 12, 21, accent, bw - 30);
   // title: one line if it fits at a decent size, else wrap to two
   const maxW = bw - 26;
   let t = (s.title || '').toUpperCase(), size = 26;
@@ -1996,6 +2216,7 @@ function loadSprites() {
   for (const kind in SPR) {
     const S = SPR[kind];
     S.seq = LW.petSeqLoad('art/sprites/', S.shared.slice(12, -1));   // drawn in-between frames (t/)
+    S.cyc = LW.petCycleLoad('art/sprites/', S.shared.slice(12, -1));   // drawn gait cycles (cycle/), see cycName
     for (const name of S.names) {
       const tryLoad = (src, fallback) => {
         const im = new Image();
@@ -2008,10 +2229,28 @@ function loadSprites() {
   }
 }
 const sprReady = (S) => S.n === S.names.length;
+// a soft rim of light on the edge of a pet that faces the brighter side of the room (lamps at night,
+// the window by day): computed with the pet's own tint, so it costs nothing per frame
+function rimFor(p) {
+  const lL = lum(lightAt(p.x - 70, p.y - 40)), lR = lum(lightAt(p.x + 70, p.y - 40)), hi = Math.max(lL, lR);
+  const k = clamp((hi - 0.42) * 0.9, 0, 0.32) * clamp(Math.abs(lL - lR) * 8, 0.35, 1);
+  const warm = clamp(E.lamp * (1 - E.day * 0.7), 0, 1), c = mix3([214, 228, 255], [255, 196, 132], warm);
+  return { s: (lL > lR ? 1 : -1) * p.face, k: Math.round(k * 20) / 20, c };
+}
+function addRim(p, g, img, R) {
+  if (!R || R.k < 0.04) return;
+  const w = g.canvas.width, h = g.canvas.height, t = p.rimC || (p.rimC = document.createElement('canvas'));
+  if (t.width !== w || t.height !== h) { t.width = w; t.height = h; }
+  const q = t.getContext('2d'), d = Math.max(2, w * 0.022);
+  q.globalCompositeOperation = 'source-over'; q.clearRect(0, 0, w, h); q.drawImage(img, 0, 0);
+  q.globalCompositeOperation = 'destination-out'; q.drawImage(img, R.s * d, d * 0.35);
+  q.globalCompositeOperation = 'source-in'; q.fillStyle = rgba(R.c); q.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'lighter'; g.globalAlpha = R.k; g.drawImage(t, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+}
 function tintedFor(a, name, im) {
   // per-animal cache of tinted poses: re-tinted only when the light at the animal changes
-  const lt = a.light.map((v) => clamp(lerp(v, 1, 0.12), 0, 1));
-  const key = lt.map((v) => Math.round(v * 48)).join(',');
+  const lt = a.light.map((v) => clamp(lerp(v, 1, 0.12), 0, 1)), R = a.rim || null;
+  const key = lt.map((v) => Math.round(v * 48)).join(',') + (R ? '|' + R.s + R.k + R.c.map((v) => v | 0) : '');
   const own = a.tint || (a.tint = {});
   let e = own[name];
   if (!e) e = own[name] = { cv: newCanvas(im.naturalWidth, im.naturalHeight), key: '' };
@@ -2021,6 +2260,7 @@ function tintedFor(a, name, im) {
     g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => v * 255)); g.fillRect(0, 0, e.cv.width, e.cv.height);
     g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0);
     g.globalCompositeOperation = 'source-over';
+    addRim(a, g, im, R);
     e.key = key;
   }
   return e.cv;
@@ -2041,7 +2281,7 @@ function seqName(a, S, kind, name) {
   if (!T) return name;
   LW.petSeqPrep(T, (f) => { const n = f === 'sleep' ? sleepN : f, im = S.img[n]; return im ? { im, k: LW.petPoseScale(kind, n, S.img.walk1, im), fa: 0.5 } : null; });
   for (const n in T.img) if (!S.img[n]) S.img[n] = T.img[n];
-  const fam = name === 'walk2' ? 'walk1' : name === sleepN ? 'sleep' : name.startsWith('jump-') ? 'jump' : name;
+  const fam = isWalk(name) ? 'walk1' : name === sleepN ? 'sleep' : name.startsWith('jump-') ? 'jump' : name;
   const f = LW.petSeqStep(a, T, fam, a.face, nowS());
   return f && S.img[f] ? f : name;
 }
@@ -2052,14 +2292,24 @@ function drawPetSprite(g, a, S, st, sx, sy, dy) {
   LW.petComposite(g,a,f.layers.map(layer=>{
     const im=S.img[layer.pose],pk=LW.petPoseScale(S===SPR.cat?'cat':'dog',layer.pose,S.img.walk1,im);
     const w=im.naturalWidth*unit*pk,h=im.naturalHeight*unit*pk;
-    return {image:tintedFor(a,layer.pose,im),x:-w/2,y:-h,w,h,alpha:layer.alpha};
+    return {image:tintedFor(a,layer.pose,im),x:-w*(im.petFa!=null?im.petFa:.5),y:-h,w,h,alpha:layer.alpha};
   }));g.restore();
 }
-const isWalk = (n) => n === 'walk1' || n === 'walk2';
+const isWalk = (n) => n === 'walk1' || n === 'walk2' || /^(walk|run)-\d/.test(n);
+// the drawn gait cycle frame for an animal on the move: by distance walked (sprite units),
+// settling onto a contact frame as it slows; null → the old walk1/walk2 swap
+function cycName(a, S, kind, dist) {
+  const C = S.cyc; if (!C || !S.img.walk1) return null;
+  LW.petCyclePrep(C, { im: S.img.walk1, k: 1, fa: 0.5 });
+  for (const n in C.img) if (!S.img[n]) S.img[n] = C.img[n];
+  const now = nowS(), dt = a.gaitT ? Math.min(0.1, now - a.gaitT) : 0; a.gaitT = now;
+  const f = LW.petGait(a, C, dist, LW.petUnit(kind, S.img.walk1) * S.img.walk1.naturalHeight, 'walk', { dt });
+  return f && S.img[f] ? f : null;
+}
 function catSpriteName(c) {
   if (c.act && c.act.t === 'hop' && c.act.from && c.hopPh && SPR.cat.seq && SPR.cat.seq.has('jump')) return LW.petJumpFrame(c.hopPh, c.hopU);
   if (c.act && c.act.t === 'hop' && c.act.from) return 'walk2';
-  if (c.walk > 0.4) return Math.floor(c.gait * 2.6) % 2 ? 'walk2' : 'walk1';
+  if (c.walk > 0.4) return cycName(c, SPR.cat, 'cat', c.gait / 0.03) || (Math.floor(c.gait * 2.6) % 2 ? 'walk2' : 'walk1');
   let best = 'curl', bw = -1; for (const n of POSE_NAMES) if (c.w[n] > bw) { bw = c.w[n]; best = n; }
   return { curl: 'sleep', loaf: 'loaf', sit: 'sit', stand: 'walk1', sniff: 'walk1', stretch: 'stretch' }[best] || 'walk1';
 }
@@ -2069,12 +2319,12 @@ function drawCatSprite(g, c) {
   const resting = name === 'sleep' || name === 'loaf';
   const br = Math.sin(c.breathP), vibe = c.vibe || 0;
   let sy = 1 + (resting ? 0.02 : 0.008) * br - 0.03 * c.nod * vibe - (name.startsWith('jump-') ? 0 : c.crouch || 0) * 0.12, sx = 1 / Math.sqrt(Math.max(0.5, sy));
-  const dy = c.walk > 0.4 ? -Math.abs(Math.sin(c.gait * Math.PI * 2.6)) * 2.2 * c.k : 0;
+  const dy = c.walk > 0.4 && !/^walk-/.test(name) ? -Math.abs(Math.sin(c.gait * Math.PI * 2.6)) * 2.2 * c.k : 0;
   drawPetSprite(g, c, S, st, sx, sy, dy);
   return true;
 }
 function dogSpriteName(d) {
-  if (d.mode === 'walk' || d.stand > 0.5) return d.walk > 0.3 ? (Math.floor(d.gait * 2) % 2 ? 'walk2' : 'walk1') : 'walk1';
+  if (d.mode === 'walk' || d.stand > 0.5) return d.walk > 0.3 ? cycName(d, SPR.dog, 'dog', d.gait * 56) || (Math.floor(d.gait * 2) % 2 ? 'walk2' : 'walk1') : 'walk1';
   if (d.happyT > 0 || d.st > 0.4) return 'belly-up';
   return d.s > 0.5 ? 'lie' : 'sit';
 }
@@ -2083,7 +2333,7 @@ function drawDogSprite(g, d) {
   const name = seqName(d, S, 'dog', dogSpriteName(d)), st = sprPick(d, S, name, d.sprDt || 0);
   const br = Math.sin(d.breathP);
   let sy = 1 + (name === 'lie' ? 0.022 : 0.008) * br - 0.03 * d.nod * (d.vibe || 0) - 0.02 * d.thump, sx = 1 / Math.sqrt(Math.max(0.5, sy));
-  const dy = d.walk > 0.3 ? -Math.abs(Math.sin(d.gait * Math.PI * 2)) * 2.4 * d.k : 0;
+  const dy = d.walk > 0.3 && !/^walk-/.test(name) ? -Math.abs(Math.sin(d.gait * Math.PI * 2)) * 2.4 * d.k : 0;
   drawPetSprite(g, d, S, st, sx, sy, dy);
   return true;
 }
@@ -2164,6 +2414,9 @@ function pickCatDest() {
   const playing = music.np && music.np.playing, wet = E.rain > 0.2 || E.snow > 0.2;
   const w = { crate: 1, shelf: playing ? 2.2 : 1.2, counter: playing ? 2.4 : 1.1, riser: wet ? 2.2 : 1.2, bed: dogHasBed() ? 0 : 1.1, floor: 0.9 };
   w[cat.plat] = 0;
+  // never settle where the user's widgets / icons are
+  const P = L.plats, at = { crate: [L.catHome.x, P.crate.y], shelf: [L.hero.cx, P.shelf.y], counter: [P.counter.x, P.counter.y], riser: [P.riser.x, P.riser.y], bed: [P.bed.x, P.bed.y], floor: [(L.lane.x0 + L.lane.x1) / 2, P.floor.y] };
+  for (const k in w) if (at[k] && !restOK(at[k][0], at[k][1])) w[k] *= 0.02;
   let tot = 0; for (const k in w) tot += w[k];
   let r = Math.random() * tot;
   for (const k in w) { r -= w[k]; if (r <= 0) return k; }
@@ -2175,18 +2428,43 @@ function planRoam(T, dest) {
   cat.plan = [{ t: 'pose', pose: 'stand', dur: 1.1 }, ...out, ...legIn(dest, x)];
   cat.dest = dest; cat.act = null;
 }
+// ---- Pets on/off (LW.settings.pets): off → they head out along the front of the shop, off the left
+// edge (toward the street door), and stay away; on → they stroll back in from there.
+const petsOn = () => { const v = LW.settings.pets; return !(v === false || v === 0 || v === '0' || v === 'false'); };
+const EXIT_X = -130;
+const petIn = (p) => (p.away ? 0 : clamp((p.x - EXIT_X - 20) / 90, 0, 1));
+function catLeave() {
+  const c = cat; c.leaving = true; c.stretchT = -1;
+  const steps = [];
+  if (c.plat === 'floor') steps.push({ t: 'walk', x: EXIT_X });
+  else {
+    const [out] = legOut(c.plat, c.x), CT = L.cratesTop;
+    steps.push(...out, { t: 'walk', x: CT.x0 + 8 }, { t: 'hop', plat: 'floor', x: CT.x0 - 30 }, { t: 'walk', x: EXIT_X });
+  }
+  c.plan = [{ t: 'pose', pose: 'stand', dur: 0.6 }, ...steps]; c.act = null; c.dest = 'away';
+}
+function catReturn(T) {
+  const c = cat, F = L.plats.floor;
+  if (c.away) Object.assign(c, { away: false, plat: 'floor', x: EXIT_X, y: F.y, k: F.k, face: 1, plan: [], act: null });
+  c.leaving = false; planRoam(T, 'crate');
+}
 function updateCat(c, dt, T) {
   const playing = music.np && music.np.playing;
+  if (!(c.act && c.act.t === 'hop')) {
+    if (!petsOn()) { if (!c.leaving && !c.away) catLeave(); }
+    else if (c.leaving || c.away) catReturn(T);
+  }
+  if (c.away) return;
   // roaming: crates ⇄ shelf / counter / window riser / dog bed / rug, resting a while at each
   c.roamT -= dt * (playing ? 1.4 : 1) * (T < c.wakeUntil ? 1.6 : 1);
-  if (!c.plan.length && !c.act && c.roamT <= 0 && !calm.on && c.stretchT < 0) {
+  if (!c.plan.length && !c.act && c.roamT <= 0 && !calm.on && c.stretchT < 0 && !c.leaving) {
     c.roamT = rand(45, 110);
     if (c.w.curl < 0.5 || playing || Math.random() < 0.45) planRoam(T);
   }
   // calm: stop wherever it is (after landing) and curl up
-  if (calm.on && c.plan.length && (!c.act || c.act.t !== 'hop')) { c.plan = []; c.act = null; c.dest = c.plat; }
+  if (calm.on && c.plan.length && (!c.act || c.act.t !== 'hop') && !c.leaving) { c.plan = []; c.act = null; c.dest = c.plat; }
   if (!c.act && c.plan.length) { c.act = c.plan.shift(); c.act.e = 0; c.travelling = true; }
-  if (c.travelling && !c.act && !c.plan.length) { c.travelling = false; c.roamT = rand(45, 110); c.lastStim = T; }   // arrived: stay a while
+  if (c.travelling && !c.act && !c.plan.length) { c.travelling = false; c.roamT = rand(45, 110); c.lastStim = T; if (c.leaving) { c.leaving = false; c.away = true; return; } }   // arrived: stay a while
   let target = catGoal(T), walking = false;
   c.air = 0; c.hopPh = null;
   const a = c.act;
@@ -2279,9 +2557,10 @@ function updateCat(c, dt, T) {
   stepTail(c, (i) => catTailTarget(c, i, sway + c.walk * Math.sin(c.gait * TAU) * 0.15), dt, 46, 8);
   c.P = P; c.F = F;
   c.light = lightAt(c.x, c.y - 50 * c.k);
+  if (!c.rimT || T - c.rimT > 0.5) { c.rimT = T; c.rim = rimFor(c); }
 }
 // ---- dog roaming: bed ⇄ rug ⇄ counter front (gentle arcs for depth changes) ----
-const dogSpot = (id) => L.dogSpots.find((q) => q.id === id) || L.dogSpots[0];
+const dogSpot = (id) => L.dogSpots.find((q) => q.id === id) || L.dogSpots[0];   // ('away' → the bed's facing; unused)
 function placeDog(id) {
   const sp = dogSpot(id || dog.spot);
   Object.assign(dog, { x: sp.x, y: sp.y, k: sp.k, face: sp.face, mode: 'rest', stand: 0, path: [], spot: sp.id, dest: sp.id });
@@ -2290,7 +2569,7 @@ function planDogRoam(dest) {
   const p = dog;
   if (!dest) {
     const playing = music.np && music.np.playing;
-    const opts = L.dogSpots.filter((q) => q.id !== p.spot && !(q.id === 'bed' && (cat.dest === 'bed' || cat.plat === 'bed')));
+    const opts = L.dogSpots.filter((q) => q.id !== p.spot && !(q.id === 'bed' && (cat.dest === 'bed' || cat.plat === 'bed')) && restOK(q.x, q.y));
     if (!opts.length) { p.roamT = rand(30, 60); return; }
     const wt = (q) => (q.id === 'bed' ? (playing ? 1 : 2.2) : q.id === 'counter' ? (playing ? 1.8 : 1) : 1);
     let tot = 0; opts.forEach((q) => (tot += wt(q)));
@@ -2341,9 +2620,22 @@ function moveDog(p, dt, T, playing) {
   }
   p.walk = approach(p.walk, p.mode === 'walk' ? 1 : 0, 6, dt);
 }
+function dogLeave() {
+  const p = dog; p.leaving = true; p.stretchT = -1;
+  p.path = [{ x: EXIT_X, y: L.lane.y, k: L.lane.k }]; p.dest = 'away'; p.spot = null; p.mode = 'rise'; p.seg = { x: p.x, y: p.y, k: p.k };
+}
+function dogReturn() {
+  const p = dog;
+  if (p.away) Object.assign(p, { away: false, x: EXIT_X, y: L.lane.y, k: L.lane.k, face: 1, mode: 'rest', stand: 1, spot: null, path: [] });
+  p.leaving = false; planDogRoam();
+}
 function updateDog(p, dt, T) {
   const playing = music.np && music.np.playing;
+  if (!petsOn()) { if (!p.leaving && !p.away) dogLeave(); }
+  else if (p.leaving || p.away) dogReturn();
+  if (p.away) return;
   moveDog(p, dt, T, playing);
+  if (p.leaving && (p.mode === 'settle' || p.mode === 'rest')) { p.leaving = false; p.away = true; p.mode = 'rest'; p.stand = 0; return; }
   let want;
   if (p.mode !== 'rest') want = 0;
   else if (calm.on) want = 1;
@@ -2418,6 +2710,7 @@ function updateDog(p, dt, T) {
   p.earSw += p.earSwV * dt;
   p.P = P; p.F = F;
   p.light = lightAt(p.x, p.y - 40 * p.k);
+  if (!p.rimT || T - p.rimT > 0.5) { p.rimT = T; p.rim = rimFor(p); }
 }
 function onBeat(s) {
   music.pulse = Math.max(music.pulse, s); music.lastBeat = nowS();
@@ -2459,16 +2752,7 @@ function updateParticles(dt, T) {
     music.noteT = rand(3.2, 6.5);
   }
   for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t += dt; n.y -= dt * 20; n.x += (n.vx + Math.sin(n.t * 1.6 + n.ph) * 10) * dt; if (n.t > n.life) notes.splice(i, 1); }
-  for (const p of animals) {
-    const asleep = p === cat ? cat.w.curl > 0.92 : dog.s > 0.92;
-    p.zT = (p.zT == null ? rand(2, 6) : p.zT) - dt;
-    if (asleep && p.zT <= 0 && !calm.on) {
-      p.zT = rand(5, 9);
-      const b = p === cat ? [cat.x + 30 * cat.k * cat.face, cat.y - 50 * cat.k] : [dog.x + 90 * dog.k * dog.face, dog.y - 60 * dog.k];
-      hearts.push({ z: true, x: b[0], y: b[1], t: 0, life: 3.2, s: rand(0.8, 1), ph: rand(0, 6) });
-    } else if (!asleep && p.zT < 1) p.zT = rand(2, 5);
-  }
-  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= dt * 34; h.x += Math.sin(h.t * 3 + h.ph) * dt * 12; if (h.t > h.life) hearts.splice(i, 1); }
+  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= dt * 16; h.x += Math.sin(h.t * 2 + h.ph) * dt * 5; if (h.t > h.life) hearts.splice(i, 1); }
 }
 function drawParticles(g) {
   const sb = 0.55 + 0.45 * (1 - E.day * 0.6);
@@ -2481,17 +2765,19 @@ function drawParticles(g) {
     g.fillStyle = rgba(nc, a); g.strokeStyle = rgba(nc, a);
     noteGlyph(g, n.x, n.y, n.s, n.kind);
   }
+  // the sound an animal just made, as one small word that drifts up and fades (no bubbles, no icons)
+  if (hearts.length) { g.textAlign = 'center'; g.textBaseline = 'middle'; }
   for (const h of hearts) {
-    if (h.z) {
-      const a = Math.min(1, h.t / 0.6) * (1 - smooth((h.t - h.life + 1.2) / 1.2)) * 0.6;
-      g.font = `italic 600 ${Math.round(14 * h.s + h.t * 3)}px ${SERIF}`; g.fillStyle = `rgba(236,228,255,${a})`;
-      g.fillText('z', h.x + h.t * 6, h.y + h.t * 12);
-      continue;
-    }
-    const a = Math.min(1, h.t / 0.25) * (1 - smooth((h.t - h.life + 0.8) / 0.8));
-    g.fillStyle = `rgba(236,128,152,${a})`; heartPath(g, h.x, h.y, h.s); g.fill();
-    g.fillStyle = `rgba(255,222,230,${a * 0.8})`; g.beginPath(); g.arc(h.x - 3.5 * h.s, h.y - 3.5 * h.s, 1.6 * h.s, 0, TAU); g.fill();
+    const a = Math.min(1, h.t / 0.35) * (1 - smooth((h.t - h.life + 0.9) / 0.9)) * 0.82;
+    if (a < 0.01) continue;
+    const c = mix3([250, 240, 222], mul([250, 236, 214], lightAt(h.x, h.y)), 0.4);
+    upright(g, h.x, () => {
+      g.font = `italic 15px ${SERIF}`;
+      g.fillStyle = `rgba(20,12,8,${a * 0.35})`; g.fillText(h.w, h.x + 0.8, h.y + 1);
+      g.fillStyle = rgba(c, a); g.fillText(h.w, h.x, h.y);
+    });
   }
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
 }
 
 // =====================================================================
@@ -2524,7 +2810,10 @@ function updateOutside(dt, T) {
     carT = rand(8, 18) * (E.hour > 1 && E.hour < 5 ? 2 : 1);
     const dir = Math.random() < 0.55 ? 1 : -1, lane = dir > 0 ? S.near - 12 : S.st + 22;
     const C = ['#2a3446', '#5a2630', '#3c4a3a', '#6b6a66', '#1d1d22', '#7a5a2a'];
-    cars.push({ dir, x: dir > 0 ? w.x0 - 220 : w.x1 + 220, y: lane, v: rand(170, 260), col: hex(C[Math.floor(Math.random() * C.length)]), k: dir > 0 ? 1 : 0.86 });
+    const car = { dir, x: dir > 0 ? w.x0 - 220 : w.x1 + 220, y: lane, v: rand(170, 260), col: hex(C[Math.floor(Math.random() * C.length)]), k: dir > 0 ? 1 : 0.86 };
+    const ids = Object.keys(carTint);
+    if (L.lanes && ids.length) { car.i = ids[Math.floor(Math.random() * ids.length)]; car.y = dir > 0 ? L.lanes.near : L.lanes.far; car.k = dir > 0 ? 1 : 0.93; car.v = rand(150, 230); }
+    cars.push(car);
   }
   for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i]; c.x += c.dir * c.v * dt; if ((c.dir > 0 && c.x > w.x1 + 260) || (c.dir < 0 && c.x < w.x0 - 260)) cars.splice(i, 1); }
   flash.t += dt;
@@ -2568,16 +2857,18 @@ function drawCar(g, c) {
 }
 function drawOutside(g, T) {
   const w = L.win, S = L.st;
+  // the street is drawn un-mirrored (only its position follows MIR): see upright()
+  const winE = MIR ? cv.width - OX * dpr - U * (w.x0 + w.x1) : OX * dpr, VW = (q) => q.setTransform(U, 0, 0, U, winE, OY * dpr);
   g.save();
-  setW(g);
+  VW(g);
   g.beginPath(); g.rect(w.x0, w.y0, w.w, w.h); g.clip();
   g.setTransform(1, 0, 0, 1, 0, 0);
-  const sx = Math.round(devX(w.x0 - 2)), sy = Math.round(devY(w.y0 - 2));
+  const sx = Math.round(winE + (w.x0 - 2) * U), sy = Math.round(devY(w.y0 - 2));
   if (fade < 1 && prevStreetCv) g.drawImage(prevStreetCv, sx, sy);
   g.globalAlpha = fade < 1 && prevStreetCv ? fade : 1; g.drawImage(streetCv, sx, sy); g.globalAlpha = 1;
-  setW(g);
-  for (const c of cars) if (c.dir < 0) drawCar(g, c);
-  for (const c of cars) if (c.dir > 0) drawCar(g, c);
+  VW(g);
+  for (const c of cars) if (c.dir < 0) (c.i ? drawCarArt : drawCar)(g, c);
+  for (const c of cars) if (c.dir > 0) (c.i ? drawCarArt : drawCar)(g, c);
   if (ripples.length) {
     g.strokeStyle = `rgba(220,226,240,${0.25 + 0.2 * E.day})`; g.lineWidth = 0.8;
     for (const r of ripples) { const k = r.t / 0.7; g.globalAlpha = 1 - k; g.beginPath(); g.ellipse(r.x, r.y, 2 + k * 9, 0.6 + k * 2, 0, 0, TAU); g.stroke(); }
@@ -2589,7 +2880,7 @@ function drawOutside(g, T) {
   }
   if (E.city > 0.03) drawSprite(g, GLOW_WARM, S.lampX, S.lampY, 60 + E.fog * 40, 0.55 * E.city);
   if (drops.length) {
-    g.strokeStyle = E.day > 0.4 ? 'rgba(220,228,240,0.22)' : 'rgba(170,180,210,0.2)'; g.lineWidth = 1;
+    g.strokeStyle = E.day > 0.4 ? 'rgba(232,238,246,0.34)' : 'rgba(180,190,220,0.26)'; g.lineWidth = 1.1;
     g.beginPath(); for (const d of drops) { g.moveTo(d.x, d.y); g.lineTo(d.x + d.l * 0.1, d.y + d.l); } g.stroke();
     if (E.city > 0.1) {
       g.strokeStyle = `rgba(255,140,170,${0.3 * E.city})`; g.beginPath();
@@ -2604,7 +2895,7 @@ function drawOutside(g, T) {
   if (fade < 1 && prevFrontCv) g.drawImage(prevFrontCv, sx, sy);
   g.globalAlpha = fade < 1 && prevFrontCv ? fade : 1; g.drawImage(frontCv, sx, sy); g.globalAlpha = 1;
   if (E.wetGlass > 0.02) { g.globalAlpha = E.wetGlass * 0.9; g.drawImage(beadsCv, sx, sy); g.globalAlpha = 1; }
-  setW(g);
+  VW(g);
   if (runners.length) {
     g.lineCap = 'round';
     for (const r of runners) {
@@ -2624,7 +2915,7 @@ let neonFlick = { t: 0, next: 9, letter: 0 };
 function drawNeon(g, T) {
   const N = L.neon, on = clamp(E.city * 1.4, 0, 1) * (1 - calm.lv * 0.5);
   g.setTransform(1, 0, 0, 1, 0, 0);
-  const dx = devX(N.cx - N.pw / 2), dy = devY(N.cy - N.ph / 2);
+  const dx = devX(MIR ? N.cx + N.pw / 2 : N.cx - N.pw / 2), dy = devY(N.cy - N.ph / 2);
   g.drawImage(neonOffCv, dx, dy);
   // the odd flicker, like every neon sign ever
   neonFlick.t += 1 / 30;
@@ -2639,7 +2930,8 @@ function heroLevel() {
   const base = music.ever ? lerp(0.55, 1, music.lv) : 0.8;
   return base * (1 - calm.lv * (0.7 - 0.45 * breath()));   // calm: the sleeve is lit by the breath (dark on empty lungs)
 }
-function drawHero(g, T) {
+function drawHero(g, T) { upright(g, L.hero.cx, () => drawHero1(g, T)); }
+function drawHero1(g, T) {
   const h = L.hero, s = h.s, cx = h.cx, cy = h.y + s / 2;
   const hl = heroLevel(), pulse = music.pulse * music.lv;
   // palette halo on the slats behind
@@ -2697,7 +2989,7 @@ function drawBreathLight(g, b, a) {
 function drawBoard(g) {
   const b = L.board, lvl = clamp(lum(lightAt((b.x0 + b.x1) / 2, b.y0 + b.h / 2)) * 1.6, 0.5, 1) * (1 - calm.lv * 0.35);
   g.setTransform(1, 0, 0, 1, 0, 0);
-  const x = Math.round(devX(b.x0)), y = Math.round(devY(b.y0));
+  const x = Math.round(devX(MIR ? b.x1 : b.x0)), y = Math.round(devY(b.y0));
   const fO = prevBoardCv ? clamp(1 - boardFade * 2, 0, 1) : 0, fN = prevBoardCv ? clamp(boardFade * 2 - 1, 0, 1) : 1;
   if (fO > 0) { g.globalAlpha = lvl * fO; g.drawImage(prevBoardCv, x, y); }
   if (fN > 0) { g.globalAlpha = lvl * fN; g.drawImage(boardCv, x, y); }
@@ -2736,7 +3028,8 @@ function updateTurntable(dt) {
   const M = LW.music || {};
   music.bassEnv = approach(music.bassEnv || 0, (M.bass || 0) * (0.6 + 0.4 * music.pulse), 12, dt);
 }
-function drawTurntable(g) {
+function drawTurntable(g) { upright(g, (L.tt.px0 + L.tt.px1) / 2, () => drawTurntable1(g)); }
+function drawTurntable1(g) {
   const t = L.tt, R = t.R, q = t.q;
   const [cx, cy] = ttP(0, 0);
   const lt = lightAt(cx, cy - 40), lc = rgba(lt.map((v) => clamp(v, 0, 1) * 255));
@@ -2748,20 +3041,23 @@ function drawTurntable(g) {
   g.restore();
   g.fillStyle = rgba(mul([220, 218, 210], lt)); g.beginPath(); g.ellipse(cx, cy - 4, 2.2, 3, 0, 0, TAU); g.fill();
   if (music.omega > 0.2 && L.ledPos) { g.fillStyle = 'rgba(255,170,90,0.95)'; g.beginPath(); g.arc(L.ledPos[0], L.ledPos[1], 2.4, 0, TAU); g.fill(); drawSprite(g, GLOW_WARM, L.ledPos[0], L.ledPos[1], 9, 0.7); }
-  const piv = t.piv, la = t.arm, phi = music.phi, z = music.lift * 7;
-  const [px, py] = ttP(piv.u, piv.v, 6);
-  const nu = piv.u - Math.sin(phi) * la, nv = piv.v + Math.cos(phi) * la;
-  const [nx, ny] = ttP(nu, nv, 4 + z);
-  const [cwx, cwy] = ttP(piv.u + Math.sin(phi) * 26, piv.v - Math.cos(phi) * 26, 7);
-  g.strokeStyle = `rgba(0,0,0,${0.35 - music.lift * 0.15})`; g.lineWidth = 3;
-  g.beginPath(); g.moveTo(px + 2, py + 6); g.lineTo(nx + 3 + z * 0.4, ny + 6 + z); g.stroke();
+  const piv = t.piv, la = t.arm, phi = music.phi, z = music.lift * 7, a = t.a0 - phi;
+  const [px, py] = ttP(piv.u, piv.v, t.pz);
+  const nu = piv.u + Math.sin(a) * la, nv = piv.v + Math.cos(a) * la;
+  const zr = t.spr ? lerp(t.rz, 3, smooth(phi / Math.max(0.05, t.phiOut * 0.6))) : 4;
+  const [nx, ny] = ttP(nu, nv, zr + z);
+  const cwl = t.spr ? 0.14 * la : 26;
+  const [cwx, cwy] = ttP(piv.u - Math.sin(a) * cwl, piv.v - Math.cos(a) * cwl, t.pz + 1);
+  const [sx0, sy0] = ttP(piv.u, piv.v, 0), [sx1, sy1] = ttP(nu, nv, 0);
+  g.strokeStyle = `rgba(0,0,0,${0.3 - music.lift * 0.12})`; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(sx0 + 3, sy0 + 2); g.lineTo(sx1 + 3 + z * 0.4, sy1 + 2 + z * 0.3); g.stroke();
   const metal = rgba(mul([214, 212, 206], lt)), dark = rgba(mul([40, 38, 36], lt));
   g.strokeStyle = dark; g.lineWidth = 9; g.lineCap = 'round';
   g.beginPath(); g.moveTo(px + (cwx - px) * 0.55, py + (cwy - py) * 0.55); g.lineTo(cwx, cwy); g.stroke();
   g.strokeStyle = dark; g.lineWidth = 4.2; g.beginPath(); g.moveTo(cwx, cwy); g.lineTo(nx, ny); g.stroke();
   g.strokeStyle = metal; g.lineWidth = 2.6; g.beginPath(); g.moveTo(cwx, cwy); g.lineTo(nx, ny); g.stroke();
-  g.fillStyle = dark; g.beginPath(); g.ellipse(px, py, 6, 5, 0, 0, TAU); g.fill();
-  g.fillStyle = metal; g.beginPath(); g.ellipse(px, py - 1, 4, 3, 0, 0, TAU); g.fill();
+  g.fillStyle = dark; g.beginPath(); g.ellipse(px, py, t.spr ? 3.6 : 6, t.spr ? 2.6 : 5, 0, 0, TAU); g.fill();
+  g.fillStyle = metal; g.beginPath(); g.ellipse(px, py - 1, t.spr ? 2.4 : 4, t.spr ? 1.6 : 3, 0, 0, TAU); g.fill();
   const ang = Math.atan2(ny - py, nx - px);
   g.save(); g.translate(nx, ny); g.rotate(ang + 0.5);
   g.fillStyle = dark; g.fillRect(-3, -4, 14, 8); g.fillStyle = metal; g.fillRect(-3, -4, 14, 2.4);
@@ -2777,7 +3073,8 @@ function startFlip(ci, isNext) {
   if (cat.plat === 'crate' && !cat.act && cat.x > c.x0 - 30 && cat.x < c.x1 + 30) { cat.startle = 0.6; cat.wakeUntil = nowS() + 12; cat.lastStim = nowS(); }
   sFlip();
 }
-function drawFlip(g) {
+function drawFlip(g) { if (flip) upright(g, flip.x, () => drawFlip1(g)); }
+function drawFlip1(g) {
   if (!flip) return;
   const c = L.crates[flip.ci], t = flip.t, D = flip.next ? 1.3 : 2.1;
   const up = t < 0.35 ? smooth(t / 0.35) : t < D - 0.45 ? 1 : 1 - smooth((t - (D - 0.45)) / 0.45);
@@ -2799,7 +3096,7 @@ function drawFlip(g) {
 //  wellbeing: water glass, stretch, calm
 // =====================================================================
 let water = null;
-function startWater(text) { water = { t: 0, text: text || 'a sip of water?', out: -1 }; sSlide(); }
+function startWater() { water = { t: 0, out: -1 }; sSlide(); }
 function updateWater(dt) { if (!water) return; water.t += dt; if (water.out < 0 && water.t > 12.5) water.out = 0; if (water.out >= 0) { water.out += dt; if (water.out > 1.4) water = null; } }
 function drawWater(g) {
   if (!water) return;
@@ -2826,18 +3123,6 @@ function drawWater(g) {
   g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x - wTop + 5, top + 6, 3, 58);
   g.fillStyle = rgba(mul([245, 215, 90], lt)); g.beginPath(); g.arc(x + wTop - 4, top + 2, 10, Math.PI * 0.95, Math.PI * 2.05); g.fill();
   g.fillStyle = rgba(mul([255, 245, 200], lt)); g.beginPath(); g.arc(x + wTop - 4, top + 2, 7.5, Math.PI, Math.PI * 2); g.fill();
-  // little paper tag on a string
-  const tx = x - 42, ty = gy - 92;
-  g.strokeStyle = rgba(mul([220, 210, 190], lt), 0.8); g.lineWidth = 0.9; g.beginPath(); g.moveTo(x - wTop + 4, top + 6); g.quadraticCurveTo(x - 34, top - 10, tx + 10, ty + 10); g.stroke();
-  g.font = `italic 13px ${SERIF}`;
-  const tw = g.measureText(water.text).width + 24, tagIn = smooth((water.t - 1.1) / 0.8);
-  g.globalAlpha = a * tagIn;
-  g.save(); g.translate(tx - tw + 20, ty); g.rotate(0.04 + Math.sin(water.t * 1.3) * 0.02);
-  g.fillStyle = 'rgba(0,0,0,0.25)'; rr(g, 3, -7, tw, 26, 4); g.fill();
-  g.fillStyle = rgba(mul([246, 238, 222], lt.map((v) => Math.max(v, 0.6)))); rr(g, 0, -10, tw, 26, 4); g.fill();
-  g.fillStyle = 'rgba(120,90,60,0.6)'; g.beginPath(); g.arc(tw - 8, 3, 2.4, 0, TAU); g.fill();
-  g.fillStyle = 'rgba(60,40,30,0.9)'; g.fillText(water.text, 10, 7.5);
-  g.restore();
   g.restore();
 }
 function startStretch(text) {
@@ -3041,20 +3326,21 @@ function devMedia(cmd) {
   if (cmd === 'playpause') { if (np) window.__lw('nowplaying', { ...np, playing: !np.playing }); else window.__lw('nowplaying', demoTrack(demoI)); }
   else if (cmd === 'next' || cmd === 'previous') { demoI = (demoI + (cmd === 'next' ? 1 : DEMO.length - 1)) % DEMO.length; window.__lw('nowplaying', demoTrack(demoI)); }
 }
-function hitCat(x, y) { const lx = (x - cat.x) / cat.k * cat.face, ly = (y - cat.y) / cat.k; return lx > -60 && lx < 80 && ly > -115 && ly < 6; }
-function hitDog(x, y) { const d = dog; const lx = (x - d.x) / d.k * d.face, ly = (y - d.y) / d.k; return lx > -95 && lx < 105 && ly > -115 - 25 * d.stand && ly < 6; }
+function soundWord(p, w, x, y) { if (hearts.some((h) => h.p === p && h.t < 1.2)) return; hearts.push({ p, w, x, y, t: 0, life: 2.2, ph: rand(0, 6) }); }
+function hitCat(x, y) { if (cat.away) return false; const lx = (x - cat.x) / cat.k * cat.face, ly = (y - cat.y) / cat.k; return lx > -60 && lx < 80 && ly > -115 && ly < 6; }
+function hitDog(x, y) { if (dog.away) return false; const d = dog; const lx = (x - d.x) / d.k * d.face, ly = (y - d.y) / d.k; return lx > -95 && lx < 105 && ly > -115 - 25 * d.stand && ly < 6; }
 function onDown(px, py) {
   if (!L) return;
   const [x, y] = toWorld(px, py), T = nowS();
   if (water && x > L.glass.x - 140 && x < L.glass.x + 50 && y > L.glass.y - 140 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
   if (hitCat(x, y)) {
     cat.happyT = 2.6; cat.wakeUntil = T + 20; cat.lastStim = T; sPurr(2.6);
-    for (let i = 0; i < 3; i++) later(i * 0.26, () => hearts.push({ x: cat.x + 46 * cat.k * cat.face + rand(-14, 14), y: cat.y - 110 * cat.k, t: 0, life: 1.8, s: rand(0.9, 1.3), ph: rand(0, 6) }));
+    soundWord(cat, 'purr', cat.x + 46 * cat.k * cat.face, cat.y - 100 * cat.k);
     return;
   }
   if (hitDog(x, y)) {
     dog.happyT = 2.4; dog.wakeUntil = T + 20; dog.lastStim = T; dog.tiltT = 1.6; sBoof();
-    for (let i = 0; i < 2; i++) later(i * 0.3, () => hearts.push({ x: dog.x + 60 * dog.k * dog.face + rand(-12, 12), y: dog.y - (110 + 25 * dog.stand) * dog.k, t: 0, life: 1.6, s: rand(0.8, 1.1), ph: rand(0, 6) }));
+    soundWord(dog, 'woof', dog.x + 60 * dog.k * dog.face, dog.y - (100 + 25 * dog.stand) * dog.k);
     return;
   }
   const t = L.tt;
@@ -3092,7 +3378,7 @@ LW.on('action', (a) => {
   else if (a === 'stretch') startStretch();
   else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
   else if (a === 'playpause' || a === 'next' || a === 'previous') media(a);
-  else if (a === 'pet') { const [px, py] = [OX + cat.x * K, OY + (cat.y - 40 * cat.k) * K]; onDown(px, py); }
+  else if (a === 'pet' && !cat.away) onDown(devX(cat.x) / dpr, devY(cat.y - 40 * cat.k) / dpr);
 });
 if (!LW.isHost) addEventListener('keydown', (e) => {
   if (e.key === 's') startStretch('roll your shoulders');
@@ -3168,16 +3454,20 @@ function render(T) {
   drawTurntable(ctx);
   // animals + the lifted record, back to front by depth (the animals array itself never reorders)
   const drawDogNow = () => {
+    if (dog.away) return;
+    ctx.globalAlpha = petIn(dog);
     const d = dog, gr = ctx.createRadialGradient(d.x, d.y, 2, d.x, d.y, 110 * d.k);
     gr.addColorStop(0, `rgba(20,8,6,${0.38 - 0.1 * d.stand})`); gr.addColorStop(1, 'rgba(20,8,6,0)');
     ctx.save(); ctx.translate(d.x, d.y); ctx.scale(1, 0.16); ctx.translate(-d.x, -d.y); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(d.x, d.y, (110 - 30 * d.stand) * d.k, 0, TAU); ctx.fill(); ctx.restore();
-    drawDog(ctx, dog);
+    drawDog(ctx, dog); drawBedFront(ctx, dog); ctx.globalAlpha = 1;
   };
   const drawCatNow = () => {
+    if (cat.away) return;
+    ctx.globalAlpha = petIn(cat);
     const sw = 70 * cat.k * (1 - (cat.air || 0) * 0.6), gr = ctx.createRadialGradient(cat.x, cat.y, 2, cat.x, cat.y, sw);
     gr.addColorStop(0, `rgba(20,8,6,${0.36 * (1 - (cat.air || 0))})`); gr.addColorStop(1, 'rgba(20,8,6,0)');
     ctx.save(); ctx.translate(cat.x, cat.y); ctx.scale(1, 0.16); ctx.translate(-cat.x, -cat.y); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cat.x, cat.y, sw, 0, TAU); ctx.fill(); ctx.restore();
-    drawCat(ctx, cat);
+    drawCat(ctx, cat); drawBedFront(ctx, cat); ctx.globalAlpha = 1;
   };
   const order = [[dog.y, drawDogNow], [765, () => drawFlip(ctx)], [cat.act && cat.act.t === 'hop' && cat.act.to ? Math.max(cat.y, cat.act.to.y) : cat.y, drawCatNow]];
   order.sort((a, b) => a[0] - b[0]);
@@ -3187,10 +3477,10 @@ function render(T) {
   // dimming: paused/stopped → a touch darker; calm → much darker
   const pausedDim = (1 - music.lv) * (music.ever ? 0.08 : 0.04) * (1 - E.day * 0.7);
   const dim = clamp(pausedDim + calm.lv * (0.56 - 0.18 * breath()), 0, 0.8);   // the room itself breathes
-  if (dim > 0.002) { ctx.fillStyle = `rgba(8,4,6,${dim})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); }
+  if (dim > 0.002) { ctx.fillStyle = `rgba(8,4,6,${dim})`; ctx.fillRect(-2400, -10, W + 4800, H + 20); }
   if (calm.lv > 0.01) drawBreathLight(ctx, breath(), calm.lv);
   const fa = flashA();
-  if (fa > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(120,130,170,${fa * 0.1})`; ctx.fillRect(-OX / K - 10, -10, W + 2 * OX / K + 20, H + 20); ctx.globalCompositeOperation = 'source-over'; }
+  if (fa > 0) { ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(120,130,170,${fa * 0.1})`; ctx.fillRect(-2400, -10, W + 4800, H + 20); ctx.globalCompositeOperation = 'source-over'; }
 }
 
 // =====================================================================
@@ -3206,13 +3496,17 @@ function rebuild() {
   bakeNeon();
   rebuildArt(false);
   boardKey = ''; prevBoardCv = null; boardFade = 1; updateBoard(true);
-  if (keepCat || !cat.tailInit) placeCatHome(); else { cat.plan = []; cat.act = null; placeCatHome(); }
-  placeDog(dog.dest || 'bed');
+  if (cat.away || cat.leaving) { cat.away = true; cat.leaving = false; cat.plan = []; cat.act = null; }
+  else if (keepCat || !cat.tailInit) placeCatHome(); else { cat.plan = []; cat.act = null; placeCatHome(); }
+  if (dog.away || dog.leaving) { dog.away = true; dog.leaving = false; dog.path = []; dog.mode = 'rest'; }
+  else placeDog(dog.dest && dog.dest !== 'away' ? dog.dest : 'bed');
 }
+LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 60); });
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
 computeTarget();
 E.amb = envAmb();
+if (!petsOn()) { cat.away = true; dog.away = true; }   // pets off from the start: nobody home
 rebuild();
 loadArtSlots();
 loadSprites();

@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kinetic</title>
+<!--
+  wallpap scene: Kinetic, music-driven kinetic sculptures. Skins (LW.settings.skin):
+    'copper'        Copper Rain (default, free): an homage to ART+COM's Kinetic Rain. 1,024 polished
+                    copper drops on hairline wires, seen from below in a dark atrium, morphing into the
+                    shape of the harmony. Every drop is driven through a motor model (max velocity and
+                    acceleration), which is what keeps it graceful and never twitchy.
+    'harmonograph'  Harmonograph: a pendulum pen draws the interval you are hearing in sumi ink on cream
+                    paper under a desk lamp. Simple ratios close into rosettes, dissonance weaves.
+  Switching skin crossfades (both run for ~1.4 s).
+
+  Copper Rain, music (LW.mx from music.js):
+    chord (circle of fifths)  → the sculpture: a sum of low-order standing modes cos(nπu)cos(mπv) from the
+                                Cymatics mode table, so related keys give related sculptures
+    minor / major             → the mode's ± symmetry partner
+    brightness                → mode order (complexity tier)
+    loudness                  → amplitude, through the motor model
+    kick                      → a soft swell travelling out from a point
+    tempo / phrases           → the form changes only on phrase boundaries (bar 1 of 8)
+    build (tension)           → the drops gather into a perfect flat plane, lifting slightly
+    drop                      → the plane breaks into the new form (+ one big swell from the centre)
+    silence / paused          → a slow looping choreography in which the two halves mirror and answer
+    calm                      → the whole field rises and falls as one breathing plane
+  Harmonograph, music:
+    two strongest pitch classes → frequency ratio (unison 1:1, fifth 3:2, fourth 4:3, maj 3rd 5:4,
+                                  min 3rd 6:5, tritone 45:32), glided like changing a pendulum length
+    loudness wobble             → a small detune: the rosette precesses
+    brightness                  → nib width;  loudness at the start of a sheet → figure size
+    phrases                     → one sheet per 16 bars (or when the figure has decayed)
+    drop                        → a third, rotary pendulum joins, drawing in the accent ink
+    new track                   → a fresh sheet slides in; finished sheets stack and fade underneath
+    silence                     → the pen spirals in as the damping finishes, then lifts. Long silence →
+                                  a slow 1:1 ellipse in graphite
+    calm                        → one ellipse per breath, growing on the in-breath
+  Never strobes: beats move matter, never light.
+
+  Rendering: Copper Rain is WebGL2 (instanced teardrops 216 tris × 1024, 2× MSAA HDR at ≤1.1 Mpx (?msaa=4 for more), analytic atrium
+  environment, dual-filter bloom, ACES); heights are a 32×32 float texture (texSubImage of 4 KB/frame).
+  Harmonograph is canvas2D only (the desk, paper and lamp are baked; per frame only new ink segments
+  and the pen's CSS transform). No 2D canvas is ever uploaded to WebGL.
+  Layout: hero inside LW.layout.clear (right ~28% calm), follows LW.on('layout').
+  Dev keys (browser): n fake track (with chords), p play/pause demo, . next, k kick, v next skin,
+    s stretch, r water, b calm, t +3h.   Debug: window.__kin.bench(120).
+  Art slots: none (procedural).
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #07070a; }
+  canvas { position: fixed; display: block; }
+  .skin { position: fixed; inset: 0; opacity: 0; transition: opacity 1.4s ease; pointer-events: none; }
+  .skin.on { opacity: 1; }
+  #cu-gl { left: 0; top: 0; width: 100vw; height: 100vh; }
+  #hg-desk, #hg-shade { left: 0; top: 0; width: 100vw; height: 100vh; }
+  #hg-sheet { position: fixed; transform-origin: 50% 50%; will-change: transform; }
+  #hg-sheet canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  #hg-stack { position: fixed; }
+  #hg-pen { position: fixed; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+  #hg-arm { position: absolute; left: 0; top: -1.5px; height: 3px; transform-origin: 0 50%; border-radius: 2px;
+    background: linear-gradient(180deg, #e9cf98 0%, #a8803f 45%, #5d4219 100%); box-shadow: 0 6px 7px rgba(0,0,0,.35); }
+  #hg-nib { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #f3e3bd, #8d6a32 60%, #3a2a12); box-shadow: 0 3px 4px rgba(0,0,0,.45); }
+  #cap { pointer-events: none; z-index: 5; }
+</style>
+</head>
+<body>
+<div class="skin" id="skin-copper"><canvas id="cu-gl"></canvas></div>
+<div class="skin" id="skin-harmonograph">
+  <canvas id="hg-desk"></canvas>
+  <canvas id="hg-stack"></canvas>
+  <div id="hg-sheet"><canvas id="hg-paper"></canvas><canvas id="hg-ink"></canvas></div>
+  <canvas id="hg-shade"></canvas>
+  <div id="hg-pen"><div id="hg-arm"></div><div id="hg-nib"></div></div>
+</div>
+<canvas id="cap"></canvas>
+<script src="lw.js"></script>
+<script src="music.js"></script>
+<script>
+'use strict';
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const approach = (v, t, tau, dt) => v + (t - v) * (1 - Math.exp(-dt / Math.max(1e-4, tau)));
+const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const nowS = () => performance.now() / 1000;
+const qs = new URLSearchParams(location.search);
+const DEV = !LW.isHost;
+const SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
+const SANS = '-apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
+const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const MX = LW.mx;
+const SKINS = ['copper', 'harmonograph'];
+const skinWanted = () => SKINS.includes(LW.settings.skin) ? LW.settings.skin : 'copper';
+
+// hour → [base, key light] (sRGB) shared by both skins
+const TOD = [
+  [0, [6, 6, 9], [175, 190, 230]], [5.5, [7, 6, 9], [200, 196, 220]], [7.2, [12, 9, 9], [255, 214, 196]],
+  [10, [11, 10, 10], [250, 244, 232]], [16.5, [11, 10, 10], [252, 238, 218]], [18.6, [13, 9, 7], [255, 200, 150]],
+  [20.6, [7, 7, 10], [205, 205, 230]], [24, [6, 6, 9], [175, 190, 230]],
+];
+function todAt(h) {
+  h = ((h % 24) + 24) % 24;
+  for (let i = 0; i < TOD.length - 1; i++) {
+    const a = TOD[i], b = TOD[i + 1];
+    if (h >= a[0] && h <= b[0]) { const t = (h - a[0]) / (b[0] - a[0]), e = t * t * (3 - 2 * t); return { base: mix3(a[1], b[1], e), light: mix3(a[2], b[2], e), day: smooth01(6, 8.5, h) * (1 - smooth01(17.5, 20, h)) }; }
+  }
+  return { base: TOD[0][1], light: TOD[0][2], day: 0 };
+}
+
+// =====================================================================
+//  Layout (shared): hero centre inside LW.layout.clear
+// =====================================================================
+const L = { W: 0, H: 0, dpr: 1, x0: 0, x1: 0, cx: 0, cy: 0 };
+function layout() {
+  const W = innerWidth, H = innerHeight, cl = (LW.layout && LW.layout.clear) || [0, 0.72];
+  L.W = W; L.H = H; L.dpr = Math.min(2, devicePixelRatio || 1);
+  L.x0 = cl[0] * W; L.x1 = cl[1] * W;
+  L.cx = Math.round(L.x0 + (L.x1 - L.x0) * 0.52); L.cy = Math.round(H * 0.45);
+  CU.layout(); HG.layout();
+  layoutCaption();
+}
+
+// =====================================================================
+//  Calm + reminders (shared)
+// =====================================================================
+const calm = { on: false, lv: 0, auto: 0, t: 0, br: { level: 0 } };
+LW.breathDiegetic = true;   // the sculpture / the pen carries the breath; lw.js keeps a quiet label
+const BR = { t0: nowS(), off: -1e9 };
+function setCalm(on, auto = 0) {
+  if (on && !calm.on && nowS() - BR.off > 3) BR.t0 = nowS();
+  if (!on && calm.on) BR.off = nowS();
+  calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
+}
+let tag = null;
+function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') CU.swell(0.5, 0.5, 1); }
+
+// =====================================================================
+//  COPPER RAIN
+// =====================================================================
+const N = 32;
+const cuCv = document.getElementById('cu-gl');
+const CU = (() => {
+  let gl = null;
+  try {
+    gl = cuCv.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: false });
+    if (gl && !gl.getExtension('EXT_color_buffer_float')) { console.warn('kinetic: EXT_color_buffer_float missing'); gl = null; }
+  } catch (e) { gl = null; }
+  const S = {
+    gl, w: 0, h: 0, ready: false,
+    hh: new Float32Array(N * N), v: new Float32Array(N * N), tgt: new Float32Array(N * N),
+    form: { a: [1, 2, -1], b: [1, 2, -1], mix: 1 }, amp: 0.6, plane: 0, lift: 0,
+    swells: [], idleT: 0, formT: 0, yaw: 0, expo: 0.95, light: [1, 0.95, 0.88], key: [1, 1, 1], win: [0.5, 0.6, 0.7],
+    accent: [0.9, 0.5, 0.3], fog: [0.01, 0.01, 0.012], base: [7, 7, 10], active: false,
+  };
+  const FS_VS = `#version 300 es
+out vec2 vUv;
+void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vUv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+  const ENV = `
+uniform vec3 uKey, uWin, uAcc, uFloor;
+// the atrium the drops reflect: a paned skylight overhead, a long clerestory band, one accent strip,
+// a faintly lit floor below
+vec3 env(vec3 r, float rough) {
+  vec3 c = vec3(0.004, 0.0038, 0.0036);
+  float s = 0.02 + rough;
+  // skylight: a long soft rooflight overhead
+  float up = smoothstep(0.62 - s, 0.8 + s, r.y) * smoothstep(0.55 + s, 0.2 - s, abs(r.x / max(r.y, 0.3)));
+  c += uKey * up;
+  // clerestory: a horizontal band all round, brighter behind the viewer (−z)
+  float band = smoothstep(0.06 - s, 0.1 + s, r.y) * (1.0 - smoothstep(0.17 - s, 0.21 + s, r.y));
+  c += uWin * band * (0.35 + 0.65 * smoothstep(0.3, -0.9, r.z));
+  // accent strip, to the right
+  float az = atan(r.x, -r.z);
+  c += uAcc * smoothstep(0.16 + s, 0.1 - s, abs(az - 1.2)) * smoothstep(-0.2 - s, 0.0, r.y) * (1.0 - smoothstep(0.4, 0.6 + s, r.y));
+  // floor bounce
+  c += uFloor * (smoothstep(-0.6 + s, -0.95, r.y) + 0.015 * smoothstep(0.0, -0.5, r.y));
+  return c;
+}`;
+  const DROP_VS = `#version 300 es
+precision highp float;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNrm;
+uniform mat4 uVP;
+uniform sampler2D uH;
+uniform float uSp, uScale;
+out vec3 vN; out vec3 vW;
+void main() {
+  int i = gl_InstanceID % ${N}, j = gl_InstanceID / ${N};
+  float h = texelFetch(uH, ivec2(i, j), 0).r;
+  vec2 g = (vec2(float(i), float(j)) - float(${(N - 1) / 2})) * uSp;
+  vec3 w = vec3(g.x, h, g.y) + aPos * uScale;
+  vW = w; vN = aNrm;
+  gl_Position = uVP * vec4(w, 1.0);
+}`;
+  const DROP_FS = `#version 300 es
+precision highp float;
+uniform vec3 uCam, uFog, uTint;
+uniform float uFogK;
+in vec3 vN; in vec3 vW; out vec4 o;
+${ENV}
+void main() {
+  vec3 n = normalize(vN), v = normalize(uCam - vW), r = reflect(-v, n);
+  vec3 F0 = vec3(0.955, 0.6, 0.46) * uTint;
+  float cv = clamp(dot(n, v), 0.0, 1.0);
+  vec3 F = F0 + (1.0 - F0) * pow(1.0 - cv, 5.0);
+  vec3 c = F * env(r, 0.12);
+  float d = length(uCam - vW);
+  c = mix(c, uFog, 1.0 - exp(-d * uFogK));
+  o = vec4(c, 1.0);
+}`;
+  const WIRE_VS = `#version 300 es
+precision highp float;
+uniform mat4 uVP; uniform sampler2D uH; uniform float uSp, uScale, uTop;
+out float vY;
+void main() {
+  int i = gl_InstanceID % ${N}, j = gl_InstanceID / ${N};
+  float h = texelFetch(uH, ivec2(i, j), 0).r;
+  vec2 g = (vec2(float(i), float(j)) - float(${(N - 1) / 2})) * uSp;
+  float y = gl_VertexID == 0 ? h + 0.95 * uScale : uTop;
+  vY = gl_VertexID == 0 ? 0.0 : 1.0;
+  gl_Position = uVP * vec4(g.x, y, g.y, 1.0);
+}`;
+  const WIRE_FS = `#version 300 es
+precision highp float;
+uniform vec3 uWire;
+in float vY; out vec4 o;
+void main() { o = vec4(uWire * (1.0 - vY) * (1.0 - vY), 1.0); }`;
+  const DOWN_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uThreshold, uSpread; uniform int uPrefilter;
+in vec2 vUv; out vec4 o;
+vec3 pre(vec3 c) { if (uPrefilter == 0) return c; float b = max(c.r, max(c.g, c.b)); float soft = clamp(b - uThreshold + 0.5, 0.0, 1.0); soft = soft * soft * 0.5; return c * max(soft, b - uThreshold) / max(b, 1e-4); }
+void main() {
+  vec2 h = uTexel * uSpread;
+  vec3 c = pre(texture(uSrc, vUv).rgb) * (uPrefilter == 0 ? 4.0 : 0.0);
+  c += pre(texture(uSrc, vUv - h).rgb) + pre(texture(uSrc, vUv + h).rgb) + pre(texture(uSrc, vUv + vec2(h.x, -h.y)).rgb) + pre(texture(uSrc, vUv - vec2(h.x, -h.y)).rgb);
+  o = vec4(c / (uPrefilter == 0 ? 8.0 : 4.0), 1.0);
+}`;
+  const UP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel;
+in vec2 vUv; out vec4 o;
+vec3 t(vec2 d) { return texture(uSrc, vUv + d * uTexel).rgb; }
+void main() { vec3 c = t(vec2(-2, 0)) + t(vec2(2, 0)) + t(vec2(0, -2)) + t(vec2(0, 2)); c += 2.0 * (t(vec2(-1, -1)) + t(vec2(1, -1)) + t(vec2(-1, 1)) + t(vec2(1, 1))); o = vec4(c / 12.0, 1.0); }`;
+  const COMP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uScene, uBloom;
+uniform float uBloomAmt, uExposure;
+uniform vec3 uBgTop, uBgBot;
+uniform vec2 uGlow;   // screen-space centre of the skylight spill
+in vec2 vUv; out vec4 o;
+vec3 aces(vec3 x) { const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+  vec4 s = texture(uScene, vUv);
+  vec3 hdr = s.rgb + texture(uBloom, vUv).rgb * uBloomAmt;
+  vec3 col = pow(aces(hdr * uExposure), vec3(1.0 / 2.2));
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+  o = vec4(col, 1.0);
+}`;
+  const BG_FS = `#version 300 es
+precision highp float;
+uniform vec3 uBgTop, uBgBot, uGlowC; uniform vec2 uGlow; uniform float uAspect;
+in vec2 vUv; out vec4 o;
+void main() {
+  vec3 c = mix(uBgBot, uBgTop, smoothstep(0.0, 1.0, vUv.y));
+  vec2 d = (vUv - uGlow) * vec2(uAspect, 1.0);
+  c += uGlowC * exp(-dot(d, d) * 2.2);
+  o = vec4(c, 1.0);
+}`;
+  let P = {}, VAO = null, triCount = 0, ms = null, res = null, mips = [], hTex = null, msaa = 4;
+  function program(vs, fs) {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      gl.attachShader(p, s);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const setters = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+      const info = gl.getActiveUniform(p, i), loc = gl.getUniformLocation(p, info.name);
+      const t = info.type;
+      setters[info.name.replace(/\[0\]$/, '')] = t === gl.FLOAT ? (v) => gl.uniform1f(loc, v) : t === gl.FLOAT_VEC2 ? (v) => gl.uniform2fv(loc, v)
+        : t === gl.FLOAT_VEC3 ? (v) => gl.uniform3fv(loc, v) : t === gl.FLOAT_MAT4 ? (v) => gl.uniformMatrix4fv(loc, false, v)
+        : (v) => gl.uniform1i(loc, v);
+    }
+    return { use(u = {}) { gl.useProgram(p); for (const k in u) if (setters[k]) setters[k](u[k]); } };
+  }
+  function tex(w, h, internal = gl.RGBA16F, fmt = gl.RGBA, type = gl.HALF_FLOAT, filter = gl.LINEAR) {
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, fmt, type, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+  }
+  function target(w, h) { const t = tex(w, h), f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null); return { tex: t, fbo: f, w, h, dispose() { gl.deleteTexture(t); gl.deleteFramebuffer(f); } }; }
+  // a teardrop by lathe: pointed neck on top (wire), full round belly below
+  function dropMesh(seg = 12, rings = 9) {
+    const prof = [];
+    for (let k = 0; k <= rings; k++) {
+      const t = k / rings, a = t * Math.PI;                 // 0 top … π bottom
+      const y = Math.cos(a) * 0.95 - 0.12 * Math.sin(a);   // shifted belly
+      const r = Math.sin(a) * (0.5 + 0.5 * Math.pow(t, 0.9)) * 0.62;
+      prof.push([r, y]);
+    }
+    const pos = [], nrm = [];
+    const nAt = (k) => { const a = prof[Math.max(0, k - 1)], b = prof[Math.min(rings, k + 1)]; const dy = b[1] - a[1], dr = b[0] - a[0]; const l = Math.hypot(dy, dr) || 1; return [-dy / l, dr / l]; };   // (radial, y) outward
+    for (let k = 0; k < rings; k++) for (let s = 0; s < seg; s++) {
+      const q = [[k, s], [k + 1, s], [k + 1, s + 1], [k, s], [k + 1, s + 1], [k, s + 1]];
+      for (const [kk, ss] of q) {
+        const [r, y] = prof[kk], ang = ss / seg * TAU, [nr, ny] = nAt(kk);
+        pos.push(Math.cos(ang) * r, y, Math.sin(ang) * r);
+        nrm.push(Math.cos(ang) * nr, ny, Math.sin(ang) * nr);
+      }
+    }
+    return { pos: new Float32Array(pos), nrm: new Float32Array(nrm), count: pos.length / 3 };
+  }
+  function init() {
+    if (!gl) return;
+    P.drop = program(DROP_VS, DROP_FS); P.wire = program(WIRE_VS, WIRE_FS);
+    P.down = program(FS_VS, DOWN_FS); P.up = program(FS_VS, UP_FS); P.comp = program(FS_VS, COMP_FS); P.bg = program(FS_VS, BG_FS);
+    VAO = gl.createVertexArray(); gl.bindVertexArray(VAO);
+    const m = dropMesh(); triCount = m.count;
+    const b0 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b0); gl.bufferData(gl.ARRAY_BUFFER, m.pos, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    const b1 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b1); gl.bufferData(gl.ARRAY_BUFFER, m.nrm, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+    S.emptyVAO = gl.createVertexArray();
+    hTex = tex(N, N, gl.R32F, gl.RED, gl.FLOAT, gl.NEAREST);
+    const maxS = gl.getParameter(gl.MAX_SAMPLES) || 0;
+    msaa = Math.min(+(qs.get('msaa') || 2), maxS);
+    S.ready = true;
+  }
+  function resize(w, h) {
+    if (!gl || (w === S.w && h === S.h)) return;
+    S.w = w; S.h = h;
+    if (ms) { gl.deleteFramebuffer(ms.fbo); gl.deleteRenderbuffer(ms.color); gl.deleteRenderbuffer(ms.depth); }
+    if (res) res.dispose();
+    mips.forEach((m) => m.dispose()); mips = [];
+    ms = { fbo: gl.createFramebuffer(), color: gl.createRenderbuffer(), depth: gl.createRenderbuffer() };
+    gl.bindRenderbuffer(gl.RENDERBUFFER, ms.color);
+    if (msaa > 1) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, msaa, gl.RGBA16F, w, h); else gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA16F, w, h);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, ms.depth);
+    if (msaa > 1) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, msaa, gl.DEPTH_COMPONENT24, w, h); else gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fbo);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, ms.color);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, ms.depth);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    res = target(w, h);
+    let sw = w >> 2, sh = h >> 2;
+    for (let i = 0; i < 4 && sw >= 8 && sh >= 8; i++, sw >>= 1, sh >>= 1) mips.push(target(sw, sh));
+  }
+  // ── camera ──
+  const mat = {
+    persp(fy, asp, n, f, shiftX) {
+      const t = 1 / Math.tan(fy / 2), m = new Float32Array(16);
+      m[0] = t / asp; m[5] = t; m[10] = (f + n) / (n - f); m[11] = -1; m[14] = 2 * f * n / (n - f);
+      m[8] = -shiftX;   // oblique shift: x_ndc += shiftX
+      return m;
+    },
+    look(e, c, up) {
+      const z = norm([e[0] - c[0], e[1] - c[1], e[2] - c[2]]), x = norm(cross(up, z)), y = cross(z, x);
+      return new Float32Array([x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, e), -dot(y, e), -dot(z, e), 1]);
+    },
+    mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+  };
+  function norm(v) { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); }
+  function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+  // ── forms: the Cymatics square-plate table, ordered on the circle of fifths ──
+  const SQUARE = [[1, 2, -1], [1, 3, 1], [2, 3, -1], [1, 4, -1], [2, 5, 1], [3, 4, 1], [3, 5, -1], [2, 6, -1], [4, 5, -1], [3, 7, 1], [5, 6, 1], [4, 7, -1]];
+  function formFor(pos, minor, tier) {
+    const [n, m, s] = SQUARE[((pos % 12) + 12) % 12];
+    // keep kinetic forms low-order: fold the higher table entries back down, tier adds one step
+    const f = (k) => 1 + ((k - 1) % 3);
+    return [f(n) + tier, f(m) + (n === m ? 1 : 0) + tier, minor ? -s : s];
+  }
+  function setForm(f) {
+    const same = f.join() === S.form.b.join();
+    if (same) return;
+    S.form.a = S.form.mix > 0.5 ? S.form.b : S.form.a; S.form.b = f; S.form.mix = 0;
+    S.formT = 0;
+  }
+  const modeVal = (f, u, v) => Math.cos(f[0] * Math.PI * u) * Math.cos(f[1] * Math.PI * v) + f[2] * Math.cos(f[1] * Math.PI * u) * Math.cos(f[0] * Math.PI * v);
+  S.swell = (u, v, s) => { S.swells.push({ u, v, age: 0, s }); if (S.swells.length > 6) S.swells.shift(); };
+
+  // idle: a looping choreography where the two halves mirror and answer each other
+  function idleTarget(u, v, t) {
+    const seg = t / 48, k = Math.floor(seg), f = seg - k, e = smooth01(0.7, 1, f);
+    const A = idleForm(k % 5, u, v, t), B = idleForm((k + 1) % 5, u, v, t);
+    return lerp(A, B, e);
+  }
+  function idleForm(i, u, v, t) {
+    const L = u < 0.5, uu = L ? u * 2 : (1 - u) * 2;    // each half in its own 0..1 (mirrored)
+    const lag = L ? 0 : 2.2;                             // the right half answers a moment later
+    switch (i) {
+      case 0: return 1.5 * Math.sin(TAU * (u * 0.9 + v * 0.35) - 0.42 * t);
+      case 1: return 1.8 * Math.sin(Math.PI * uu) * Math.sin(Math.PI * v) * Math.sin(0.35 * (t - lag));
+      case 2: { const r = Math.hypot(u - 0.5, v - 0.5); return 1.4 * Math.cos(r * 11 - 0.5 * t) * Math.exp(-r * 1.6); }
+      case 3: return 1.6 * Math.sin(TAU * uu * 0.75 - 0.4 * (t - lag)) * Math.cos(Math.PI * (v - 0.5));
+      default: return 1.7 * Math.cos(Math.PI * u) * Math.cos(Math.PI * v) * Math.sin(0.28 * t) + 0.6 * Math.sin(TAU * v - 0.3 * t);
+    }
+  }
+  function simulate(dt) {
+    const cl = calm.lv, playing = MX.playing && MX.silentFor < 2;
+    S.form.mix = Math.min(1, S.form.mix + dt / 2.5);
+    const fm = S.form.mix * S.form.mix * (3 - 2 * S.form.mix);
+    S.formT += dt;
+    // amplitude through loudness; the build flattens everything into a lifted plane
+    const ampT = playing ? 0.5 + 2.7 * Math.pow(MX.energy, 1.15) : 0;
+    S.amp = approach(S.amp, ampT * (1 - 0.94 * MX.tension), ampT > S.amp ? 0.6 : 1.5, dt);
+    S.lift = approach(S.lift, playing ? 1.4 * MX.tension : 0, 1.2, dt);
+    const idleW = approach(S.idleW == null ? 1 : S.idleW, playing ? 0 : 1, 2.5, dt); S.idleW = idleW;
+    S.idleT += dt * (MX.playing ? 1 : 0.75);
+    const breath = calm.br.level;
+    for (const sw of S.swells) sw.age += dt;
+    S.swells = S.swells.filter((s) => s.age < 4.5);
+    const tg = S.tgt;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const u = i / (N - 1), v = j / (N - 1);
+      let h = S.amp * lerp(modeVal(S.form.a, u, v), modeVal(S.form.b, u, v), fm) * 0.5 + S.lift;
+      if (idleW > 0.001) h = lerp(h, idleTarget(u, v, S.idleT), idleW);
+      for (const sw of S.swells) {
+        const r = Math.hypot(u - sw.u, v - sw.v), x = r - sw.age * 0.32;
+        h += sw.s * 1.25 * Math.exp(-x * x / 0.006) * Math.exp(-sw.age / 1.6);
+      }
+      h = lerp(h, -1.4 + 2.8 * breath, cl);
+      tg[i + j * N] = h;
+    }
+    // motor model: velocity and acceleration limits per drop
+    const vmax = lerp(2.6, 1.4, cl), amax = 7;
+    for (let k = 0; k < N * N; k++) {
+      const want = clamp((tg[k] - S.hh[k]) * 3.2, -vmax, vmax);
+      S.v[k] += clamp(want - S.v[k], -amax * dt, amax * dt);
+      S.hh[k] += S.v[k] * dt;
+    }
+  }
+  MX.on('phrase', () => { if (MX.playing) setForm(formFor(MX.rootPos, MX.minor, tier())); });
+  MX.on('chord', () => { if (MX.playing && S.formT > 16) setForm(formFor(MX.rootPos, MX.minor, tier())); });
+  MX.on('drop', () => { setForm(formFor(MX.rootPos, MX.minor, tier())); S.swell(0.5, 0.5, 1.4); });
+  MX.on('track', () => { setForm(formFor(MX.rootPos, MX.minor, tier())); });
+  MX.on('kick', (s) => {
+    if (!MX.playing || calm.lv > 0.5 || MX.tension > 0.6) return;
+    // swells travel out from a point that walks slowly round the field
+    const a = MX.beatIndex * 0.61;
+    S.swell(0.5 + 0.3 * Math.cos(a), 0.5 + 0.3 * Math.sin(a), 0.25 + 0.45 * s);
+  });
+  function tier() { return MX.bright > 0.6 ? 1 : 0; }
+
+  function palette(dt) {
+    const tod = todAt(LW.env.hour || 0);
+    const w = MX.np ? (MX.playing ? 1 : 0.6) : 0;
+    const light = toLin(tod.light);
+    let key = mix3(light, [1, 0.78, 0.55], 0.35).map((v) => v * (3 + 2 * tod.day));
+    let win = mix3(light, [0.55, 0.65, 0.85], 0.35 * tod.day).map((v) => v * (2.6 + 2 * tod.day));
+    let acc = MX.pal.accent.map((v) => v * 1.2);
+    if (MX.art && MX.art.acc && w > 0) { const a = toLin(MX.art.acc), am = Math.max(...a, 1e-3); acc = mix3(acc, a.map((v) => v / am * 1.2), 0.6 * w); }
+    const wx = LW.env.weather;
+    if (wx === 'cloudy' || wx === 'fog' || wx === 'rain' || wx === 'storm') { key = key.map((v) => v * 0.7); win = win.map((v) => v * 0.8); }
+    const k = LW.envBlend ? LW.envBlend(dt, 2.5) : 1 - Math.exp(-dt / 2.5);
+    const glide = (c, t) => { for (let i = 0; i < 3; i++) c[i] += (t[i] - c[i]) * k; };
+    glide(S.key, key); glide(S.win, win); glide(S.accent, acc); glide(S.base, tod.base);
+    const expoT = (MX.playing ? 1 : MX.ever ? 0.8 : 0.88) * lerp(1, 0.55 + 0.25 * calm.br.level, calm.lv);
+    S.expo = approach(S.expo, expoT, lerp(1.6, 0.6, calm.lv), dt);
+  }
+  function render(dt, T) {
+    if (!S.ready) return;
+    resize(S.pw, S.ph);
+    // upload heights (4 KB)
+    gl.bindTexture(gl.TEXTURE_2D, hTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, N, N, gl.RED, gl.FLOAT, S.hh);
+    // camera: below the sculpture at 3/4, a very slow drift
+    S.yaw = 0.62 + 0.05 * Math.sin(T * 0.021);
+    const R = 36, el = -0.3;
+    const eye = [Math.sin(S.yaw) * R * Math.cos(el), R * Math.sin(el) - 1.5, -Math.cos(S.yaw) * R * Math.cos(el)];
+    const ctr = [0, 2.5, 0];
+    const asp = S.w / S.h;
+    const proj = mat.persp(S.fov, asp, 1, 200, S.shift);
+    const vp = mat.mul(proj, mat.look(eye, ctr, [0, 1, 0]));
+    const base = toLin(S.base);
+    const fog = base.map((v) => v * 1.4 + 0.002);
+    // scene
+    gl.bindFramebuffer(gl.FRAMEBUFFER, ms.fbo); gl.viewport(0, 0, S.w, S.h);
+    gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(S.emptyVAO);
+    const top = base.map((v) => v * 2.2 + 0.003), bot = base.map((v) => v * 0.6);
+    P.bg.use({ uBgTop: top, uBgBot: bot, uGlow: [0.5 + S.shift * 0.5, 1.05], uGlowC: S.key.map((v) => v * 0.012), uAspect: asp });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LESS); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, hTex);
+    // wires (no depth write, faint)
+    gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    P.wire.use({ uVP: vp, uH: 0, uSp: 1, uScale: 0.46, uTop: 34, uWire: S.key.map((v) => v * 0.008 + 0.0015) });
+    gl.drawArraysInstanced(gl.LINES, 0, 2, N * N);
+    gl.disable(gl.BLEND); gl.depthMask(true);
+    gl.bindVertexArray(VAO);
+    P.drop.use({
+      uVP: vp, uH: 0, uSp: 1, uScale: 0.46, uCam: eye, uFog: fog, uFogK: 0.016, uTint: [1, 1, 1],
+      uKey: S.key, uWin: S.win, uAcc: S.accent, uFloor: S.key.map((v) => v * 0.7),
+    });
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, triCount, N * N);
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(S.emptyVAO);
+    // resolve MSAA
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.fbo); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, res.fbo);
+    gl.blitFramebuffer(0, 0, S.w, S.h, 0, 0, S.w, S.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    // bloom
+    let src = res;
+    mips.forEach((m, i) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, m.fbo); gl.viewport(0, 0, m.w, m.h);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, src.tex);
+      P.down.use({ uSrc: 0, uTexel: [1 / src.w, 1 / src.h], uThreshold: 0.8, uPrefilter: i === 0 ? 1 : 0, uSpread: i === 0 ? 1 : 0.5 });
+      gl.drawArrays(gl.TRIANGLES, 0, 3); src = m;
+    });
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    for (let i = mips.length - 1; i > 0; i--) {
+      const from = mips[i], to = mips[i - 1];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, to.fbo); gl.viewport(0, 0, to.w, to.h);
+      gl.bindTexture(gl.TEXTURE_2D, from.tex);
+      P.up.use({ uSrc: 0, uTexel: [1 / from.w, 1 / from.h] });
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, res.tex);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mips[0].tex);
+    P.comp.use({ uScene: 0, uBloom: 1, uBloomAmt: 0.7 / mips.length, uExposure: S.expo });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  S.init = init;
+  S.layout = () => {
+    const budget = 1.1e6, css = L.W * L.H;
+    const scale = Math.min(L.dpr, Math.sqrt(budget / css));
+    S.pw = Math.round(L.W * scale); S.ph = Math.round(L.H * scale);
+    if (cuCv.width !== S.pw || cuCv.height !== S.ph) { cuCv.width = S.pw; cuCv.height = S.ph; }
+    // frame the sculpture inside the clear band: oblique projection shift toward its centre
+    S.shift = (L.cx / L.W) * 2 - 1;
+    const zoneW = (L.x1 - L.x0) / L.W, asp = L.W / L.H;
+    // vertical fov so the sculpture fills ~85% of the clear band's width
+    const wantHalfW = 21 / (zoneW * 0.9);               // world half-width visible across the window
+    S.fov = clamp(2 * Math.atan(wantHalfW / 36 / asp), 0.45, 1.05);
+  };
+  S.tick = (dt, T) => { if (!gl) return; simulate(dt); palette(dt); render(dt, T); };
+  S.formFor = formFor; S.setForm = setForm;
+  return S;
+})();
+
+// =====================================================================
+//  HARMONOGRAPH
+// =====================================================================
+const HG = (() => {
+  const desk = document.getElementById('hg-desk'), dx = desk.getContext('2d');
+  const shade = document.getElementById('hg-shade'), shx = shade.getContext('2d');
+  const stack = document.getElementById('hg-stack'), stx = stack.getContext('2d');
+  const sheetEl = document.getElementById('hg-sheet');
+  const paper = document.getElementById('hg-paper'), px = paper.getContext('2d');
+  const ink = document.getElementById('hg-ink'), ix = ink.getContext('2d');
+  const pen = document.getElementById('hg-pen'), arm = document.getElementById('hg-arm'), nib = document.getElementById('hg-nib');
+  const S = {
+    size: 0, sx: 0, sy: 0, rot: -0.025, dirty: true, key: '', sheets: [], slide: 1, slideFrom: [0, 0],
+    // pendulums
+    t: 0, A: 0, d: 1 / 26, f1: 3.4, f2: 3.4 * 1.5, f2T: 3.4 * 1.5, p: [0, 0.6, 1.1, 2.3], rot3: 0, R3: 0,
+    lifted: true, last: null, inkCol: [24, 22, 26], accent: false, mode: 'idle', bars: 0, startT: 0,
+    nibW: 1, ellipse: 0, calmPh: 0, silent: 0,
+  };
+  function layout() {
+    const zone = L.x1 - L.x0;
+    S.size = Math.round(Math.min(L.H * 0.66, zone * 0.62));
+    S.sx = L.cx - S.size / 2; S.sy = L.cy - S.size / 2;
+    for (const c of [desk, shade]) { const w = Math.round(L.W * 0.5), h = Math.round(L.H * 0.5); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } }
+    sheetEl.style.left = S.sx + 'px'; sheetEl.style.top = S.sy + 'px';
+    sheetEl.style.width = S.size + 'px'; sheetEl.style.height = S.size + 'px';
+    const pxs = Math.round(S.size * L.dpr);
+    if (ink.width !== pxs) {
+      // keep what is drawn when only the DPR/size changes
+      let keep = null;
+      if (ink.width > 0) { keep = document.createElement('canvas'); keep.width = ink.width; keep.height = ink.height; keep.getContext('2d').drawImage(ink, 0, 0); }
+      ink.width = ink.height = pxs; paper.width = paper.height = pxs;
+      if (keep) ix.drawImage(keep, 0, 0, pxs, pxs);
+    }
+    const m = Math.round(S.size * 0.2);
+    stack.style.left = (S.sx - m) + 'px'; stack.style.top = (S.sy - m) + 'px';
+    stack.style.width = stack.style.height = (S.size + 2 * m) + 'px';
+    const sp = Math.round((S.size + 2 * m) * L.dpr * 0.5);
+    if (stack.width !== sp) { stack.width = stack.height = sp; }
+    S.dirty = true; S.stackDirty = true;
+    LW.breathLabelAt = [L.cx / L.W, Math.min(0.86, (S.sy + S.size) / L.H + 0.06)];
+  }
+  // ── baking: desk (walnut + lamp pool), paper (fibres), shade (vignette) ──
+  function bake() {
+    const tod = todAt(LW.env.hour || 0), day = tod.day;
+    const w = desk.width, h = desk.height, s = 0.5;
+    dx.setTransform(s, 0, 0, s, 0, 0);
+    const wood = mix3([38, 24, 16], [52, 36, 24], day);
+    dx.fillStyle = rgb(wood); dx.fillRect(0, 0, L.W, L.H);
+    // grain: long faint streaks, slightly wavy
+    let seed = 7;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    dx.lineWidth = 1;
+    for (let i = 0; i < 260; i++) {
+      const y = rnd() * L.H, a = 0.03 + rnd() * 0.06, dark = rnd() < 0.6;
+      dx.strokeStyle = dark ? `rgba(10,5,2,${a})` : `rgba(120,80,48,${a * 0.6})`;
+      dx.lineWidth = 0.6 + rnd() * 2.2;
+      dx.beginPath(); dx.moveTo(-10, y);
+      for (let x = 0; x <= L.W + 40; x += 40) dx.lineTo(x, y + Math.sin(x * 0.004 + i) * 6 + Math.sin(x * 0.013 + i * 3) * 2);
+      dx.stroke();
+    }
+    // the lamp: a warm pool on the sheet, falling off into the room
+    const lamp = mix3([255, 200, 140], [255, 236, 210], day);
+    const g = dx.createRadialGradient(L.cx - S.size * 0.1, L.cy - S.size * 0.15, 0, L.cx, L.cy, Math.max(L.W, L.H) * 0.75);
+    g.addColorStop(0, rgb(lamp, 0.28)); g.addColorStop(0.35, rgb(lamp, 0.08)); g.addColorStop(1, 'rgba(0,0,0,0)');
+    dx.globalCompositeOperation = 'soft-light'; dx.fillStyle = g; dx.fillRect(0, 0, L.W, L.H);
+    dx.globalCompositeOperation = 'source-over';
+    // shadow of the current sheet (soft, offset away from the lamp)
+    dx.save(); dx.translate(L.cx + S.size * 0.02, L.cy + S.size * 0.03); dx.rotate(S.rot);
+    dx.shadowColor = 'rgba(0,0,0,0.55)'; dx.shadowBlur = S.size * 0.06 * s; dx.fillStyle = 'rgba(0,0,0,0.5)';
+    dx.fillRect(-S.size / 2, -S.size / 2, S.size, S.size); dx.restore();
+    // shade: darkens the room toward the edges and especially the right (widgets side)
+    const sw = shade.width, sh = shade.height;
+    shx.setTransform(s, 0, 0, s, 0, 0); shx.clearRect(0, 0, L.W, L.H);
+    const night = 1 - day;
+    const sg = shx.createRadialGradient(L.cx - S.size * 0.08, L.cy - S.size * 0.1, S.size * 0.3, L.cx, L.cy, Math.max(L.W, L.H) * 0.7);
+    sg.addColorStop(0, 'rgba(6,4,3,0)'); sg.addColorStop(0.5, `rgba(6,4,3,${0.35 + 0.25 * night})`); sg.addColorStop(1, `rgba(4,3,2,${0.8 + 0.12 * night})`);
+    shx.fillStyle = sg; shx.fillRect(0, 0, L.W, L.H);
+    // paper
+    const P = paper.width, pc = mix3([236, 222, 196], [242, 236, 222], day);
+    px.setTransform(1, 0, 0, 1, 0, 0);
+    px.fillStyle = rgb(pc); px.fillRect(0, 0, P, P);
+    const pg = px.createRadialGradient(P * 0.4, P * 0.35, 0, P * 0.5, P * 0.5, P * 0.85);
+    pg.addColorStop(0, 'rgba(255,248,232,0.35)'); pg.addColorStop(1, 'rgba(120,96,60,0.22)');
+    px.fillStyle = pg; px.fillRect(0, 0, P, P);
+    seed = 99;
+    for (let i = 0; i < 2600; i++) {   // fibres
+      const x = rnd() * P, y = rnd() * P, l = (2 + rnd() * 9) * L.dpr, a = rnd() * TAU;
+      px.strokeStyle = rnd() < 0.5 ? 'rgba(120,100,70,0.06)' : 'rgba(255,255,255,0.08)'; px.lineWidth = 0.5 * L.dpr;
+      px.beginPath(); px.moveTo(x, y); px.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); px.stroke();
+    }
+    const tile = document.createElement('canvas'); tile.width = tile.height = 128;   // fine grain (neutral, tileable)
+    const tg = tile.getContext('2d'), n = tg.createImageData(128, 128);
+    for (let i = 0; i < n.data.length; i += 4) { const v = 128 + (Math.random() - 0.5) * 60; n.data[i] = n.data[i + 1] = n.data[i + 2] = v; n.data[i + 3] = 255; }
+    tg.putImageData(n, 0, 0);
+    px.globalAlpha = 0.07; px.globalCompositeOperation = 'overlay'; px.fillStyle = px.createPattern(tile, 'repeat'); px.fillRect(0, 0, P, P);
+    px.globalAlpha = 1; px.globalCompositeOperation = 'source-over';
+    px.strokeStyle = 'rgba(90,70,45,0.25)'; px.lineWidth = L.dpr; px.strokeRect(0.5, 0.5, P - 1, P - 1);
+    S.dirty = false;
+  }
+  function bakeStack() {
+    const c = stx, w = stack.width;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, w);
+    const k = w / (S.size * 1.4);
+    S.sheets.forEach((sh, i) => {
+      const age = S.sheets.length - i;           // 1 = the most recent finished sheet
+      c.save(); c.translate(w / 2 + sh.ox * k * S.size, w / 2 + sh.oy * k * S.size); c.rotate(sh.r);
+      c.shadowColor = 'rgba(0,0,0,0.4)'; c.shadowBlur = 10 * k * L.dpr;
+      c.globalAlpha = 1;
+      c.drawImage(sh.img, -S.size * k / 2, -S.size * k / 2, S.size * k, S.size * k);
+      c.shadowBlur = 0;
+      c.fillStyle = `rgba(20,14,8,${0.12 + 0.12 * age})`; c.fillRect(-S.size * k / 2, -S.size * k / 2, S.size * k, S.size * k);   // fade underneath
+      c.restore();
+    });
+    S.stackDirty = false;
+  }
+  // ── the pendulums ──
+  function ratioNow() {
+    if (!MX.playing) return [1, 1];
+    return MX.interval.strength > 0.25 ? MX.interval.ratio : [1, 1];
+  }
+  function newSheet(reason) {
+    // retire the current sheet to the stack (paper + ink baked into one small image)
+    if (S.inked) {
+      const img = document.createElement('canvas'); img.width = img.height = Math.round(S.size * 0.7);
+      const g = img.getContext('2d'); g.drawImage(paper, 0, 0, img.width, img.width); g.drawImage(ink, 0, 0, img.width, img.width);
+      S.sheets.push({ img, r: S.rot + (Math.random() - 0.5) * 0.12, ox: (Math.random() - 0.5) * 0.06, oy: (Math.random() - 0.5) * 0.06 });
+      if (S.sheets.length > 3) S.sheets.shift();
+      S.stackDirty = true;
+    }
+    ix.setTransform(1, 0, 0, 1, 0, 0); ix.clearRect(0, 0, ink.width, ink.height);
+    S.inked = false; S.rot = (Math.random() - 0.5) * 0.05; S.slide = 0; bg.dirty = true; HG.dirtyDesk = true;
+    const r = ratioNow(), slow = TAU / 1.05;
+    S.f1 = slow * r[1] / Math.min(r[0], r[1]); S.f2 = S.f2T = slow * r[0] / Math.min(r[0], r[1]);
+    S.p = [Math.random() * TAU, Math.random() * TAU];
+    S.k1 = Math.PI / 2 * (0.82 + 0.16 * Math.random()); S.k2 = Math.PI / 2 * (0.78 + 0.2 * Math.random());
+    S.spin = MX.playing && MX.minor ? 1 : -1;
+    const loud = MX.playing ? MX.energy : 0.3;
+    S.A = reason === 'calm' ? 0 : reason === 'idle' ? 0.55 : 0.72 + 0.22 * loud;
+    S.d = reason === 'idle' ? 1 / 70 : 1 / 30;
+    S.t = 0; S.last = null; S.lifted = false; S.accent = false; S.R3 = 0; S.mode = reason; S.bars = 0; S.startT = nowS();
+    S.inkCol = reason === 'idle' ? [70, 70, 74] : [22, 20, 24];
+  }
+  MX.on('track', () => newSheet('music'));
+  MX.on('phrase', (i) => { if (MX.playing && calm.lv < 0.5 && (i % 2 === 0 || S.A * Math.exp(-S.d * S.t) < 0.06)) newSheet('music'); });
+  MX.on('drop', () => { if (calm.lv < 0.5) { S.accent = true; S.R3 = 0.16; S.f3 = (S.f1 + S.f2) * 0.5 * 1.003; } });
+  // two rotary pendulums (pen arm + table): nearly circular orbits; counter-rotating (major) draws petals,
+  // co-rotating (minor) draws inner loops
+  function penAt(t) {
+    const e = Math.exp(-S.d * t), e2 = Math.exp(-S.d * 1.25 * t);
+    const a1 = S.A * 0.56, a2 = S.A * 0.44, sg = S.spin;
+    let x = a1 * Math.sin(S.f1 * t + S.p[0]) * e + a2 * Math.sin(S.f2 * t + S.p[1]) * e2;
+    let y = a1 * Math.sin(S.f1 * t + S.p[0] + S.k1) * e + a2 * Math.sin(S.f2 * t + S.p[1] + sg * S.k2) * e2;
+    if (S.R3 > 0) { const e3 = Math.exp(-S.d * 0.8 * (t - S.t3)); x += S.R3 * e3 * Math.cos(S.f3 * t); y += S.R3 * e3 * Math.sin(S.f3 * t); }
+    return [x, y];
+  }
+  function tick(dt, T) {
+    if (S.dirty) bake();
+    if (S.stackDirty) bakeStack();
+    const cl = calm.lv, playing = MX.playing && MX.silentFor < 2;
+    S.silent = playing ? 0 : S.silent + dt;
+    // calm: one ellipse per breath, growing on the in-breath
+    if (cl > 0.5 && S.mode !== 'calm') newSheet('calm');
+    if (cl < 0.5 && S.mode === 'calm') newSheet(MX.playing ? 'music' : 'idle');
+    if (S.mode !== 'calm' && !playing && S.silent > 90 && S.mode !== 'idle') newSheet('idle');
+    if (!MX.ever && S.mode === 'idle' && S.t === 0 && !S.inked) newSheet('idle');
+    // slide the fresh sheet in from above-left
+    S.slide = Math.min(1, S.slide + dt / 1.4);
+    const e = 1 - Math.pow(1 - S.slide, 3);
+    sheetEl.style.transform = `translate(${(1 - e) * -S.size * 0.25}px, ${(1 - e) * -S.size * 0.9}px) rotate(${S.rot + (1 - e) * -0.12}rad)`;
+    if (S.slide < 1) { HG.dirtyDesk = true; }
+    // ratio glide (like sliding a pendulum bob) + loudness wobble → slow precession
+    const r = ratioNow(), slow = TAU / 1.05;
+    const wob = playing ? (MX.level - MX.energy) * 0.04 : 0;
+    S.f2T = slow * r[0] / Math.min(r[0], r[1]) * (1 + 0.004 + wob);
+    S.f1 = approach(S.f1, slow * r[1] / Math.min(r[0], r[1]), 2.5, dt);
+    S.f2 = approach(S.f2, S.f2T, 2.5, dt);
+    S.nibW = approach(S.nibW, 0.6 + 1.1 * MX.bright, 2, dt);
+    let lw = S.nibW * L.dpr, alpha = 0.62;
+    const steps = Math.max(2, Math.ceil(dt * 240));
+    const k = S.size * L.dpr * 0.5, c0 = ink.width / 2;
+    ix.lineCap = 'round'; ix.lineJoin = 'round';
+    const col = S.accent ? (MX.art && MX.art.acc ? MX.art.acc.map((v) => v * 0.55) : MX.pal.accent.map((v) => Math.pow(v, 1 / 2.2) * 150)) : S.inkCol;
+    let p = null;
+    if (S.mode === 'calm') {
+      const br = calm.br.level, cyc = LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0);
+      const ph = cyc.cycle ? ((LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) % cyc.cycle) / cyc.cycle : 0;
+      const R = 0.12 + 0.62 * br;
+      p = [R * Math.cos(ph * TAU) * 0.5, R * Math.sin(ph * TAU) * 0.42];
+      alpha = 0.28; lw = 0.8 * L.dpr;
+      drawSeg(S.last, p, k, c0, lw, alpha, [60, 58, 64]);
+      S.last = p; S.inked = true;
+    } else if (!S.lifted) {
+      const pts = S.last ? [S.last] : [];
+      for (let i = 1; i <= steps; i++) {
+        const t = S.t + dt * i / steps;
+        if (S.accent && S.t3 == null) S.t3 = t;
+        p = penAt(t); pts.push(p);
+      }
+      drawPath(pts, k, c0, lw, alpha, col);
+      S.t += dt; S.last = p; S.inked = true;
+      if (S.A * Math.exp(-S.d * S.t) < 0.012) S.lifted = true;      // the figure has died away: lift the pen
+    }
+    if (!S.accent) S.t3 = null;
+    // pen (nib + brass arm) follows the point, in screen space
+    const q = S.last || [0, 0];
+    const cs = Math.cos(S.rot), sn = Math.sin(S.rot);
+    const lx = q[0] * S.size * 0.5, ly = q[1] * S.size * 0.5;
+    const nx = L.cx + lx * cs - ly * sn, ny = L.cy + lx * sn + ly * cs;
+    const lift = S.lifted ? 1 : 0;
+    S.penLift = approach(S.penLift || 0, lift, 0.6, dt);
+    pen.style.transform = `translate(${nx - S.penLift * 6}px, ${ny - S.penLift * 10}px)`;
+    const ax = L.x0 - 40 - nx, ay = -40 - ny, al = Math.hypot(ax, ay);
+    arm.style.width = al + 'px'; arm.style.transform = `rotate(${Math.atan2(ay, ax)}rad)`;
+    nib.style.opacity = 1 - 0.3 * S.penLift;
+    if (HG.dirtyDesk) { HG.dirtyDesk = false; bakeDeskOnly(); }
+  }
+  function bakeDeskOnly() { S.dirty = true; }
+  function drawPath(pts, k, c0, lw, alpha, col) {
+    if (pts.length < 2) return;
+    const trace = () => { ix.beginPath(); ix.moveTo(c0 + pts[0][0] * k, c0 + pts[0][1] * k); for (let i = 1; i < pts.length; i++) ix.lineTo(c0 + pts[i][0] * k, c0 + pts[i][1] * k); };
+    trace();
+    ix.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha * 0.07})`; ix.lineWidth = lw * 3.2; ix.stroke();
+    ix.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha})`; ix.lineWidth = lw; ix.stroke();
+  }
+  function drawSeg(a, b, k, c0, lw, alpha, col) {
+    if (!a) return;
+    const x0 = c0 + a[0] * k, y0 = c0 + a[1] * k, x1 = c0 + b[0] * k, y1 = c0 + b[1] * k;
+    // bleed: a wide faint stroke under the line
+    ix.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha * 0.08})`; ix.lineWidth = lw * 3.2;
+    ix.beginPath(); ix.moveTo(x0, y0); ix.lineTo(x1, y1); ix.stroke();
+    ix.strokeStyle = `rgba(${col[0] | 0},${col[1] | 0},${col[2] | 0},${alpha})`; ix.lineWidth = lw;
+    ix.beginPath(); ix.moveTo(x0, y0); ix.lineTo(x1, y1); ix.stroke();
+  }
+  S.layout = layout; S.tick = tick; S.newSheet = newSheet;
+  S.markEnv = () => { S.dirty = true; };
+  return S;
+})();
+const bg = { dirty: false };
+
+// =====================================================================
+//  Skins: crossfade by CSS opacity, both tick during the fade
+// =====================================================================
+const SK = { cur: null, fadeUntil: 0 };
+const skinEl = { copper: document.getElementById('skin-copper'), harmonograph: document.getElementById('skin-harmonograph') };
+function applySkin() {
+  const want = skinWanted();
+  if (want === SK.cur) return;
+  const prev = SK.cur;
+  SK.cur = want; SK.prev = prev; SK.fadeUntil = nowS() + 1.6;
+  for (const k of SKINS) skinEl[k].classList.toggle('on', k === want);
+  if (want === 'harmonograph' && !HG.inked) HG.newSheet(MX.playing ? 'music' : 'idle');
+  cap.dirty = true;
+}
+LW.on('settings', applySkin);
+
+// =====================================================================
+//  Caption (left area, under the hero)
+// =====================================================================
+const capCv = document.getElementById('cap'), capx = capCv.getContext('2d');
+const cap = { dirty: true, x: 0, y: 0, w: 0, h: 0, a: 0, shownKey: '', key: '' };
+function layoutCaption() {
+  cap.w = Math.round(Math.min(L.H * 0.7, L.x1 - L.x0 - 60)); cap.x = Math.round(L.cx - cap.w / 2);
+  cap.y = Math.round(L.H * 0.84); cap.h = Math.round(Math.min(L.H * 0.11, L.H - cap.y - 6));
+  capCv.style.left = cap.x + 'px'; capCv.style.top = cap.y + 'px'; capCv.style.width = cap.w + 'px'; capCv.style.height = cap.h + 'px';
+  const w = Math.round(cap.w * L.dpr), h = Math.round(cap.h * L.dpr);
+  if (capCv.width !== w || capCv.height !== h) { capCv.width = w; capCv.height = h; }
+  cap.dirty = true;
+}
+function ellipsize(g, s, maxW) { if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s.trimEnd() + '…'; }
+function stateLabel() {
+  if (calm.lv > 0.5) return SK.cur === 'harmonograph' ? 'one ellipse per breath' : 'breathing plane';
+  if (SK.cur === 'harmonograph') {
+    if (!MX.playing) return HG.lifted ? 'pen at rest' : 'free swing · 1:1';
+    const r = MX.interval.strength > 0.25 ? MX.interval.ratio : [1, 1];
+    return MX.chordName() + '  ·  ' + r[0] + ':' + r[1];
+  }
+  if (!MX.playing) return 'resting choreography';
+  const f = CU.form.b;
+  return MX.chordName() + '  ·  mode ' + f[0] + ',' + f[1] + (MX.section === 'build' ? '  ·  gathering' : '');
+}
+function drawCaption(dt) {
+  const np = MX.np, want = np ? 'np|' + MX.trackKey : 'idle';
+  if (want !== cap.shownKey) { cap.a = approach(cap.a, 0, 0.25, dt); if (cap.a < 0.02) { cap.shownKey = want; cap.dirty = true; } }
+  else cap.a = approach(cap.a, 1, 0.6, dt);
+  if (tag) { tag.t += dt; if (tag.t > 12) tag = null; }
+  const fadeOn = Math.abs(cap.a - (want === cap.shownKey ? 1 : 0)) > 0.004;
+  const lab = stateLabel();
+  const key = cap.shownKey + '|' + lab + '|' + SK.cur + '|' + (MX.playing ? 1 : 0) + '|' + (MX.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
+  if (!cap.dirty && !fadeOn && !tag && key === cap.key) return;
+  cap.key = key; cap.dirty = false;
+  const g = capx, d = L.dpr, H = L.H, w = cap.w, h = cap.h;
+  g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  const light = SK.cur === 'harmonograph';
+  const A = cap.a * (1 - 0.55 * calm.lv) * (MX.playing || !np ? 1 : 0.7);
+  const fsT = clamp(Math.round(H * 0.019), 13, 30), fsA = clamp(Math.round(H * 0.0118), 10, 18), top = clamp(H * 0.006, 2, 12);
+  let x = 0;
+  g.textBaseline = 'top'; g.textAlign = 'left';
+  g.shadowColor = 'rgba(0,0,0,0.5)'; g.shadowBlur = light ? 6 : 0;
+  const shown = cap.shownKey.startsWith('np|') ? np : null;
+  if (shown) {
+    const th = Math.round(fsT * 1.25 + fsA * 1.5 + 6);
+    if (MX.art && MX.art.img) {
+      g.globalAlpha = A * 0.9; g.save(); g.beginPath(); g.roundRect(0, top, th, th, 3); g.clip(); g.drawImage(MX.art.img, 0, top, th, th); g.restore();
+      x = th + Math.round(fsT * 0.8);
+    }
+    g.globalAlpha = A * 0.88; g.fillStyle = '#f3ede4'; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText(ellipsize(g, shown.title || '', w * 0.58 - x), x, top);
+    g.globalAlpha = A * 0.52; g.fillStyle = '#e6ddd0'; g.font = `500 ${fsA}px ${SANS}`;
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0.14em';
+    g.fillText(ellipsize(g, (shown.artist || '').toUpperCase() + (shown.playing ? '' : '  ·  PAUSED'), w * 0.58 - x), x, top + fsT * 1.3 + 4);
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0px';
+  } else {
+    g.globalAlpha = A * 0.58; g.fillStyle = '#efe8dd'; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText(SK.cur === 'harmonograph' ? 'Harmonograph' : 'Copper Rain', 0, top);
+    g.globalAlpha = A * 0.32; g.font = `400 ${fsA}px ${SANS}`;
+    g.fillText(SK.cur === 'harmonograph' ? 'the pen draws the interval you hear' : 'a kinetic sculpture · play some music', 0, top + fsT * 1.3 + 4);
+  }
+  g.textAlign = 'right';
+  if (tag) {
+    const k = clamp(tag.t / 1.5, 0, 1) * clamp((12 - tag.t) / 2, 0, 1), ee = k * k * (3 - 2 * k);
+    g.globalAlpha = 0.78 * ee * (1 - 0.3 * calm.lv); g.fillStyle = '#f3ede4'; g.font = `italic 400 ${fsT * 0.92}px ${SERIF}`;
+    const tw = g.measureText(tag.text).width;
+    g.fillText(tag.text, w, top + 1);
+    if (tag.kind === 'water') {
+      const gx = w - tw - fsT, gy = top + 1, gh = fsT * 0.95, gw = gh * 0.62;
+      g.strokeStyle = '#f3ede4'; g.lineWidth = 1; g.globalAlpha *= 0.8;
+      g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + gw * 0.12, gy + gh); g.lineTo(gx + gw * 0.88, gy + gh); g.lineTo(gx + gw, gy); g.stroke();
+      g.globalAlpha *= 0.5; g.beginPath(); g.moveTo(gx + gw * 0.06, gy + gh * 0.42); g.lineTo(gx + gw * 0.94, gy + gh * 0.42); g.stroke();
+    }
+  } else {
+    g.globalAlpha = A * 0.3 + 0.06; g.fillStyle = '#e6ddd0'; g.font = `400 ${fsA}px ${MONO}`;
+    g.fillText(lab, w, top + 3);
+  }
+  g.shadowBlur = 0; g.globalAlpha = 1;
+}
+
+// =====================================================================
+//  Frame
+// =====================================================================
+let tPrev = nowS();
+function frame() {
+  requestAnimationFrame(frame);
+  const T = nowS(), dt = Math.min(0.1, Math.max(0, T - tPrev));
+  tPrev = T;
+  tick(dt, T);
+}
+function tick(dt, T) {
+  MX.update(dt);
+  if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
+  calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 1.2 : 1.6, dt);
+  calm.br = calm.lv > 0.01 ? LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) : { level: 0 };
+  applySkin();
+  const fading = T < SK.fadeUntil;
+  if (SK.cur === 'copper' || (fading && SK.prev === 'copper')) CU.tick(dt, T);
+  if (SK.cur === 'harmonograph' || (fading && SK.prev === 'harmonograph')) HG.tick(dt, T);
+  drawCaption(dt);
+}
+
+// =====================================================================
+//  Wiring
+// =====================================================================
+function inHero(x, y) { return Math.abs(x - L.cx) < (L.x1 - L.x0) * 0.32 && Math.abs(y - L.cy) < L.H * 0.3; }
+LW.on('down', (x, y) => {
+  if (inHero(x, y)) { MX.media('playpause'); if (SK.cur === 'copper') CU.swell(0.5, 0.5, 0.6); }
+  else if (x >= cap.x && x <= cap.x + cap.w * 0.58 && y >= cap.y && y <= cap.y + cap.h && MX.np) MX.media('next');
+});
+LW.on('nowplaying', () => { cap.dirty = true; });
+MX.on('art', () => { cap.dirty = true; });
+LW.on('env', () => { HG.markEnv(); });
+LW.on('layout', layout);
+LW.on('reminder', (r) => {
+  if (!r) return;
+  if (r.kind === 'water') showTag('water', r.text || 'a sip of water?');
+  else if (r.kind === 'stretch') showTag('stretch', r.text || 'roll your shoulders, unclench your jaw');
+  else if (r.kind === 'breathe') setCalm(true, 60);
+});
+LW.on('calm', (on) => setCalm(!!on));
+LW.on('action', (a) => {
+  if (a === 'water') showTag('water', 'a sip of water?');
+  else if (a === 'stretch') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
+  else if (a === 'playpause' || a === 'next' || a === 'previous') MX.media(a);
+});
+if (DEV) addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey) return;
+  if (e.key === 'p') MX.media('playpause');
+  if (e.key === '.') MX.media('next');
+  if (e.key === 'k') CU.swell(0.5, 0.5, 1);
+  if (e.key === 'v') LW.set('skin', SKINS[(SKINS.indexOf(skinWanted()) + 1) % SKINS.length]);
+  if (e.key === 's') showTag('stretch', 'roll your shoulders, unclench your jaw');
+});
+addEventListener('resize', layout);
+
+try { CU.init(); } catch (e) { console.error('kinetic GL init failed', e); }
+layout();
+applySkin();
+if (LW.calm) setCalm(true);
+requestAnimationFrame(frame);
+
+window.__kin = {
+  CU, HG, L, calm, MX, SK,
+  bench(n = 120) {
+    const realNow = () => new Event('x').timeStamp, px = new Uint8Array(4), gl = CU.gl;
+    let T = nowS(); const t0 = realNow();
+    for (let i = 0; i < n; i++) { T += 1 / 30; tick(1 / 30, T); if (gl && SK.cur === 'copper') gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    return { msPerFrameSynced: +((realNow() - t0) / n).toFixed(2), skin: SK.cur, renderPx: [CU.w, CU.h], dpr: L.dpr, view: [L.W, L.H] };
+  },
+};
+</script>
+</body>
+</html>

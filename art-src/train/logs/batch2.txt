@@ -1,0 +1,10 @@
+OK swiss-pano-night 2172x724x
+OK shinkansen-pano-night 2172x724x
+OK orient-pano-night 2172x724x
+OK p-tt 2166x726x
+OK p-aunty 2172x724x
+OK p-suitcase 2172x724x
+OK shinkansen-day 1586x992x
+OK swiss-day 1586x992x
+OK orient-day 1586x992x
+OK p-attendant 2172x724x

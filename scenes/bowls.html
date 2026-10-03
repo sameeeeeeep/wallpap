@@ -14,9 +14,17 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script>
 (() => {
 'use strict';
+// Singing Bowls — a quiet Himalayan room at the wall's foot; the bowls, candles, mallet and glass all live in
+// the LEFT ~70% (the right is calm wall/floor for desktop icons and widgets).
+// Window light is geometric: the sun/moon direction shears the arched window (panes + mullion bars) onto the
+// floor, the bowls in it catch light on their rims and throw shadows along it, and a dust-lit beam joins window
+// and patch (stronger in haze/fog, faint when cloudy, gone when the source is down). See bakeLight().
+// Optional art (procedural fallback): art/bowls/window-view-day.png, window-view-night.png — 1152×468 painted
+// Himalayan ranges with a transparent sky (live sky, sun, moon and stars show behind).
 
 // ───────────────────────── helpers ─────────────────────────
 const TAU = Math.PI * 2;
@@ -150,14 +158,15 @@ const lightKeyOf = (L) => {
 };
 
 // ───────────────────────── state ─────────────────────────
-let W = 0, H = 0, dpr = 1;
+let W = 0, H = 0, dpr = 1, MIR = 1;
 let groupW, gx0, Rmax, depthSpan, baseY, horizonY;
 let bowls = [], candles = [], win = null, glass = null, shaft = null;
 let bgCur = null, bgPrev = null, bgFade = 1;
-let shaftCur = null, shaftPrev = null, patchCv = null;
+let LIGHT = null, LIGHTprev = null, beamFront = [], beamFrontPrev = [];                   // baked window light (patch + beam), current / fading out
 let frameSpr = null, dotSpr = null;
 let light = lightFor(LW.env), lightKey = '';
 let dust = [], rings = [], props = [];
+const smoke = { p: [], acc: 0 };
 let GR = [1, 1, 1];                                   // colour grade used while baking
 const gc = (c, m = 1, a = 1) => rgba([c[0] * m * GR[0], c[1] * m * GR[1], c[2] * m * GR[2]], a);
 
@@ -171,7 +180,7 @@ const calm = { target: !!LW.calm, amt: 0, breath: 0, temp: 0, br: { phase: 'in',
 // breath (meditate auto-mode / breathe reminder, no guide on screen) restarts that clock.
 function calmRestart() { if (!LW.calm) BR.t0 = performance.now() / 1000; calm.lastPh = ''; }
 const reminder = { on: false, kind: '', text: '', t0: 0, a: 0 };
-const wxs = { flash: 0, flashes: [], nextFlash: 0, rain: [], drops: [], snow: [], clouds: [], fog: [] };
+const wxs = { flash: 0, flashes: [], nextFlash: 0, rain: [], drops: [], snow: [], clouds: [], fog: [], snowAcc: 0 };
 
 // ───────────────────────── layout ─────────────────────────
 function layout() {
@@ -182,14 +191,21 @@ function layout() {
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
 
   const SET = SETS[setName];
-  groupW = Math.min(W * (SET.wide ? 0.9 : 0.84), H * SET.gw);
-  gx0 = (W - groupW) / 2;
+  // Everything that needs attention (bowls, candles, mallet, glass) lives in the LEFT ~70%: the right ~28%
+  // is quiet wall and floor for the desktop icons/widgets. Measure the set's true footprint (bowl radii at
+  // both ends) so the group fills the band [BAND0, BAND1] of the width without spilling past it.
+  const cl = (LW.layout && LW.layout.clear) || [0, 0.72];
+  MIR = LW.layout && LW.layout.side === 'left' ? -1 : 1;     // widgets on the left → the room is mirrored
+  const BAND0 = clamp(cl[0], 0, 0.5) + 0.045, BAND1 = clamp(cl[1], 0.5, 1) - 0.035, fRef = Math.min(...SET.bowls.map((o) => o.f));
+  let lo = 1e9, hi = -1e9;
+  for (const o of SET.bowls) { const r = SET.rf * Math.pow(fRef / o.f, 0.45) * (1 - 0.14 * o.d) * 1.06; lo = Math.min(lo, o.u - r); hi = Math.max(hi, o.u + r); }
+  groupW = Math.min(W * (BAND1 - BAND0) / (hi - lo), H * SET.gw);
+  gx0 = W * (BAND0 + BAND1) / 2 - groupW * (lo + hi) / 2;
   Rmax = groupW * SET.rf;
   depthSpan = Rmax * 1.2;
   baseY = Math.min(H * 0.8, H * 0.965 - Rmax * (K + 0.5 + 0.16));
   horizonY = baseY - depthSpan * 1.55 - Rmax * 0.35;
 
-  const fRef = Math.min(...SET.bowls.map((o) => o.f));
   const old = bowls;
   bowls = SET.bowls.map((o, i) => {
     const f = o.f, kind = o.kind || 'brass';
@@ -224,7 +240,8 @@ function layout() {
   });
 
   const ww = clamp(Math.min(W * 0.2, H * 0.34), 110, 640);
-  const wxp = Math.max(W * 0.04, Math.min(gx0 - ww * 0.3, W * 0.12));
+  let wxp = Math.max(W * 0.04, Math.min(gx0 - ww * 0.3, W * 0.12));
+  if (MIR < 0) wxp = W - ww - Math.max(W * 0.04, Math.min(W - (gx0 + groupW) - ww * 0.3, W * 0.12));
   let wtop = H * 0.07;
   const wbot = horizonY - (horizonY - wtop) * 0.12;
   wtop = Math.max(wtop, wbot - ww * 1.9);
@@ -675,82 +692,240 @@ function winPath(g, inset = 0) {
   g.closePath();
 }
 
-function bakeShaft(L) {
-  const sc = 0.2, sw = Math.ceil(W * sc), sh = Math.ceil(H * sc);
-  const c = mk(sw, sh), g = c.getContext('2d'), img = g.createImageData(sw, sh), D = img.data;
-  const x0 = win.cx, y0 = win.cy;
-  // the beam lands where the sun (or moon) puts it: morning far right, evening near the window;
-  // high sun lands closer to the wall
-  const sunny = L.day > 0.35, X = sunny ? L.sunX : L.moonX, E = clamp(sunny ? L.sunE : L.moonE, 0, 1);
-  const x1 = gx0 + groupW * lerp(1.0, 0.1, X), y1 = baseY - depthSpan * lerp(0.0, 1.05, E);
-  let dx = x1 - x0, dy = y1 - y0; const Ln = Math.hypot(dx, dy); dx /= Ln; dy /= Ln;
-  const w0 = win.w * 0.36 * L.shaftW, w1 = win.w * 0.62 * L.shaftW;
-  const soft = L.haze > 0 ? 0.05 : 0.3;
-  shaft = { x0, y0, dx, dy, nx: -dy, ny: dx, L: Ln, w0, spr: (w1 - w0) / Ln, soft, amp: L.shaftA, x1, y1, pr: groupW * 0.24 };
-  const col = L.shaft;
-  let minX = sw, minY = sh, maxX = 0, maxY = 0;
-  for (let j = 0; j < sh; j++) {
-    const y = (j + 0.5) / sc;
-    for (let i = 0; i < sw; i++) {
-      const x = (i + 0.5) / sc;
-      let I = shaftAt(x, y, true);
-      if (y > horizonY) {
-        const ex = (x - x1) / shaft.pr, ey = (y - y1) / (shaft.pr * K);
-        I += Math.exp(-(ex * ex + ey * ey) * 1.6) * 0.22 * sstep(horizonY, horizonY + 20, y);
-      }
-      const a = clamp(I * L.shaftA * 0.2, 0, 1);
-      if (a > 0.002) {
-        const k = (j * sw + i) * 4;
-        D[k] = col[0]; D[k + 1] = col[1]; D[k + 2] = col[2]; D[k + 3] = a * 255;
-        if (i < minX) minX = i; if (i > maxX) maxX = i; if (j < minY) minY = j; if (j > maxY) maxY = j;
-      }
-    }
+// ───────────────────────── window light (sun / moon through the arched window) ─────────────────────────
+// A tiny bit of real geometry. The window is an opening in the back wall; the floor runs from the wall's foot
+// (horizonY) toward the viewer, with depth foreshortened by K (a horizontal circle of radius R reads R × R·K).
+// A ray from the sun/moon that passes the window at height h above the floor drops h and, per unit of drop,
+// travels tx sideways and tz into the room, so it lands at screen (x + tx·h, horizonY + K·tz·h). That's one
+// affine map, so the lit patch IS the window — arch, panes and mullion bars — sheared and stretched by the
+// light direction: high sun → short patch near the wall; low dusk sun → long streak reaching into the room.
+// The beam in the air is the same map at fractions t of the drop (window → patch), stacked as thin slices.
+const D2R = Math.PI / 180;
+// where the light comes from, relative to the window. rel = azimuth from the wall's normal (− = from the left
+// as you look out, so the light falls to the right); e = elevation. Morning light enters steeply from the left
+// and swings round to nearly straight in at sunset (the window faces roughly west-south-west).
+function lightDir(X, E, maxE) {
+  const rel = lerp(-58, 6, clamp(X, 0, 1)) * D2R * MIR;   // mirrored room: the window is on the right
+  const e = lerp(3.5, maxE, clamp(E, 0, 1)) * D2R;
+  const te = Math.tan(Math.max(e, 3.5 * D2R));
+  return { rel, e, tx: clamp(-Math.sin(rel) / te, -2.6, 2.6), tz: Math.min(Math.cos(rel) / te, 9) };
+}
+// how much of the moon is lit (a crescent barely lights a floor; the full moon casts a real window)
+function moonLit() { const m = LW.env && LW.env.astronomy && LW.env.astronomy.moon; const f = m && Number.isFinite(m.fraction) ? m.fraction : 1; return clamp(0.06 + 0.94 * f, 0, 1); }
+function lightSource(L) {
+  const sunK = L.sunE > 0 ? sstep(0, 0.1, L.sunE) * sstep(0.15, 0.4, L.day) : 0;
+  const moonK = L.moon * (1 - sstep(0.25, 0.5, L.day)) * moonLit();
+  const sun = sunK >= moonK * 0.6 && sunK > 0.01;
+  const k = sun ? sunK : moonK;
+  const d = sun ? lightDir(L.sunX, L.sunE, 64) : lightDir(L.moonX, L.moonE, 58);
+  // direct light reaching the floor: weather dims it (clouds scatter it into the beam's haze instead)
+  const I = k * L.patchK * (sun ? 1 : 0.62);
+  const beamK = ({ clear: 0.55, cloudy: 0.3, snow: 0.45, fog: 1.45, rain: 0.08, storm: 0 })[L.weather] ?? 0.5;
+  return { sun, k, I, beam: k * beamK * (sun ? 1 : 0.75) * (1 + 0.6 * L.haze), ...d, col: L.shaft };
+}
+// The disc seen through the glass, placed from the same direction as the light it casts (seen to the left →
+// light falls to the right) and nudged off the mullions so it always sits inside a pane.
+function discPos(rel, E, r) {
+  const { x0, w, top, bot } = win, wh = bot - top, bw = Math.max(2, win.ft * 0.45);
+  let x = win.cx + Math.sin(rel) * w * 0.62, y = bot - wh * 0.42 - wh * 0.62 * clamp(E, 0, 1);
+  const pad = r * 1.35 + bw / 2;
+  x = clamp(x, x0 + pad, x0 + w - pad); y = clamp(y, top + w * 0.18 + r, bot - pad);
+  if (Math.abs(x - win.cx) < pad) x = win.cx + (x < win.cx ? -pad : pad);
+  const rectH = bot - win.archY;
+  for (const f of [0, 0.5]) { const by = win.archY + rectH * f; if (Math.abs(y - by) < pad) y = by + (y < by ? -pad : pad); }
+  // still inside the arch?
+  if (y < win.archY) { const dx = x - win.cx, dy = y - win.archY, rr = win.r - r * 1.25; const d = Math.hypot(dx, dy); if (d > rr) { x = win.cx + dx * rr / d; y = win.archY + dy * rr / d; } }
+  return { x, y };
+}
+// window aperture as a mask (panes lit, mullions dark), in screen space at scale sc
+function apertureMask(sc, bars = true) {
+  const c = mk(W * sc, H * sc), g = c.getContext('2d');
+  g.setTransform(sc, 0, 0, sc, 0, 0);
+  winPath(g, 0); g.fillStyle = '#fff'; g.fill();
+  if (bars) {
+    g.globalCompositeOperation = 'destination-out';
+    const bw = Math.max(2, win.ft * 0.45), rectH = win.bot - win.archY;
+    g.fillRect(win.cx - bw / 2, win.top, bw, win.bot - win.top);
+    for (const f of [0, 0.5]) g.fillRect(win.x0, win.archY + rectH * f - bw / 2, win.w, bw);
   }
-  g.putImageData(img, 0, 0);
-  c.box = maxX >= minX ? { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1, sc } : null;
   return c;
 }
-
-function bakePatch(L) {
-  const sc = 0.25, c = mk(W * sc, H * sc), g = c.getContext('2d'), s = shaft;
-  if (!s) return c;
-  const sunny = L.day > 0.35, E = clamp(sunny ? L.sunE : L.moonE, 0, 1);
-  const hw = win.w * 0.62, hh = (win.bot - win.top) * K * (0.32 + 0.3 * (1 - E)), ra = Math.min(hh * 0.6, hw * K * 1.4);
-  const shx = clamp(s.dx / Math.max(0.25, s.dy), -3, 3) * 0.45;
-  g.scale(sc, sc); g.translate(s.x1, s.y1); g.transform(1, 0, shx, 1, 0, 0);
-  g.beginPath(); g.moveTo(-hw, hh); g.lineTo(-hw, -hh + ra); g.ellipse(0, -hh + ra, hw, ra, 0, Math.PI, 0, false); g.lineTo(hw, hh); g.closePath();
-  g.fillStyle = rgba(L.shaft, 1); g.fill();
-  g.globalCompositeOperation = 'destination-out';
-  const bw = hw * 0.085, base = -hh + ra, rectH = hh - base;
-  g.fillRect(-bw / 2, -hh, bw, hh * 2);
-  for (const f of [0, 0.5]) g.fillRect(-hw, base + rectH * f - bw * 0.3, hw * 2, bw * 0.6);
-  // soften (penumbra)
-  const c2 = mk(c.width, c.height), g2 = c2.getContext('2d');
-  for (const [rad, al] of [[2.2, 0.06], [1.1, 0.07]]) {
-    g2.globalAlpha = al;
-    for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + rad; g2.drawImage(c, Math.cos(a) * rad, Math.sin(a) * rad); }
+// affine map of the window onto the plane reached after a fraction t of the drop (t = 1 → the floor)
+function dropXform(s, t, lift = 0) {
+  const hY = horizonY - lift, a = t * (1 + K * s.tz);
+  return [1, 0, -t * s.tx, 1 - a, t * s.tx * hY, a * hY];
+}
+// penumbra: the sun's disc (and haze) soften the edges, more so the further the light has to fall
+function blurPx(L, s, sc) {
+  const hMax = horizonY - win.top;
+  return clamp((1.5 + hMax * 0.007 / Math.max(0.12, Math.sin(s.e))) * (s.sun ? 1 + 2.4 * (1 - L.sunVis) : 1.2) * (1 + 1.6 * L.haze), 1.5, 34) * sc;
+}
+function blurCanvas(src, r) {
+  const c = mk(src.width, src.height), g = c.getContext('2d');
+  const taps = [[0, 0, 0.2]];
+  for (const [f, n, w] of [[0.5, 6, 0.07], [1, 10, 0.045]]) for (let i = 0; i < n; i++) { const a = (i / n) * TAU + f; taps.push([Math.cos(a) * r * f, Math.sin(a) * r * f, w]); }
+  const wsum = taps.reduce((q, t) => q + t[2], 0);
+  g.globalCompositeOperation = 'lighter';
+  for (const [dx, dy, w] of taps) { g.globalAlpha = w / wsum; g.drawImage(src, dx, dy); }
+  return c;
+}
+function bakeLight(L) {
+  const s = lightSource(L);
+  shaft = s;
+  const out = { s, patch: null, beam: null, beamData: null };
+  if (s.I < 0.004 && s.beam < 0.004) return out;
+  // ── the patch on the floor
+  const psc = 0.3, mask = apertureMask(psc);
+  const pc = mk(W * psc, H * psc), pg = pc.getContext('2d');
+  pg.setTransform(...dropXform(s, 1).map((v) => v * psc));
+  pg.drawImage(mask, 0, 0, W, H);
+  pg.setTransform(psc, 0, 0, psc, 0, 0);
+  pg.globalCompositeOperation = 'source-in'; pg.fillStyle = rgba(s.col); pg.fillRect(0, 0, W, H);
+  const pRaw = blurCanvas(pc, blurPx(L, s, psc));
+  // the bowls and candles standing in the light throw their shadows across it (along the light's path)
+  const sh = mk(pc.width, pc.height), sg = sh.getContext('2d');
+  sg.setTransform(psc, 0, 0, psc, 0, 0); sg.fillStyle = '#000';
+  const casters = bowls.map((b) => ({ x: b.x, y: b.bottom - b.R * K * 0.25, r: b.R * 0.92, h: (b.bottom - b.y) * 0.95 }))
+    .concat(candles.map((c) => ({ x: c.x, y: c.y, r: c.w * 0.5, h: c.h })))
+    .concat(ROOM_PROPS.map(roomPropGeom).filter(Boolean).map((r) => ({ x: r.x, y: r.y - r.h * 0.15, r: r.w * 0.4, h: r.h * (r.im === ART.room.incense ? 0.25 : 0.6) })));
+  for (const o of casters) {
+    for (let i = 0; i <= 14; i++) {
+      const f = i / 14, x = o.x + s.tx * o.h * f, y = o.y + K * s.tz * o.h * f;
+      sg.beginPath(); sg.ellipse(x, y, o.r, o.r * K, 0, 0, TAU); sg.fill();
+    }
   }
-  g2.globalAlpha = 0.05; g2.drawImage(c, 0, 0);
-  c2.k = sunny ? 0.46 : 0.3;
-  return c2;
+  const pb = mk(pc.width, pc.height), bg = pb.getContext('2d');
+  bg.drawImage(pRaw, 0, 0); bg.globalCompositeOperation = 'destination-out'; bg.drawImage(blurCanvas(sh, blurPx(L, s, psc) * 0.6), 0, 0);
+  out.patchRaw = pRaw;
+  out.patch = pb;
+  // ── the beam: slices of the opening on their way down, dust-lit; stronger in haze, gone without a source
+  if (s.beam > 0.004) {
+    const bsc = 0.2, bm = apertureMask(bsc), N = 40;
+    const bc = mk(W * bsc, H * bsc), g = bc.getContext('2d');
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < N; i++) {
+      const t = (i + 0.5) / N;
+      const fadeIn = sstep(0.0, 0.16, t), fadeOut = 1 - 0.55 * t;
+      g.globalAlpha = (1 / N) * 1.1 * fadeIn * fadeOut;
+      g.setTransform(...dropXform(s, t).map((v) => v * bsc));
+      g.drawImage(bm, 0, 0, W, H);
+    }
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+    // soften the slices into one volume
+    const b2 = mk(bc.width, bc.height), g2 = b2.getContext('2d');
+    g2.globalCompositeOperation = 'lighter';
+    for (const [dx, dy] of [[0, 0], [1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2]]) { g2.globalAlpha = 0.2; g2.drawImage(bc, dx, dy); }
+    const img = g2.getImageData(0, 0, b2.width, b2.height), D = img.data;
+    let minX = b2.width, minY = b2.height, maxX = -1, maxY = -1;
+    const al = new Uint8Array(b2.width * b2.height);
+    for (let j = 0; j < b2.height; j++) for (let i = 0; i < b2.width; i++) {
+      const k = j * b2.width + i, a = D[k * 4 + 3];   // accumulated coverage = beam density
+      al[k] = a;
+      if (a > 2) { if (i < minX) minX = i; if (i > maxX) maxX = i; if (j < minY) minY = j; if (j > maxY) maxY = j; }
+    }
+    g2.globalCompositeOperation = 'source-in'; g2.globalAlpha = 1; g2.fillStyle = rgba(s.col); g2.fillRect(0, 0, b2.width, b2.height);
+    // dust in the beam reads the density back
+    b2.box = maxX >= minX ? { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1 } : null;
+    b2.box_sc = bsc; b2.al = al; b2.aw = b2.width; b2.ah = b2.height; b2.k = s.beam;
+    out.beam = b2;
+    out.beamBottom = (maxY + 1) / bsc;
+  }
+  return out;
+}
+// light on a bowl standing in the patch: the floor patch lifted to the rim's height lights the rim and the
+// inner front wall (which faces the window); the outside of the bowl faces away and stays dark
+function lightBowlSprite(b, LP) {
+  if (!LP || !LP.patchRaw || LP.s.I < 0.01) return;
+  const s = LP.s, spr = b.spr, hb = (b.bottom - b.y) * 0.9;
+  const c = mk(spr.c.width, spr.c.height), g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, -spr.x * dpr, -spr.y * dpr);
+  g.drawImage(LP.patchRaw, -s.tx * hb, -(1 + K * s.tz) * hb, W, H);
+  g.globalCompositeOperation = 'destination-in';
+  g.beginPath(); g.ellipse(b.x, b.y + b.ry * 0.22, b.R * 1.01, b.ry * 0.86, 0, 0, TAU); g.fill();
+  g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(spr.c, 0, 0);
+  const sg = spr.c.getContext('2d');
+  sg.save(); sg.setTransform(1, 0, 0, 1, 0, 0); sg.globalCompositeOperation = 'lighter'; sg.globalAlpha = clamp(s.I * (s.sun ? 0.55 : 0.4), 0, 0.7); sg.drawImage(c, 0, 0); sg.restore();
+}
+function shaftAt(x, y) {
+  const b = LIGHT && LIGHT.beam; if (!b) return 0;
+  const i = (x * b.box_sc) | 0, j = (y * b.box_sc) | 0;
+  if (i < 0 || j < 0 || i >= b.aw || j >= b.ah) return 0;
+  return (b.al[j * b.aw + i] / 255) * b.k;
 }
 
-function shaftAt(x, y, raw) {
-  const s = shaft; if (!s) return 0;
-  const px = x - s.x0, py = y - s.y0;
-  const along = px * s.dx + py * s.dy;
-  if (along < 0) return 0;
-  const across = px * s.nx + py * s.ny;
-  const wid = s.w0 + along * s.spr;
-  const q = Math.abs(across) / wid;
-  if (q >= 1) return 0;
-  const edge = 1 - sstep(s.soft, 1, q);
-  const fade = sstep(0, s.L * 0.12, along) * (1 - sstep(s.L * 0.85, s.L * 1.2, along));
-  const an = across / wid;
-  const streak = raw ? 0.7 + 0.3 * (0.5 + 0.5 * Math.sin(an * 7 + 0.8)) * (0.6 + 0.4 * Math.sin(an * 17 + 2.1)) : 1;
-  return edge * fade * streak * (0.6 + 0.4 * (1 - along / s.L)) * (raw ? 1 : s.amp);
+const grey3 = (c) => { const v = c[0] * 0.3 + c[1] * 0.5 + c[2] * 0.2; return [v, v, v * 1.03]; };
+// painted window view (optional; procedural ridges until/unless these load)
+//   art/bowls/window-view-day.png, window-view-night.png — 1152×468, transparent sky, land along the bottom
+const ART = { day: null, night: null, room: {}, thangka: null };
+// lived-in details on the floor (painted sprites, neutral light; re-lit by the room at bake):
+//   art/bowls/incense.png 113×173 (stick tip at 54,2) · mala.png 202×100 · plant.png 222×251 · shawl.png 298×134
+// u/d as for bowls (group-relative across / depth); w = width in Rmax
+const ROOM_PROPS = [
+  { name: 'plant', u: 0.015, d: 1.45, w: 1.5 },
+  { name: 'incense', u: 0.405, d: 1.36, w: 0.42, tip: [54, 2] },
+  { name: 'mala', u: 0.5, d: -0.8, w: 0.78 },
+  { name: 'shawl', u: 0.985, d: -0.38, w: 1.5 },
+];
+for (const rp of ROOM_PROPS) {
+  const im = new Image();
+  im.onload = () => { if (!im.naturalWidth) return; ART.room[rp.name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); };
+  im.onerror = () => {};
+  im.src = 'art/bowls/' + rp.name + '.png';
 }
-
+// placed in world space (follows layout); null until the sprite has loaded
+function roomPropGeom(rp) {
+  const im = ART.room[rp.name]; if (!im) return null;
+  const s = 1 - 0.14 * rp.d, w = rp.w * Rmax * s, h = w * im.naturalHeight / im.naturalWidth;
+  const x = gx0 + rp.u * groupW, y = baseY - rp.d * depthSpan;   // y = where it touches the floor
+  return { im, x, y, w, h, s: w / im.naturalWidth };
+}
+// the room's light at a floor point: ambient (graded) + candle pools — sprites are multiplied by this
+function roomLightAt(L, x, y) {
+  const a = L.amb * 0.4;
+  let c = [a, a * 0.95, a * 0.88];
+  for (const cd of candles) {
+    const dd = Math.hypot((x - cd.x) / (Rmax * 3.2), (y - cd.y) / (Rmax * 1.6)), k = L.candle * 0.55 * Math.exp(-dd * dd);
+    c = [c[0] + k, c[1] + k * 0.68, c[2] + k * 0.42];
+  }
+  return c.map((v, i) => clamp(v * L.grade[i], 0, 1));
+}
+// a faded mandala thangka on the wall above the bowls (art/bowls/thangka.png 380×562, hanging cord included):
+// lit from below by the candles, falling into shadow toward the ceiling; hangs a finger's width off the wall
+{ const im = new Image(); im.onload = () => { if (!im.naturalWidth) return; ART.thangka = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); }; im.onerror = () => {}; im.src = 'art/bowls/thangka.png'; }
+function thangkaGeom() {
+  const im = ART.thangka; if (!im) return null;
+  const top = Math.max(H * 0.08, horizonY - (horizonY - H * 0.08) * 0.92), h = (horizonY - top) * 0.6, w = h * im.naturalWidth / im.naturalHeight;
+  return { im, x: gx0 + groupW * 0.585 - w / 2, y: top + (horizonY - top) * 0.07, w, h };
+}
+function bakeThangka(g, L) {
+  const r = thangkaGeom(); if (!r) return;
+  // a soft contact shadow where the scroll stands off the plaster (light from the candles below → shadow rides up)
+  g.save(); g.fillStyle = 'rgba(0,0,0,0.28)';
+  for (const [o, a] of [[10, 0.05], [6, 0.08], [3, 0.12]]) { g.globalAlpha = a / 0.28; g.fillRect(r.x - o * 0.4, r.y + r.h * 0.12 - o * 1.2, r.w + o * 0.8, r.h * 0.86 + o * 0.6); }
+  g.restore();
+  const lo = roomLightAt(L, r.x + r.w / 2, horizonY).map((v) => v * 0.82), hi = lo.map((v) => v * 0.5);
+  const c = mk(Math.ceil(r.w * dpr), Math.ceil(r.h * dpr)), cg = c.getContext('2d');
+  cg.drawImage(r.im, 0, 0, c.width, c.height);
+  cg.globalCompositeOperation = 'multiply';
+  const gr = cg.createLinearGradient(0, 0, 0, c.height);
+  gr.addColorStop(0, rgba(hi.map((v) => v * 255))); gr.addColorStop(1, rgba(lo.map((v) => Math.min(1, v * 1.08) * 255)));
+  cg.fillStyle = gr; cg.fillRect(0, 0, c.width, c.height);
+  cg.globalCompositeOperation = 'destination-in'; cg.drawImage(r.im, 0, 0, c.width, c.height);
+  g.drawImage(c, r.x, r.y, r.w, r.h);
+}
+function tintedProp(im, w, h, tint) {
+  const c = mk(w, h), g = c.getContext('2d');
+  g.drawImage(im, 0, 0, w, h);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(tint.map((v) => v * 255)); g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0, w, h);
+  return c;
+}
+for (const [k, f] of [['day', 'window-view-day'], ['night', 'window-view-night']]) {
+  const im = new Image();
+  im.onload = () => { if (!im.naturalWidth) return; ART[k] = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); };
+  im.onerror = () => {};
+  im.src = 'art/bowls/' + f + '.png';
+}
 function bakeWindow(g, L) {
   const { x0, x1, top, bot, w, ft } = win;
   // soft light spill around the opening
@@ -782,12 +957,17 @@ function bakeWindow(g, L) {
   const rnd = rng(7);
   const wh = bot - top;
   if (L.sunVis > 0.01 && L.sunE > 0) {
-    const sx = x0 + w * lerp(0.12, 0.88, L.sunX), sy = bot - wh * 0.16 - wh * 1.45 * L.sunE + wh * 0.03;
+    const sd = lightDir(L.sunX, L.sunE, 64), sp = discPos(sd.rel, L.sunE, w * 0.05), sx = sp.x, sy = sp.y;
     const low = 1 - sstep(0.05, 0.5, L.sunE), sc = mixc([255, 246, 225], [255, 150, 70], low);
     const r1 = w * 0.9; gr = g.createRadialGradient(sx, sy, 0, sx, sy, r1);
     gr.addColorStop(0, rgba(sc, 0.5 * L.sunVis)); gr.addColorStop(0.25, rgba(sc, 0.16 * L.sunVis)); gr.addColorStop(1, rgba(sc, 0));
     g.fillStyle = gr; g.fillRect(sx - r1, sy - r1, r1 * 2, r1 * 2);
-    g.fillStyle = rgba(mixc(sc, [255, 255, 255], 0.25), 0.95 * L.sunVis); g.beginPath(); g.arc(sx, sy, w * 0.05, 0, TAU); g.fill();
+    // a sun, not a moon: hot core + bloom that eats the disc edge
+    g.save(); g.globalCompositeOperation = 'lighter';
+    const r2 = w * 0.16; gr = g.createRadialGradient(sx, sy, w * 0.03, sx, sy, r2);
+    gr.addColorStop(0, rgba(sc, 0.75 * L.sunVis)); gr.addColorStop(0.35, rgba(sc, 0.22 * L.sunVis)); gr.addColorStop(1, rgba(sc, 0));
+    g.fillStyle = gr; g.fillRect(sx - r2, sy - r2, r2 * 2, r2 * 2); g.restore();
+    g.fillStyle = rgba(mixc(sc, [255, 255, 255], 0.6), 0.97 * L.sunVis); g.beginPath(); g.arc(sx, sy, w * 0.042, 0, TAU); g.fill();
   }
   if (L.stars > 0.01) {
     for (let i = 0; i < 80; i++) {
@@ -796,18 +976,31 @@ function bakeWindow(g, L) {
     }
   }
   if (L.moon > 0.01) {
-    const mx = x0 + w * lerp(0.18, 0.82, L.moonX), my = top + wh * (0.62 - 0.42 * L.moonE), mr = w * 0.055;
-    gr = g.createRadialGradient(mx, my, 0, mx, my, mr * 6);
-    gr.addColorStop(0, `rgba(210,220,245,${0.25 * L.moon})`); gr.addColorStop(1, 'rgba(210,220,245,0)');
-    g.fillStyle = gr; g.fillRect(mx - mr * 6, my - mr * 6, mr * 12, mr * 12);
-    g.fillStyle = `rgba(236,238,248,${0.92 * L.moon})`; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill();
-    { const cg = g.createRadialGradient(mx + mr * 0.35, my - mr * 0.1, 0, mx + mr * 0.35, my - mr * 0.1, mr * 1.1);
-      cg.addColorStop(0, 'rgba(0,0,0,0)'); cg.addColorStop(1, `rgba(150,158,185,${0.3 * L.moon})`);
-      g.fillStyle = cg; g.beginPath(); g.arc(mx, my, mr, 0, TAU); g.fill(); }
+    const mr = w * 0.055, md = lightDir(L.moonX, L.moonE, 58), mp = discPos(md.rel, L.moonE, mr), mx = mp.x, my = mp.y;
+    // the shared photoreal moon (real phase, earthshine, low-horizon warmth); mountains drawn after occlude it
+    if (LW.drawMoon) LW.drawMoon(g, mx, my, mr, { alt: Math.asin(clamp(L.moonE, 0, 1)), glow: 0.45, haze: L.weather === 'cloudy' ? 0.4 : L.haze, alpha: clamp(L.moon * 1.1, 0, 1) });
   }
-  // Layered distant ridges: broad silhouettes with atmospheric separation.
+  // The view: painted Himalayan ranges (day + moonlit night plates, sky keyed out so the live sky, sun, moon
+  // and stars show behind them), tinted toward the horizon light at dawn/dusk. Procedural ridges if missing.
   const skyB = L.sky[1];
-  for (let layer = 0; layer < 3; layer++) {
+  const vd = ART.day, vn = ART.night;
+  if (vd || vn) {
+    const iw = (vd || vn).naturalWidth, ih = (vd || vn).naturalHeight;
+    const dw = w * 1.75, dh = dw * ih / iw, dx = x0 + w * 0.5 - dw * 0.4, dy = bot - dh * 0.98;
+    const vc = mk(w * dpr, wh * dpr), vg = vc.getContext('2d');
+    vg.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -top * dpr);
+    const dayK = clamp(L.day * 1.15 - 0.05, 0, 1);
+    if (vn && dayK < 1) vg.drawImage(vn, dx, dy, dw, dh);
+    if (vd && dayK > 0) { vg.globalAlpha = vn ? dayK : 1; vg.drawImage(vd, dx, dy, dw, dh); vg.globalAlpha = 1; }
+    // atmosphere: the horizon colour washes the far ranges; grey weather flattens everything
+    vg.globalCompositeOperation = 'source-atop';
+    const tg = vg.createLinearGradient(0, dy, 0, bot);
+    const warm = L.weather === 'clear' ? (1 - sstep(0.15, 0.6, L.sunE)) * L.day : 0;
+    tg.addColorStop(0, rgba(skyB, 0.18 + 0.3 * warm)); tg.addColorStop(0.6, rgba(skyB, 0.08 + 0.12 * warm)); tg.addColorStop(1, rgba(skyB, 0));
+    vg.fillStyle = tg; vg.fillRect(x0, top, w, wh);
+    if (L.weather !== 'clear') { vg.fillStyle = rgba(grey3(skyB), 0.25 * L.I); vg.fillRect(x0, top, w, wh); }
+    g.drawImage(vc, x0, top, w, wh);
+  } else for (let layer = 0; layer < 3; layer++) {
     g.fillStyle = rgba(mixc(skyB, [24, 35, 39], 0.25 + layer * 0.2), 0.78 + layer * 0.08);
     const base = bot - wh * (0.25 - layer * 0.065), amp = wh * (0.075 - layer * 0.012);
     g.beginPath(); g.moveTo(x0 - 4, bot + 2); g.lineTo(x0 - 4, base);
@@ -914,6 +1107,7 @@ function bake(target, L) {
     g.fillStyle = bg; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
   }
   g.globalCompositeOperation = 'source-over';
+  bakeThangka(g, L);
   bakeWindow(g, L);
   // table / floor
   gr = g.createLinearGradient(0, horizonY, 0, H);
@@ -942,9 +1136,9 @@ function bake(target, L) {
     g.fillStyle = pg; g.fillRect(-r, -r, 2 * r, 2 * r); }
   g.restore();
   // sun / moon patch on the table, with the window's mullion shadows
-  if (patchCv) {
+  if (LIGHT && LIGHT.patch && LIGHT.s.I > 0.004) {
     g.save(); g.beginPath(); g.rect(0, horizonY, W, H - horizonY); g.clip();
-    g.globalAlpha = clamp(L.shaftA * patchCv.k * L.patchK, 0, 1); g.drawImage(patchCv, 0, 0, W, H); g.globalAlpha = 1;
+    g.globalAlpha = clamp(LIGHT.s.I * (LIGHT.s.sun ? 0.5 : 0.34), 0, 1); g.drawImage(LIGHT.patch, 0, 0, W, H); g.globalAlpha = 1;
     g.restore();
   }
   // candle light on wall & table (dominant at night)
@@ -967,7 +1161,7 @@ function bake(target, L) {
   g.globalCompositeOperation = 'source-over';
   // objects back → front, each baked as a sprite so it can be re-layered over floor rings
   props = [];
-  for (const b of bowls) { makeBowlSprite(b); props.push({ d: b.d, spr: b.spr, b, shadow: () => drawShadow(g, b) }); }
+  for (const b of bowls) { makeBowlSprite(b); lightBowlSprite(b, LIGHT); props.push({ d: b.d, spr: b.spr, b, shadow: () => drawShadow(g, b) }); }
   for (const c of candles) {
     const spr = worldSprite(c.x - c.w * 0.75, c.y - c.h - c.w * 0.35, c.w * 1.5, c.h + c.w * 0.62, (sg) => drawCandleBody(sg, c));
     props.push({ d: c.d, spr, shadow: () => drawCandleShadow(g, c) });
@@ -975,24 +1169,26 @@ function bake(target, L) {
   { const m = malletGeom(), pad = m.hr * 1.5;
     const spr = worldSprite(Math.min(m.x0, m.x1) - pad, Math.min(m.y0, m.y1) - pad, Math.abs(m.x1 - m.x0) + pad * 2, Math.abs(m.y1 - m.y0) + pad * 2, drawMallet);
     props.push({ d: -0.35, spr, shadow: () => drawMalletShadow(g) }); }
+  for (const rp of ROOM_PROPS) {
+    const r = roomPropGeom(rp); if (!r) continue;
+    const c = tintedProp(r.im, Math.ceil(r.w * dpr), Math.ceil(r.h * dpr), roomLightAt(L, r.x, r.y));
+    const spr = { c, x: r.x - r.w / 2, y: r.y - r.h, w: r.w, h: r.h };
+    props.push({ d: rp.d, spr, shadow: () => {
+      g.save(); g.translate(r.x + r.w * 0.06, r.y - r.h * 0.04); g.scale(1, K * 0.7);
+      const rr = r.w * 0.58, sg = g.createRadialGradient(0, 0, 0, 0, 0, rr);
+      sg.addColorStop(0, 'rgba(0,0,0,0.45)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = sg; g.fillRect(-rr, -rr, rr * 2, rr * 2); g.restore(); } });
+  }
   props.sort((a, b) => b.d - a.d);
   const hit = (A, B) => B.x < A.x + A.w && B.x + B.w > A.x && B.y < A.y + A.h && B.y + B.h > A.y;
   for (const b of bowls) b.over = props.filter((o) => o.b !== b && o.d < b.d && hit(b.spr, o.spr));
   for (const it of props) { it.shadow(); const s = it.spr; g.drawImage(s.c, s.x, s.y, s.w, s.h); }
-  // volumetric shaft
-  g.globalCompositeOperation = 'lighter';
-  const sc = shaftCur;
-  if (sc) g.drawImage(sc, 0, 0, sc.width / sc.box_sc, sc.height / sc.box_sc);
-  g.globalCompositeOperation = 'source-over';
-  // fog haze
-  if (L.haze > 0) {
-    g.fillStyle = `rgba(62,56,50,${0.16 * L.haze})`; g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'lighter';
-    gr = g.createLinearGradient(0, horizonY - H * 0.25, 0, H);
-    gr.addColorStop(0, 'rgba(120,110,100,0)'); gr.addColorStop(0.4, `rgba(120,110,100,${0.08 * L.haze})`); gr.addColorStop(1, 'rgba(120,110,100,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'source-over';
-  }
+  // props standing in front of the beam (between it and us) are redrawn over the live beam layer
+  const bb = LIGHT && LIGHT.beam && LIGHT.beam.box;
+  beamFront = bb ? props.filter((p) => { const s = p.spr, x0 = bb.sx / LIGHT.beam.box_sc, x1 = (bb.sx + bb.sw) / LIGHT.beam.box_sc;
+    return s.x < x1 && s.x + s.w > x0 && s.y < LIGHT.beamBottom && s.y + s.h > LIGHT.beamBottom - 4 && s.y + s.h * 0.85 > LIGHT.beamBottom - Rmax * 0.3; }) : [];
+  // fog stays outside: indoors the grey day only flattens and cools the light (see the grade); the haze that
+  // makes the beam visible is the room's own incense smoke
   // vignette
   { const r0 = Math.min(W, H) * 0.3, r1 = Math.hypot(W, H) * 0.62;
     const vg = g.createRadialGradient(W * 0.5, H * 0.58, r0, W * 0.5, H * 0.58, r1);
@@ -1025,15 +1221,14 @@ function rebake(crossfade) {
   if (!bgCur || bgCur.width !== cv.width || bgCur.height !== cv.height) {
     bgCur = mk(cv.width, cv.height); bgPrev = mk(cv.width, cv.height); crossfade = false;
   } else if (crossfade) {
-    const t = bgPrev; bgPrev = bgCur; bgCur = t; shaftPrev = shaftCur;
+    const t = bgPrev; bgPrev = bgCur; bgCur = t; LIGHTprev = LIGHT; beamFrontPrev = beamFront;
   }
-  shaftCur = bakeShaft(L); shaftCur.box_sc = 0.2;
-  patchCv = bakePatch(L);
+  LIGHT = bakeLight(L);
   bake(bgCur, L);
   frameSpr = bakeFrameSprite(L);
   dotSpr = makeDot(mixc(L.shaft, [255, 214, 170], 0.5));
   bgFade = crossfade ? 0 : 1;
-  if (!crossfade) shaftPrev = null;
+  if (!crossfade) LIGHTprev = null;
 }
 
 // ───────────────────────── weather particles ─────────────────────────
@@ -1748,6 +1943,20 @@ function update(dt, now) {
   }
   // rings
   for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.age += dt * (r.soft ? 1 : lerp(1, 0.7, calm.amt) * (1 - 0.35 * calm.still * calm.amt)); if (r.age > r.life) rings.splice(i, 1); }
+  // incense smoke
+  { const rp = ROOM_PROPS[1], r = roomPropGeom(rp);
+    if (r) {
+      const tx = r.x - r.w / 2 + rp.tip[0] * r.s, ty = r.y - r.h + rp.tip[1] * r.s;
+      smoke.acc += dt * 9 * ts;
+      while (smoke.acc > 1) { smoke.acc--; if (smoke.p.length < 60) smoke.p.push({ x: tx, y: ty, age: 0, life: 5 + Math.random() * 3, ph: Math.random() * TAU, sx: (Math.random() - 0.5) * 2 }); }
+      for (let i = smoke.p.length - 1; i >= 0; i--) {
+        const q = smoke.p[i]; q.age += dt * ts;
+        if (q.age > q.life) { smoke.p.splice(i, 1); continue; }
+        const k = q.age / q.life;
+        q.y -= dt * ts * Rmax * (0.42 - 0.18 * k);
+        q.x += dt * ts * (Math.sin(ambT * 0.7 + q.ph + q.age * 1.3) * Rmax * 0.09 * k + q.sx * Rmax * 0.02 * k + Rmax * 0.05 * k * light.wind);
+      }
+    } else smoke.p.length = 0; }
   // dust
   for (const p of dust) {
     const sp = 0.4 + 0.8 * p.z;
@@ -1779,6 +1988,7 @@ function update(dt, now) {
   }
   while (wxs.flashes.length && now >= wxs.flashes[0]) { wxs.flashes.shift(); wxs.flash = Math.max(wxs.flash, 0.7 + Math.random() * 0.3); }
   wxs.flash *= Math.exp(-dt / 0.11);
+  wxs.snowAcc = clamp(wxs.snowAcc + (light.weather === 'snow' ? dt * (0.25 + 0.75 * light.I) / 120 : -dt / (light.day > 0.5 ? 240 : 600)), 0, 1);
   if (bgFade < 1) bgFade = Math.min(1, bgFade + dt / 2.5);
   if (reminder.on) {
     const e = (now - reminder.t0) / 1000;
@@ -1788,18 +1998,22 @@ function update(dt, now) {
 }
 
 // ───────────────────────── draw ─────────────────────────
-function drawShaftLayer(c, a) {
-  if (!c || !c.box || a <= 0.002) return;
+function drawBeam(LP, fk, sa, front, t) {
+  const c = LP && LP.beam; if (!c) return;
+  const a = fk * (0.45 + sa) * c.k * 1.15;
+  if (!c.box || a <= 0.002) return;
   const bx = c.box, s = c.box_sc;
+  ctx.globalCompositeOperation = 'lighter';
   ctx.globalAlpha = Math.min(1, a);
   ctx.drawImage(c, bx.sx, bx.sy, bx.sw, bx.sh, bx.sx / s, bx.sy / s, bx.sw / s, bx.sh / s);
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  for (const p of front || []) drawProp(p, t);
 }
 
 function drawWindowWeather(t) {
   const L = light, w = L.weather, I = L.I;
   const { x0, top, bot } = win, ww = win.w, wh = bot - top;
-  const hasFx = L.clouds > 0 || w === 'rain' || w === 'storm' || w === 'snow' || wxs.flash > 0.01;
+  const hasFx = L.clouds > 0 || w === 'rain' || w === 'storm' || w === 'snow' || wxs.flash > 0.01 || wxs.snowAcc > 0.01;
   if (!hasFx) { ctx.drawImage(frameSpr.c, frameSpr.x, frameSpr.y, frameSpr.w, frameSpr.h); return; }
   ctx.save(); winPath(ctx, 0); ctx.clip();
   // clouds
@@ -1855,6 +2069,21 @@ function drawWindowWeather(t) {
     }
     ctx.globalAlpha = 1;
   }
+  // snow collecting on the outside of the panes, deepest in the bottom corners; builds up while it snows and
+  // lingers (then slowly melts) after
+  if (wxs.snowAcc > 0.01) {
+    const bw = Math.max(2, win.ft * 0.45), rectH = bot - win.archY, A = wxs.snowAcc;
+    const cols = [[x0, win.cx - bw / 2], [win.cx + bw / 2, x0 + ww]], rowsB = [win.archY + rectH * 0.5 - bw / 2, bot, win.archY - bw / 2];
+    const day = clamp(L.day + 0.25, 0.3, 1);
+    for (const yb of rowsB) for (const [a, b] of cols) {
+      const pw = b - a, hc = pw * (0.05 + 0.14 * A), he = pw * 0.03 * A;
+      const gr = ctx.createLinearGradient(0, yb - hc, 0, yb);
+      gr.addColorStop(0, `rgba(${235 * day | 0},${240 * day | 0},${250 * day | 0},${0.55 * A})`); gr.addColorStop(1, `rgba(${226 * day | 0},${232 * day | 0},${244 * day | 0},${0.9 * A})`);
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(a, yb); ctx.lineTo(a, yb - hc);
+      ctx.quadraticCurveTo(a + pw * 0.08, yb - he * 1.5, a + pw * 0.3, yb - he); ctx.lineTo(b - pw * 0.3, yb - he);
+      ctx.quadraticCurveTo(b - pw * 0.08, yb - he * 1.5, b, yb - hc * 0.8); ctx.lineTo(b, yb); ctx.closePath(); ctx.fill();
+    }
+  }
   ctx.restore();
   ctx.drawImage(frameSpr.c, frameSpr.x, frameSpr.y, frameSpr.w, frameSpr.h);
 }
@@ -1898,15 +2127,19 @@ function drawCandleFlames(t) {
 
 function drawFog(t) {
   if (light.haze <= 0) return;
+  // fog banks drifting through the valley — outside, seen through the glass only
+  ctx.save(); winPath(ctx, 0); ctx.clip();
   ctx.globalCompositeOperation = 'lighter';
+  const ww = win.w, wh = win.bot - win.top;
   for (const f of wxs.fog) {
-    const x = ((((f.x + ambT * f.v) % 1.4) + 1.4) % 1.4 - 0.2) * W, y = f.y * H, r = f.s * W;
+    const x = win.x0 + ((((f.x + ambT * f.v * 3) % 1.4) + 1.4) % 1.4 - 0.2) * ww, y = win.top + (0.35 + f.y * 0.6) * wh, r = f.s * ww * 1.6;
     ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.35);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-    g.addColorStop(0, `rgba(130,120,110,${0.05 * light.haze})`); g.addColorStop(1, 'rgba(130,120,110,0)');
+    g.addColorStop(0, `rgba(150,148,146,${0.16 * light.haze})`); g.addColorStop(1, 'rgba(150,148,146,0)');
     ctx.fillStyle = g; ctx.fillRect(-r, -r, 2 * r, 2 * r); ctx.restore();
   }
   ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
 }
 
 function drawSprite(s, jx) { if (s) ctx.drawImage(s.c, s.x + jx, s.y, s.w, s.h); }
@@ -2050,6 +2283,20 @@ function drawBreathFloor() {
   ctx.restore();
 }
 
+function drawSmoke() {
+  if (!smoke.p.length) return;
+  ctx.globalCompositeOperation = 'lighter';
+  const L = light, base = mixc([150, 140, 130], L.shaft, 0.25);
+  for (const q of smoke.p) {
+    const k = q.age / q.life, r = Rmax * (0.03 + 0.2 * k);
+    const lit = 0.05 + shaftAt(q.x, q.y) * 1.4 + 0.05 * L.candle;
+    const a = Math.sin(Math.PI * Math.min(1, k * 1.15)) * (1 - k) * 0.5 * lit;
+    if (a < 0.003) continue;
+    ctx.globalAlpha = Math.min(1, a);
+    ctx.drawImage(dotSpr, q.x - r, q.y - r, r * 2, r * 2);
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
 function drawDust(t) {
   ctx.globalCompositeOperation = 'lighter';
   for (const p of dust) {
@@ -2134,17 +2381,6 @@ function drawGlass(a, t) {
   ctx.restore();
 }
 
-function drawText(txt, x, y, a, size) {
-  if (a < 0.005 || !txt) return;
-  ctx.save();
-  ctx.font = `italic 300 ${size}px ${SERIF}`;
-  if ('letterSpacing' in ctx) ctx.letterSpacing = `${(size * 0.08).toFixed(1)}px`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.shadowColor = `rgba(255,170,100,${0.35 * a})`; ctx.shadowBlur = 14 * dpr;
-  ctx.fillStyle = `rgba(236,216,190,${0.62 * a})`;
-  ctx.fillText(txt, x, y);
-  ctx.restore();
-}
 
 function draw(now) {
   const t = now / 1000;
@@ -2160,8 +2396,9 @@ function draw(now) {
   ctx.globalCompositeOperation = 'lighter';
   const breathe = 0.22 + 0.16 * Math.sin((ambT * TAU) / 17) + 0.06 * Math.sin((ambT * TAU) / 6.3);
   const sa = breathe * (1 - 0.5 * calm.amt) + calm.amt * (0.1 + 0.75 * calm.breath) + wxs.flash * 0.3;
-  if (shaftPrev && bgFade < 1) { drawShaftLayer(shaftPrev, sa * (1 - bgFade)); drawShaftLayer(shaftCur, sa * bgFade); }
-  else drawShaftLayer(shaftCur, sa);
+  const fresh = LIGHTprev && bgFade < 1 ? bgFade : 1;
+  if (fresh < 1) drawBeam(LIGHTprev, 1 - fresh, sa, beamFrontPrev, t);
+  drawBeam(LIGHT, fresh, sa, beamFront, t);
   ctx.globalCompositeOperation = 'source-over';
 
   drawWindowWeather(t);
@@ -2189,13 +2426,10 @@ function draw(now) {
   for (const b of bowls.order) drawBowlFx(b, t, ground);
   drawDwell(now);
   drawRings([false]);
+  drawSmoke();
   drawDust(t);
-  if (reminder.a > 0.003) {
-    if (reminder.kind === 'water') drawGlass(reminder.a, t);
-    const size = clamp(Rmax * 0.17, 12, 22);
-    const ty = reminder.kind === 'water' ? glass.y + Rmax * 0.42 : baseY + Rmax * 1.08;
-    drawText(reminder.text, reminder.kind === 'water' ? glass.x : W / 2, Math.min(ty, H - size * 1.8), reminder.a, size);
-  }
+  // reminders are diegetic (a glass of water appears); the host's own label carries any words
+  if (reminder.a > 0.003 && reminder.kind === 'water') drawGlass(reminder.a, t);
   if ((ind.dimA || 0) > 0.003) { ctx.fillStyle = `rgba(2,1,1,${ind.dimA})`; ctx.fillRect(0, 0, W, H); }
   {
     const P = LW.pointer, q = indicatorPos();
@@ -2238,6 +2472,9 @@ function frame(now) {
 
 let rsT = 0;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => { layout(); rebake(false); }, 120); });
+LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(() => { layout(); rebake(false); }, 60); });
+// the shared moon art arrives asynchronously: re-bake the window once it can be drawn
+{ const iv = setInterval(() => { if (!LW.moonCanvas || LW.moonCanvas(16)) { clearInterval(iv); if (light.moon > 0.01 && bgCur) rebake(false); } }, 250); setTimeout(() => clearInterval(iv), 20000); }
 document.addEventListener('visibilitychange', () => { lastT = performance.now(); });
 
 layout();
@@ -2248,7 +2485,7 @@ if (LW.calm) calm.target = true;
 requestAnimationFrame(frame);
 
 // test hooks
-window.__bowls = { strike: (i, v = 0.8) => strike(bowls[i], v), bowls: () => bowls, light: () => light, calm, reminder, wxs,
+window.__bowls = { strike: (i, v = 0.8) => strike(bowls[i], v), bowls: () => bowls, light: () => light, calm, reminder, wxs, rebake, bakeLight: () => bakeLight(light), LIGHT: () => LIGHT,
   act, auto, S: () => S, rub: (i, s = 0.8) => { const b = bowls[i]; b.rubT = s; b.rubSeen = performance.now() + 3000; } };
 })();
 </script>

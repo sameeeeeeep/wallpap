@@ -1,0 +1,30 @@
+{
+  "id": "taj",
+  "title": "Taj Mahal",
+  "style": "photo",
+  "plates": ["day", "dawn", "dusk", "night", "overcast"],
+  "scene": "Wide landscape photograph of the Taj Mahal in Agra, India, seen from the classic garden viewpoint just inside the main gateway, camera at standing eye level on the raised central walkway, looking north along the long central reflecting pool. Composition, exactly:\n- The white marble mausoleum with its great onion dome, four slender minarets and broad raised plinth stands in the middle distance. Its central axis is placed at about 40% from the LEFT edge of the frame (NOT centred). The tip of the dome finial is at about 22% from the top of the frame; the base of the plinth at about 52% from the top.\n- The long, straight, narrow reflecting pool runs from the bottom foreground straight toward the mausoleum along that same axis, its still water showing a clear mirror reflection of the Taj Mahal and the sky; a single row of small fountain nozzles along its centre line (fountains switched OFF, no spray).\n- Either side of the pool: wide paved stone walkways, then neat green lawns and long rows of tall dark-green cypress trees and leafy trees leading toward the mausoleum.\n- On the far right the red sandstone guest-house building is only partly visible, low, behind trees.\n- No people, no animals, no birds, no scaffolding, no signage.",
+  "sky_area": "the upper part of the frame around and above the mausoleum (roughly the top 45%)",
+  "calm": "only lawns, the right-hand row of trees, distant red sandstone and plain sky",
+  "space": "Keep the pool's water surface, the walkways and the sky around the dome clean: birds, fountain spray and mist are added live.",
+  "preserve": "mausoleum, dome, minarets, plinth, reflecting pool, reflection, walkways, lawns, every tree and the horizon",
+  "sunrise_side": "right (east)",
+  "sunset_side": "left (west)",
+  "surfaces": "the white marble (which glows warm pink-gold), the walkways and the lawns",
+  "light": {
+    "day": "clear bright late-morning sun from the upper right, the white marble luminous with crisp soft shadows, clean pale-blue sky gradient, lawns fresh green",
+    "night": "clear night, sky a plain deep navy gradient to slightly lighter blue near the horizon, NO stars, NO moon. The white marble of the Taj Mahal is bathed in soft cool moonlight (the moon itself not visible) and glows pale silver-blue against the dark sky, its reflection glowing softly in the dark still pool; a few small warm lanterns along the walkways cast little pools of warm light; the trees are dark silhouettes. Real night photograph look, low noise"
+  },
+  "wet": "a soft hazy monsoon morning: the walkways wet and reflective, lawns deep green, a light humid haze softening the mausoleum, the pool water still with soft reflections",
+  "keys": {
+    "sky": "the whole sky (everything that is sky, around the dome, between the minarets and between all trees)",
+    "water": "the water of the long reflecting pool (including the reflection in it), only the water surface inside the pool's stone edges",
+    "foliage": "every tree, cypress and hedge (their leaves and foliage only), NOT the lawns, NOT the buildings"
+  },
+  "sheets": {
+    "birds": {
+      "prompt": "Subjects: eight birds in flight, arranged in a neat 4 columns x 2 rows grid. Top row: a black kite (the brown raptor common over Indian cities) soaring and gliding, seen from slightly below and to the side, wings spread wide, forked tail — four different wing poses of the SAME bird (wings fully up, wings level, wings slightly down, wings down). Bottom row: a rose-ringed parakeet (bright green, long pointed tail, red beak) flying in pure side view facing LEFT — four successive wing-beat frames (wings up, wings mid, wings down, wings mid-up) of the SAME bird. All birds of a row at the same scale. Photorealistic like a real wildlife photograph, sharp feathers.",
+      "light": "Lighting: soft bright daylight from above."
+    }
+  }
+}

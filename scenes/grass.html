@@ -17,6 +17,7 @@
 <script>window.__realNow = performance.now.bind(performance);</script>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script src="pet-motion.js"></script>
 <script>
 'use strict';
@@ -26,7 +27,7 @@
 //            depth) interleaved with SDF "vector" actors (pandas, songbirds, black kites,
 //            water basin, bamboo bundles) → fog/vignette pass.
 //   2D overlay (no texture uploads): butterflies, fireflies, rain/snow, seeds,
-//            hearts, speech bubbles (lw.js draws the breathing guide).
+//            hearts, sleepy z's (lw.js draws the breathing guide; no speech bubbles).
 //   Touch: a small CPU spring field (lean, flatten) uploaded as an RG8
 //          texture; the grass vertex shader bends around the cursor/pandas.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,6 +92,10 @@ uniform vec2 uRes, uView;
 uniform float uHor, uCloud, uNight, uFog, uFlash, uSnow, uBack, uCloudSh, uHazeK;
 uniform vec3 uSkyTop, uSkyHor, uSun, uAmbC, uHaze, uCloudLit, uCloudDark, uSnowC, uGrassMid, uGroundDark, uHill1, uHill2;
 uniform vec3 uSunP, uMoonP;
+uniform sampler2D uMoonTex;   // the shared photoreal moon (moon.js), uploaded only when its key changes
+uniform float uMoonOn;
+uniform sampler2D uMtnTex;    // painted distant ridges (art/grass/mountains.png), uploaded once
+uniform float uMtnOn, uMtnH;
 out vec4 o;
 void main(){
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y)/uRes*uView;
@@ -100,6 +105,7 @@ void main(){
   float trees = smoothstep(0.52, 0.8, vnoise(vec2(xn*6.0, 1.0)));
   yFar -= H*0.014*trees*(0.5 + 0.5*vnoise(vec2(xn*80.0, 3.0)));
   float yMid = min(uHor - 1.5, uHor - H*(0.014 + 0.017*sin(xn*1.6 + 2.4) + 0.008*sin(xn*4.4 + 0.3)));
+  if (uMtnOn > 0.5) { yFar = uHor; yMid = uHor; }   // the painted ridges replace the procedural hills
   vec3 lit = uAmbC*0.8 + uSun*0.55;
   float sd = length(p - uSunP.xy)/H;
   vec3 scatter = uSun*uSunP.z*(0.3*exp(-sd*4.5) + 0.08*exp(-sd*1.5))*(0.35 + uBack);
@@ -149,10 +155,27 @@ void main(){
     cc += uSun*uSunP.z*0.4*exp(-sd*5.0)*(1.0 - smoothstep(0.45, 0.85, dn));
     sky = mix(sky, cc, cov*0.93);
     sky += uSun*uSunP.z*smoothstep(0.03, 0.026, sd)*(1.0 - cov*0.85)*1.3;
-    float mdisk = smoothstep(0.023, 0.020, md);
-    float cres = smoothstep(0.019, 0.026, length(p - uMoonP.xy - vec2(0.009*H, -0.005*H))/H);
-    sky = mix(sky, vec3(0.93, 0.92, 0.86), mdisk*mix(1.0, cres, 0.85)*uMoonP.z*(1.0 - cov*0.9));
+    vec2 mq = (p - uMoonP.xy)/(0.024*H);
+    if (uMoonOn > 0.5) {
+      if (max(abs(mq.x), abs(mq.y)) < 1.0) { vec4 mc = texture(uMoonTex, mq*0.5 + 0.5); sky = mix(sky, mc.rgb, mc.a*uMoonP.z*(1.0 - cov*0.9)); }
+    } else {
+      float mdisk = smoothstep(0.023, 0.020, md);
+      float cres = smoothstep(0.019, 0.026, length(p - uMoonP.xy - vec2(0.009*H, -0.005*H))/H);
+      sky = mix(sky, vec3(0.93, 0.92, 0.86), mdisk*mix(1.0, cres, 0.85)*uMoonP.z*(1.0 - cov*0.9));
+    }
     col = mix(sky, uHaze, uFog*0.55*smoothstep(0.2, 1.0, ty));
+    if (uMtnOn > 0.5 && y > uHor - uMtnH) {
+      float my = (y - (uHor - uMtnH))/uMtnH;
+      vec4 m = texture(uMtnTex, vec2(x/W, my));
+      if (m.a > 0.003) {
+        vec3 mc = m.rgb*(uAmbC*1.05 + uSun*0.45);
+        mc = mix(mc, uSnowC, uSnow*0.7*(1.0 - 0.5*my));
+        // aerial perspective: the ridges are far off — hazier overall, a soft mist lying along their foot
+        float hz = clamp((0.2 + 0.34*uHazeK + uFog*0.75)*(1.1 - 0.4*my) + 0.22*smoothstep(0.78, 1.0, my), 0.0, 0.96);
+        mc = mix(mc, uHaze, hz) + scatter*(0.35 + 0.4*(1.0 - my));
+        col = mix(col, mc, m.a);
+      }
+    }
   }
   col += vec3(0.5, 0.55, 0.72)*uFlash*(y < uHor ? 0.55 : 0.25);
   col += (hash12(gl_FragCoord.xy + fract(uTime)*91.0) - 0.5)*(1.6/255.0);
@@ -681,8 +704,12 @@ function stepLight(dt) {
     if (Array.isArray(t[key])) Lt[key] = Lt[key] ? Lt[key].map((v, i) => lerp(v, t[key][i], a)) : t[key].slice();
     else Lt[key] = Lt[key] === undefined ? t[key] : lerp(Lt[key], t[key], a);
   }
+  // snow settles over a few minutes of snowfall and lingers, melting faster in daylight; the meadow
+  // stays wet a while after the rain stops
   const snowT = LW.env.weather === 'snow' ? 1 : 0;
-  Lt.snow = snapLight ? snowT : approach(Lt.snow || 0, snowT, dt / (snowT ? 40 : 60));
+  Lt.snow = snapLight ? snowT : approach(Lt.snow || 0, snowT, dt / (snowT ? 150 / Math.max(0.4, LW.env.intensity || 0.7) : Lt.night > 0.5 ? 900 : 360));
+  const wetT = t.wet;
+  Lt.wet = snapLight ? wetT : approach(Lt.wetS == null ? wetT : Lt.wetS, wetT, dt / (wetT > (Lt.wetS || 0) ? 25 : 300)); Lt.wetS = Lt.wet;
   Lt.flash = (Lt.flash || 0) * Math.exp(-dt * 7);
   snapLight = false;
   // derived
@@ -1278,10 +1305,11 @@ function sprInit(p) {
   const set = SPR_SETS[p.ap.name]; if (!set) return null;
   const names = [...new Set(Object.values(set.poses))];
   const S = { set, names, imgs: {}, rects: {}, base: null, cv: null, ctx: null, tex: null, unit: 1, key: '', ready: false, failed: false, tints: 0, seq: null };
-  let left = names.length + 1;
+  let left = names.length + 2;
   const done = () => { if (--left === 0 && !S.failed) sprBuild(p, S); };
   // drawn in-between frames (t/): baked into the same atlas, so they wait for the build
   S.seq = LW.petSeqLoad('art/sprites/', 'pandas/' + set.dir, done);
+  S.cyc = LW.petCycleLoad('art/sprites/', 'pandas/' + set.dir, done);   // drawn walk cycle (cycle/), same atlas
   for (const n of names) {
     const im = S.imgs[n] = sprImg(SPR_DIR + set.dir + '/' + n + '.png');
     if (im.complete && im.naturalWidth) done();
@@ -1297,9 +1325,11 @@ function sprBuild(p, S) {
   const T = S.seq, P = S.set.poses, poseK = (n) => SPR_K[S.set.dir + '/' + n] || 1;
   const endN = { walk1: 'walk1', sit: P.sit, sleep: P.back };
   LW.petSeqPrep(T, (f) => ({ im: S.imgs[endN[f]], k: poseK(endN[f]), fa: 0.5 }), (im) => im, { mirror: false });
-  const frames = Object.keys(T.img);
-  for (const n of frames) S.imgs[n] = T.img[n];
-  const all = S.names.concat(frames), NC = all.length > 8 ? 4 : 2;
+  // the drawn walk cycle: one size for the loop, anchored on walk1's torso point (rect.fa)
+  LW.petCyclePrep(S.cyc, { im: S.imgs.walk1, k: poseK('walk1'), fa: 0.5 });
+  const frames = Object.keys(T.img).concat(Object.keys(S.cyc.img));
+  for (const n of frames) S.imgs[n] = T.img[n] || S.cyc.img[n];
+  const all = S.names.concat(frames), NC = all.length > 24 ? 6 : all.length > 8 ? 4 : 2;
   const PAD = 6, ims = all.map((n) => S.imgs[n]);
   const colW = Math.max(...ims.map((im) => im.naturalWidth)) + PAD * 2, rowH = [];
   ims.forEach((im, i) => { const r = Math.floor(i / NC); rowH[r] = Math.max(rowH[r] || 0, im.naturalHeight + PAD * 2); });
@@ -1317,8 +1347,9 @@ function sprBuild(p, S) {
       hd = [n.startsWith('turn-') && +n[5] > 2 ? 1 - nh[0] : nh[0], nh[1], nh[2]]; k = im.petK;
     }
     hd = hd || [0.5, 0.3, 0.15];
-    S.rects[n] = { w, h, u0: x / cw, v0: yy / ch, u1: (x + w) / cw, v1: (yy + h) / ch, hx: hd[0], hy: hd[1], hr: hd[2], k };
-    if (n.startsWith('turn-')) { const r = S.rects[n]; S.rects[n + '~m'] = { ...r, u0: r.u1, u1: r.u0, hx: 1 - r.hx }; }
+    const fa = im.petCycle ? im.petFa : 0.5;   // foot/body anchor (fraction of width): cycle frames are torso-pinned
+    S.rects[n] = { w, h, u0: x / cw, v0: yy / ch, u1: (x + w) / cw, v1: (yy + h) / ch, hx: hd[0], hy: hd[1], hr: hd[2], k, fa, cyc: im.petCycle ? im : null };
+    if (n.startsWith('turn-')) { const r = S.rects[n]; S.rects[n + '~m'] = { ...r, u0: r.u1, u1: r.u0, hx: 1 - r.hx, fa: 1 - r.fa }; }
   });
   // De-fringe: the cut-outs carry a pale halo; fade it out and pull edge pixels
   // toward the ink outline so they sit cleanly on the grass.
@@ -1346,11 +1377,11 @@ function sprLight() {
   const l = sprLt(Lt.sun, Lt.ambC), m = l.map((v, i) => v / SPR_NOON[i]), mx = Math.max(m[0], m[1], m[2], 1e-3);
   const q = (v, n) => Math.round(v * n) / n;
   const w = WEATHER[LW.env.weather] || WEATHER.clear;
-  SL.gain = mx * (1 + 0.55 * Lt.night);   // moonlit fur still reads (like the old SDF rim)
+  SL.gain = mx * (1 + 0.3 * Lt.night);   // moonlit fur still reads, without glowing against the dark meadow
   SL.mul = m.map((v) => q(v / mx, 40));
   SL.desat = q(clamp(Lt.night * 0.5 + w.gray * 0.3, 0, 0.75), 20);
   SL.gold = q(clamp(Lt.gold * (1 - Lt.night) * 0.2, 0, 0.3), 20);
-  SL.lift = q(clamp(Lt.night * 0.7, 0, 0.7), 20);
+  SL.lift = q(clamp(Lt.night * 0.5, 0, 0.5), 20);
   SL.key = SL.mul.join() + '|' + SL.desat + '|' + SL.gold + '|' + SL.lift;
 }
 function sprTint(p) {
@@ -1387,6 +1418,12 @@ function sprBreathe(o, p, t) {
 }
 // Behaviour state → abstract pose + a little motion (rotation, squash, bob).
 // rot > 0 tips the nose down (sprites face right); pvx = pivot offset (fraction of width).
+const isCycN = (n) => /^(walk|run)-\d/.test(n);
+function sprGait(p, gait) {
+  const S = p.spr; if (!S || !S.base || !S.cyc) return null;
+  const f = LW.petGait(p, S.cyc, p.gait / p.S, 74 * S.set.k, gait, { dt: p.edt });
+  return f && S.rects[f] ? f : null;
+}
 function sprPose(p, t) {
   const o = p.spo, st = p.st, cub = p.ap.cub;
   o.pose = 'walk1'; o.rot = 0; o.sx = 1; o.sy = 1; o.dy = 0; o.ball = false; o.pvx = 0;
@@ -1394,8 +1431,10 @@ function sprPose(p, t) {
   switch (p.state) {
     case 'walk': case 'chase': {
       const run = p.state === 'chase' || st.run, g = p.gait / ((run ? 15 : 9.5) * p.S);
-      o.pose = Math.floor(g) & 1 ? 'walk2' : 'walk1';
-      o.dy = -Math.sin((g % 1) * Math.PI) * (run ? 0.02 : 0.013) * (p.state === 'chase' ? 1 : st.amt || 0);
+      // the drawn walk cycle by distance (p.gait / p.S, walk1 = 74·k tall); a run strides it out
+      const gf = sprGait(p, run ? 'run' : 'walk');
+      o.pose = gf || (Math.floor(g) & 1 ? 'walk2' : 'walk1');
+      if (!gf) o.dy = -Math.sin((g % 1) * Math.PI) * (run ? 0.02 : 0.013) * (p.state === 'chase' ? 1 : st.amt || 0);
       break;
     }
     case 'sit': o.pose = 'sit'; if (cub) o.rot = 0.05 * Math.sin(t * 1.6 + p.ph0); else o.sy = 1 + 0.008 * Math.sin(t * 1.5 + p.ph0); break;
@@ -1420,11 +1459,11 @@ function sprPose(p, t) {
     case 'scratch': o.pose = 'sit'; o.rot = 0.05 * Math.sin(t * 5.2); o.dy = -Math.abs(Math.sin(t * 5.2)) * 0.012; break;
     case 'stretch': { const e = Math.sin(Math.PI * clamp(st.t / st.dur, 0, 1)); o.sx = 1 + 0.07 * e; o.sy = 1 - 0.045 * e; o.rot = -0.035 * e; o.pvx = -0.3; break; }
     case 'drink': o.rot = 0.09 + 0.015 * Math.sin(t * 9); o.pvx = 0.1; canLook = false; break;
-    default: break;   // idle, bumpHit: standing
+    default: o.pose = sprGait(p, 'walk') || 'walk1'; break;   // idle, bumpHit: standing (a stopped stride settles onto a contact first)
   }
   // a kite gliding low: chin up (tip back on the rear paws) + a startled little hop
   p.lookUpK = approach(p.lookUpK, canLook && p.lookY < -0.4 ? 1 : 0, p.edt * 3);
-  if (p.lookUpK > 0) { o.rot -= 0.075 * easeIO(p.lookUpK); if (!o.pvx && !o.ball && (o.pose === 'walk1' || o.pose === 'walk2')) o.pvx = -0.28; }
+  if (p.lookUpK > 0) { o.rot -= 0.075 * easeIO(p.lookUpK); if (!o.pvx && !o.ball && (o.pose === 'walk1' || o.pose === 'walk2' || isCycN(o.pose))) o.pvx = -0.28; }
   if (p.hopT < 0.42) o.dy -= Math.sin(Math.PI * p.hopT / 0.42) * 0.07;
   return o;
 }
@@ -1435,7 +1474,7 @@ function emitPandaSprite(p, t) {
   const o = sprPose(p, t);
   // drawn in-between frames: pose changes (stand ↔ sit ↔ back), turning round on its feet,
   // and the startled hop; a rolling ball keeps its own motion (and the crossfade)
-  const img = S.set.poses[o.pose], P = S.set.poses, gaitP = img === 'walk1' || img === 'walk2';
+  const img = S.set.poses[o.pose] || o.pose, P = S.set.poses, gaitP = img === 'walk1' || img === 'walk2' || isCycN(img);
   let fam = o.ball ? 'ball' : gaitP ? 'walk1' : img === P.sit ? 'sit' : img === P.back ? 'sleep' : img;
   if (gaitP && p.hopT < 0.42 && S.seq.has('jump')) { const u = p.hopT / 0.42; o.pose = LW.petJumpFrame(u < 0.12 ? 'crouch' : u < 0.88 ? 'air' : 'land', (u - 0.12) / 0.76); fam = 'jump'; }
   const sf = LW.petSeqStep(p, S.seq, fam, p.dir < 0 ? -1 : 1, t);
@@ -1447,7 +1486,9 @@ function emitPandaSprite(p, t) {
   const kx = sc * o.sx * sg, ky = sc * o.sy;
   // anchor: bottom-centre, paws a touch into the grass — or the centre of a rolling ball
   const ballR = 0.21 * (r.w + r.h) * sc;
-  const ax = r.w * 0.5, ay = o.ball ? r.h * 0.5 : r.h * 0.985;
+  // cycle frames read their live anchor: LW.petGait re-sets petFa per panda so the planted paws
+  // hold still while a frame shows and the body steps at each cut (pet-motion.js)
+  const ax = r.w * (o.ball ? 0.5 : r.cyc ? r.cyc.petFa : r.fa), ay = o.ball ? r.h * 0.5 : r.h * 0.985;
   const ox = p.x, oy = (o.ball ? p.y - ballR * 0.92 : p.y + r.h * sc * 0.02) + o.dy * r.h * sc;
   const PX = o.pvx * r.w * kx;
   const M = (u, v) => { const lx = (u - ax) * kx - PX, ly = (v - ay) * ky; return [ox + PX + lx * ca - ly * sa, oy + lx * sa + ly * ca]; };
@@ -1455,7 +1496,7 @@ function emitPandaSprite(p, t) {
   // crossfade between poses (walk1 ↔ walk2 is a hard gait swap)
   const sv = p.sv;
   if (sv.pose !== o.pose || sv.sg !== sg) {
-    const gait = (n) => n === 'walk1' || n === 'walk2', drawn = (n) => !!(S.rects[n] && S.rects[n].k && /^(stand-sit|sit-sleep|turn|jump)-/.test(n));
+    const gait = (n) => n === 'walk1' || n === 'walk2' || isCycN(n), drawn = (n) => !!(S.rects[n] && S.rects[n].k && /^(stand-sit|sit-sleep|turn|jump)-/.test(n));
     // hard cut into a drawn sheet (its first frame is the pose it leaves) and frame to frame
     const cut = drawn(o.pose) && (drawn(sv.pose) || !o.pose.startsWith('jump-'));
     if (cut) sv.k = 1;
@@ -1469,8 +1510,9 @@ function emitPandaSprite(p, t) {
   // soft ground + contact shadow, stretched away from a low sun
   const sunDx = clamp((Lt.sunP[0] - p.x) / W, -1, 1), sl = Lt.back * (1 - Lt.night) * 0.9, night = 0.45 + 0.55 * (1 - Lt.night);
   const half = o.ball ? ballR : r.w * 0.5 * sc * o.sx, shR = half * 0.86 * (1 + sl * 0.6);
-  pSoft(L, p.x - sunDx * shR * sl * 0.6, p.y - 1, shR, shR * 0.2, shR * 0.3, COL.SHADOW, 0.3 * night);
-  pSoft(L, p.x, p.y, shR * 0.55, shR * 0.08, shR * 0.12, COL.SHADOW, 0.26 * night);
+  const va = p.vis == null ? 1 : p.vis;
+  pSoft(L, p.x - sunDx * shR * sl * 0.6, p.y - 1, shR, shR * 0.2, shR * 0.3, COL.SHADOW, 0.3 * night * va);
+  pSoft(L, p.x, p.y, shR * 0.55, shR * 0.08, shR * 0.12, COL.SHADOW, 0.26 * night * va);
   // bookkeeping for hit tests, bubbles, hearts, birds on heads
   const hd = M(r.hx * r.w, r.hy * r.h), bc = M(r.w * 0.5, r.h * 0.5);
   p.hit = { bx: bc[0], by: bc[1], br: Math.max(r.w, r.h) * 0.4 * sc, hx: hd[0], hy: hd[1], hr: r.hr * r.w * sc };
@@ -1538,14 +1580,17 @@ function drawBirdSprite(b) {
   gl.uniform1f(u.uBlend,0);gl.uniform3fv(u.uHaze,Lt.haze);gl.uniform1f(u.uHazeAmt,b.haze);gl.uniform1f(u.uGain,Math.max(.25,SL.gain));
   sprQuad(u,q,b.alpha);
 }
+// dappled shade under the bamboo canopy (daylight only; at night the moon is soft everywhere)
+function pandaShade(p) { return 1 - 0.28 * (1 - smooth(groveX1 * 0.55, groveX1 * 1.05, p.x)) * (1 - Lt.night) * (1 - 0.5 * (Lt.cloud || 0)); }
 function drawPandaSprite(p) {
   const S = p.spr; if (!S || !S.ready || dbg.proc || !dbg.actors) return;
   gl.useProgram(sprP.p); gl.bindVertexArray(emptyVao);
   const u = sprP.u, sv = p.sv;
   gl.uniform2f(u.uView, W, H);
   gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, S.tex); gl.uniform1i(u.uTex, 3);
-  gl.uniform3fv(u.uHaze, Lt.haze); gl.uniform1f(u.uHazeAmt, p.prims.haze); gl.uniform1f(u.uGain, SL.gain);
-  if(sv.k>=1){gl.uniform1f(u.uBlend,0);sprQuad(u,sv.cur,1);return;}
+  gl.uniform3fv(u.uHaze, Lt.haze); gl.uniform1f(u.uHazeAmt, p.prims.haze); gl.uniform1f(u.uGain, SL.gain * pandaShade(p));
+  const va = p.vis == null ? 1 : p.vis;
+  if(sv.k>=1){gl.uniform1f(u.uBlend,0);sprQuad(u,sv.cur,va);return;}
   const old=p.poseQuad||(p.poseQuad=new Float32Array(10));old.set(sv.prev);
   old[0]+=p.x-sv.prevX;old[1]+=p.y-sv.prevY;
   const setPose=(prefix,q)=>{
@@ -1557,7 +1602,7 @@ function drawPandaSprite(p) {
   for(const q of [old,sv.cur])for(const [a,b] of [[0,0],[1,0],[0,1],[1,1]])corners.push([q[0]+q[2]*a+q[4]*b,q[1]+q[3]*a+q[5]*b]);
   const x=Math.min(...corners.map(p=>p[0])),y=Math.min(...corners.map(p=>p[1]));
   const w=Math.max(...corners.map(p=>p[0]))-x,h=Math.max(...corners.map(p=>p[1]))-y;
-  sprQuad(u,[x,y,w,0,0,h,0,0,1,1],1);
+  sprQuad(u,[x,y,w,0,0,h,0,0,1,1],va);
   gl.uniform1f(u.uBlend,0);
 }
 
@@ -1570,8 +1615,20 @@ LW.breathDiegetic = true;
 let windG = 0, calmSway = 1;   // wind + blade sway as the grass sees them (quieted in calm so the breath leads)
 let calmBr = { phase: 'in', k: 0, level: 0 };   // LW.breathState on the guide's clock (lw.js draws the guide)
 // pandas stay out of the right ~28% of the screen (macOS widgets live there)
-const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * 0.72 - PS * 36;   // centre limit ≈ right edge at 72%
+// Desktop layout (LW.layout): pandas, the basin and resting spots stay inside the clear band; the
+// widget side stays calm. side:'left' mirrors the whole meadow (grove on the right, open meadow on the
+// left — both canvases flipped, input flipped back), so the clear band is always [0, clearHi] here.
+let MIR = false;
+function clearHi() { const l = LW.layout || {}, c = Array.isArray(l.clear) ? l.clear : [0, 0.72]; return clamp(MIR ? 1 - c[0] : c[1], 0.55, 1); }
+function avoidHit(x, y) { const av = (LW.layout && LW.layout.avoid) || [], fx = (MIR ? W - x : x) / W, fy = y / H; return av.some((b) => b && fx > b[0] && fx < b[0] + b[2] && fy > b[1] && fy < b[1] + b[3]); }
+function applyMirror() {
+  MIR = (LW.layout && LW.layout.side) === 'left';
+  for (const cv of [glc, ov]) cv.style.transform = MIR ? 'scaleX(-1)' : '';
+}
+const mx = (x) => (MIR ? W - x : x);   // screen x ↔ world x
+const XMIN = () => Math.max(groveX1 * 0.4, W * 0.06), XMAX = () => W * clearHi() - PS * 36;   // centre limit ≈ right edge of the clear band
 function setState(p, name, data) {
+  if (p.state === 'away' && name !== 'away' && !p.entering) return;   // pets off: an absent panda isn't called back
   p.from = Object.assign({}, p.pose); p.from.roll = wrapA(p.from.roll);
   p.blend = 0; p.blendDur = (data && data.blend) || 0.5;
   p.state = name; p.st = Object.assign({ t: 0 }, data || {});
@@ -1603,6 +1660,7 @@ function freeSpot(p, s) {
   for (let k = 0; k < 12; k++) {
     const x = rand(XMIN() + W * 0.04, XMAX() - W * 0.03);
     if (Math.abs(x - basin.x) < basin.r * 2 && Math.abs(s - basin.s) < 0.12) continue;
+    if (avoidHit(x, sToY(s) - 40 * p.S)) continue;
     const ok = (qx, qs, q) => Math.abs(qx - x) > (q.len + p.len) * 0.8 || Math.abs(qs - s) > 0.12;
     if (pandas.every((q) => q === p || (ok(q.x, q.s, q) && (q.state !== 'walk' || ok(q.st.tx, q.st.ts, q))))) return x;
   }
@@ -1622,7 +1680,31 @@ function goShelter(p) {
   if (Math.abs(p.x - x) < 6 && Math.abs(p.s - s) < 0.02) return setState(p, 'shelter', {});
   walkTo(p, x, s, 'shelter', {});
 }
+// ---- Pets toggle (LW.settings.pets; the pets here are the pandas) ---------------------------------
+// Off: each panda finishes its moment, then ambles off into the bamboo grove and fades among the
+// stalks; it stays away. On: they wander back out of the grove, one after another.
+const petsOn = () => LW.settings.pets !== false;
+function leaveForGrove(p) {
+  if (p.state === 'away' || p.leaving || p.state === 'roll') return;
+  stopEating(p); p.leaving = true; p.entering = false;
+  const tx = groveX1 * rand(0.12, 0.4), ts = clamp(p.s + rand(-0.05, 0.05), 0.42, 0.6);
+  setState(p, 'walk', { tx, ts, x0: p.x, s0: p.s, queue: [], then: 'away', thenData: {}, amt: p.state === 'walk' ? p.st.amt || 0 : 0, blend: 0.4 });
+}
+function backFromGrove(p) {
+  if (!petsOn() || p.state !== 'away') return;
+  p.leaving = false; p.entering = true;
+  p.x = groveX1 * rand(0.15, 0.35); p.s = rand(0.44, 0.58); p.y = sToY(p.s);
+  walkTo(p, freeSpot(p, p.s), p.s, 'idle', { dur: rand(1.5, 4) });
+}
+function syncPets() {
+  if (!petsOn()) pandas.forEach((p, i) => later(i * rand(1.2, 2.4) + rand(0, 0.8), () => { if (!petsOn()) leaveForGrove(p); }));
+  else pandas.forEach((p, i) => {
+    if (p.state === 'away') later(rand(0.4, 1.5) + i * rand(1.5, 3), () => backFromGrove(p));
+    else if (p.leaving) { p.leaving = false; p.entering = true; wander(p); }   // changed its mind on the way
+  });
+}
 function think(p) {
+  if (!petsOn()) return p.state === 'away' ? null : leaveForGrove(p);
   if (calmOn || breathTemp > 0) return setState(p, 'calm', { blend: 1.2 });
   const w = LW.env.weather;
   if (w === 'rain' || w === 'storm') return goShelter(p);
@@ -1671,6 +1753,7 @@ function goBundle(p, b) {
 function stopEating(p) { if (p.bundle) { if (p.bundle.eater === p) p.bundle.eater = null; p.bundle = null; } }
 
 const ST = {};
+ST.away = (p, dt, t) => poseStand(p, t, 0, false);   // pets off: in the grove, not drawn
 ST.idle = (p, dt, t) => { if (p.st.t > (p.st.dur || 3)) think(p); return poseStand(p, t, 0, false); };
 ST.walk = (p, dt, t) => {
   const st = p.st, S = p.S;
@@ -1803,6 +1886,11 @@ function updatePanda(p, dt, t) {
   else { for (const k of PK) p.pose[k] = target[k]; p.from = null; }
   p.fx = approach(p.fx, p.dir, dt * 5.5);
   p.s = clamp(p.s, 0.26, 0.94); p.x = clamp(p.x, -50, W + 50);
+  // into / out of the bamboo: fades among the stalks deep in the grove
+  if (p.state === 'away') p.vis = 0;
+  else if (p.leaving || p.entering) { p.vis = Math.max(p.entering ? 0 : 0, smooth(groveX1 * 0.1, groveX1 * 0.75, p.x)); if (p.entering && (p.x > groveX1 * 0.8 || p.state !== 'walk')) p.entering = false; }
+  else p.vis = approach(p.vis == null ? 1 : p.vis, 1, dt);
+  if (p.state === 'away') return;
   p.y = sToY(p.s);
   // gaze: cursor, a sibling, or idle glances
   let lx = noise1(p.ph0 * 9 + t * 0.25) * 0.5, ly = 0;
@@ -2151,6 +2239,7 @@ function runTimers(t) { for (let i = timers.length - 1; i >= 0; i--) if (t >= ti
 const cur = { x: -1e4, y: -1e4, vx: 0, vy: 0, speed: 0, inside: false, lastMove: -10, lastT: 0, path: [], downT: 0 };
 let lastInput = 0;
 LW.on('move', (x, y) => {
+  x = mx(x);
   const t = performance.now() / 1000, dt = Math.max(0.008, t - cur.lastT);
   if (cur.inside && cur.lastT) { cur.vx = lerp(cur.vx, (x - cur.x) / dt, 0.4); cur.vy = lerp(cur.vy, (y - cur.y) / dt, 0.4); }
   cur.x = x; cur.y = y; cur.lastT = t; cur.lastMove = t; cur.inside = true;
@@ -2160,6 +2249,7 @@ LW.on('move', (x, y) => {
 });
 LW.on('leave', () => { cur.inside = false; cur.path.length = 0; });
 LW.on('down', (x, y) => {
+  x = mx(x);
   const t = performance.now() / 1000; lastInput = t;
   cur.inside = true; cur.x = x; cur.y = y; cur.downT = t;
   // pandas (front-most first)
@@ -2319,13 +2409,11 @@ function releaseSeeds(fl, pos, frac = 1) {
   rustle(pos[0], 0.25);
 }
 let fireflies = [];
-const bubbles = [];
-function showBubble(text, anchor, life = 12) { bubbles.length = 0; bubbles.push({ text, anchor, t: 0, life }); }
 let bolt = null;
 function drawOverlay(dt, t) {
   const c = octx;
   const wantFF = Lt.night > 0.6 && ['clear', 'cloudy', 'fog'].includes(LW.env.weather) && Lt.snow < 0.2 ? Math.round(18 * W / 1440) : 0;
-  const busy = wantFF || parts.length || bubbles.length || calmFade > 0.01 || caption.t >= 0 || bolt || fireflies.length || butterflies.some((b) => b.state !== 'gone') ||
+  const busy = wantFF || parts.length || calmFade > 0.01 || caption.t >= 0 || bolt || fireflies.length || butterflies.some((b) => b.state !== 'gone') ||
     ['rain', 'storm', 'snow'].includes(LW.env.weather) || Lt.snow > 0.05;
   if (!busy && !drawOverlay.dirty) return;
   c.setTransform(ODPR, 0, 0, ODPR, 0, 0);
@@ -2412,7 +2500,8 @@ function drawOverlayInner(c, dt, t, wantFF) {
       c.restore(); c.globalAlpha = 1;
     } else if (p.kind === 'z') {
       p.x += p.vx * dt; p.y += p.vy * dt;
-      c.font = `italic 500 ${Math.round(p.r * (1 + k * 0.6))}px ui-serif, Georgia, serif`; c.fillStyle = `rgba(225,230,245,${0.7 * fade})`; c.textAlign = 'center'; c.fillText('z', p.x, p.y);
+      c.font = `italic 500 ${Math.round(p.r * (1 + k * 0.6))}px ui-serif, Georgia, serif`; c.fillStyle = `rgba(225,230,245,${0.7 * fade})`; c.textAlign = 'center';
+      c.save(); c.translate(p.x, p.y); if (MIR) c.scale(-1, 1); c.fillText('z', 0, 0); c.restore();
     }
   }
   if (calmFade > 0.01) drawBreathSeeds(c, t, lit);
@@ -2424,6 +2513,7 @@ function drawOverlayInner(c, dt, t, wantFF) {
     c.strokeStyle = `rgba(${Math.round(200 * lum)},${Math.round(210 * lum)},${Math.round(225 * lum)},0.28)`; c.lineWidth = 1; c.beginPath();
     for (let i = 0; i < n; i++) {
       const sp = 900 + (i % 7) * 60, y = ((hash2(i, 1) * (H + 200)) + t * sp) % (H + 200) - 100, x = ((hash2(i, 2) * (W + 300)) + y * sl) % (W + 300) - 150;
+      if (x < groveX1 * 0.9 && y > H * 0.12 && hash2(i, 7) < 0.75) continue;   // the bamboo canopy catches most of it (drier under the grove)
       c.moveTo(x, y); c.lineTo(x - len * sl, y - len);
     }
     c.stroke();
@@ -2431,6 +2521,7 @@ function drawOverlayInner(c, dt, t, wantFF) {
     for (let i = 0; i < n * 0.25; i++) {
       const slot = Math.floor(t * 3 + hash2(i, 5) * 10), k = (t * 3 + hash2(i, 5) * 10) % 1;
       const x = hash2(i, slot) * W, y = sToY(0.15 + hash2(slot, i) * 0.9), r = (2 + k * 6) * (0.4 + yToS(y));
+      if (x < groveX1 * 0.9 && hash2(i, 8) < 0.8) continue;   // few splashes under the bamboo
       c.moveTo(x + r, y); c.ellipse(x, y, r, r * 0.3, 0, 0, TAU);
     }
     c.stroke();
@@ -2454,16 +2545,7 @@ function drawOverlayInner(c, dt, t, wantFF) {
       c.beginPath(); bolt.pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); c.shadowBlur = 0;
     }
   }
-  // speech bubbles
-  for (let i = bubbles.length - 1; i >= 0; i--) {
-    const b = bubbles[i]; b.t += dt;
-    if (b.t > b.life + 1.5) { bubbles.splice(i, 1); continue; }
-    const a = smooth(0, 0.8, b.t) * smooth(b.life + 1.5, b.life, b.t);
-    const [ax, ay] = b.anchor();
-    mark(0, ay - H * 0.2, W, ay + 4);
-    drawBubble(c, b.text, ax, ay, a, t);
-  }
-  // "you touched grass ✓"
+  // "you touched grass" + a little hand-drawn blade-of-grass tick (no glyphs)
   if (caption.t >= 0) {
     caption.t += dt;
     const a = smooth(0, 0.6, caption.t) * smooth(5, 3.8, caption.t);
@@ -2471,28 +2553,14 @@ function drawOverlayInner(c, dt, t, wantFF) {
     const fs = Math.round(clamp(H * 0.017, 12, 24));
     c.font = `italic 400 ${fs}px ui-serif, "New York", Georgia, serif`; c.textAlign = 'center'; c.textBaseline = 'middle';
     const x = clamp(caption.x, 80, W * 0.72), y = clamp(caption.y + 36, yH + 20, H - 24) - caption.t * 4;
-    c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 8; c.fillStyle = `rgba(248,244,228,${0.85 * a})`; c.fillText('you touched grass ✓', x, y); c.shadowBlur = 0;
+    c.save(); c.translate(x, y); if (MIR) c.scale(-1, 1);
+    c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 8; c.fillStyle = `rgba(248,244,228,${0.85 * a})`; c.fillText('you touched grass', -fs * 0.6, 0);
+    const tx = c.measureText('you touched grass').width / 2 - fs * 0.6 + fs * 0.55;   // the tick: two curved blades
+    c.strokeStyle = `rgba(196,226,150,${0.9 * a})`; c.lineWidth = Math.max(1.4, fs * 0.11); c.lineCap = 'round';
+    c.beginPath(); c.moveTo(tx, fs * 0.05); c.quadraticCurveTo(tx + fs * 0.12, fs * 0.28, tx + fs * 0.26, fs * 0.3); c.quadraticCurveTo(tx + fs * 0.42, -fs * 0.05, tx + fs * 0.66, -fs * 0.42); c.stroke();
+    c.shadowBlur = 0; c.restore();
     mark(x - fs * 8, y - fs * 1.5, x + fs * 8, y + fs * 1.5);
   }
-}
-function drawBubble(c, text, ax, ay, a, t) {
-  const fs = Math.round(clamp(H * 0.021, 14, 32));
-  c.font = `italic 400 ${fs}px ui-serif, "New York", Georgia, serif`;
-  const tw = c.measureText(text).width, pw = fs * 0.9, ph = fs * 0.55, w = tw + pw * 2, h = fs + ph * 2;
-  let x = clamp(ax - w / 2, 14, W - w - 14), y = ay - h - fs * 1.3 + Math.sin(t * 1.4) * 2;
-  if (x + w > W * 0.8 && y < H * 0.42) x = W * 0.8 - w;
-  y = Math.max(14, y);
-  c.save(); c.globalAlpha = a;
-  c.shadowColor = 'rgba(0,0,0,0.18)'; c.shadowBlur = 16; c.shadowOffsetY = 3;
-  c.fillStyle = 'rgba(252,249,242,0.9)';
-  c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, h / 2) : c.rect(x, y, w, h); c.fill();
-  c.shadowBlur = 0; c.shadowOffsetY = 0;
-  const tx = clamp(ax, x + h * 0.5, x + w - h * 0.5);
-  c.beginPath(); c.arc(tx - 4, y + h + fs * 0.32, fs * 0.17, 0, TAU); c.fill();
-  c.beginPath(); c.arc(tx - 1, y + h + fs * 0.75, fs * 0.1, 0, TAU); c.fill();
-  c.fillStyle = 'rgba(78,66,56,0.95)'; c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText(text, x + w / 2, y + h / 2 + 1);
-  c.restore();
 }
 
 // ─── Audio (only when LW.audio() is running; very quiet) ────────────────────
@@ -2703,7 +2771,7 @@ LW.on('calm', (on) => {
 LW.on('reminder', (r) => {
   const t = performance.now() / 1000; lastInput = t;
   chime();
-  const free = pandas.filter((p) => !['calm', 'roll', 'chase'].includes(p.state));
+  const free = pandas.filter((p) => !['calm', 'roll', 'chase', 'away'].includes(p.state) && !p.leaving);
   if (r.kind === 'water') {
     const adults = free.filter((p) => !p.ap.cub);
     const p = (adults.length ? adults : free).sort((a, b) => Math.abs(a.x - basin.x) - Math.abs(b.x - basin.x))[0];
@@ -2712,29 +2780,26 @@ LW.on('reminder', (r) => {
       stopEating(p);
       const side = -1;   // drink from the left side (the right of the screen stays clear)
       walkTo(p, basin.x + side * (basin.r * 0.9 + p.len * 0.62), basin.s + 0.01, 'drink', { dur: 7, face: -side });
-      showBubble(r.text || 'a sip of water?', () => [p.hit ? p.hit.hx : p.x, p.hit ? p.hit.hy - p.hit.hr : p.y - 100], 12);
-    } else showBubble(r.text || 'a sip of water?', () => [basin.x, sToY(basin.s) - basin.r * 1.6], 12);
+    }   // (the basin's spout runs and a panda drinks: the reminder is in the world, the host shows the words)
   } else if (r.kind === 'stretch') {
     pandas.forEach((p, i) => { if (p.state !== 'calm') { stopEating(p); later(i * 0.38, () => { if (p.state !== 'calm') setState(p, 'stretch', { dur: 3.6, then: 'yawn' }); }); } });
-    const p = pandas[0];
-    showBubble(r.text || 'roll your shoulders, unclench your jaw', () => [p.hit ? p.hit.hx : p.x, p.hit ? p.hit.hy - p.hit.hr : p.y - 100], 12);
   } else {
     breathTemp = 14; if (!LW.calm) BR.t0 = performance.now() / 1000;   // no on-screen guide here: start a fresh breath
     for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.2 }); }
-    showBubble(r.text || 'breathe in… and out', () => [W * 0.46, yH * 0.62 + 60], 12);
   }
 });
 LW.on('action', (name) => {
   if (name === 'bamboo' || name === 'feed') { const p = pick(pandas); dropBundle(clamp(p.x + rand(-0.15, 0.15) * W, XMIN() + 40, XMAX() - 40), sToY(clamp(p.s + rand(-0.06, 0.08), 0.35, 0.85))); }
   if (name === 'water') LW.emit('reminder', { kind: 'water', text: 'a sip of water?' });
 });
-LW.on('settings', () => syncPandaCount());
+let petsWas = petsOn();
+LW.on('settings', () => { syncPandaCount(); if (petsOn() !== petsWas) { petsWas = petsOn(); syncPets(); } });
 LW.on('env', () => {
   const w = LW.env.weather;
   const day = keyAt(((LW.env.hour % 24) + 24) % 24).night < 0.5;
   for (const p of pandas) {
     if (day && p.state === 'sleep') p.st.dur = Math.min(p.st.dur, p.st.t + rand(2, 12));
-    if ((w === 'rain' || w === 'storm') && !['shelter', 'calm'].includes(p.state) && !(p.state === 'walk' && p.st.then === 'shelter')) { stopEating(p); goShelter(p); }
+    if ((w === 'rain' || w === 'storm') && petsOn() && !['shelter', 'calm', 'away'].includes(p.state) && !p.leaving && !(p.state === 'walk' && p.st.then === 'shelter')) { stopEating(p); goShelter(p); }
   }
 });
 function syncPandaCount() {
@@ -2745,6 +2810,7 @@ function syncPandaCount() {
 
 // ─── Resize / build ─────────────────────────────────────────────────────────
 function resize() {
+  applyMirror();
   const oW = W || innerWidth;
   W = innerWidth; H = innerHeight;
   DPR = Math.min(devicePixelRatio || 1, 2);
@@ -2755,13 +2821,21 @@ function resize() {
   yH = H * 0.4; GH = H * 0.12; GW = H * 0.0078; PS = H * 0.0041;
   groveX1 = Math.min(W * 0.19, H * 0.34);
   buildWorld(); buildField();
-  basin.x = clamp(groveX1 + W * 0.42, W * 0.45, W * 0.62); basin.s = 0.36;   // left of the widget column
+  basin.x = clamp(groveX1 + W * 0.42, W * 0.45, W * (clearHi() - 0.1)); basin.s = 0.36;   // inside the clear band
   for (const p of pandas) { p.x = clamp((p.x / oW) * W, XMIN(), XMAX()); p.y = sToY(p.s); }
   syncPandaCount();
   drawOverlay.dirty = true;
 }
 addEventListener('resize', () => { clearTimeout(resize.t); resize.t = setTimeout(resize, 150); });
 resize();
+if (!petsOn()) for (const p of pandas) { p.x = groveX1 * 0.3; p.vis = 0; setState(p, 'away', {}); }
+// a new desktop layout: re-compose without reloading — pandas outside the clear band amble back in
+LW.on('layout', () => {
+  applyMirror();
+  basin.x = clamp(groveX1 + W * 0.42, W * 0.45, W * (clearHi() - 0.1));
+  for (const p of pandas) if (p.state !== 'away' && (p.x > XMAX() || avoidHit(p.x, p.y - 40 * p.S)) && !['roll', 'chase', 'walk'].includes(p.state)) { stopEating(p); wander(p); }
+  drawOverlay.dirty = true;
+});
 stepLight(0);
 
 // ─── Render ─────────────────────────────────────────────────────────────────
@@ -2788,7 +2862,42 @@ function drawActor(L) {
   gl.uniform1f(u.uHazeAmt, L.haze); gl.uniform1f(u.uPaper, L.paper || 0);
   gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, L.tiles);
 }
+// the photoreal moon as a texture: re-uploaded only when its phase / tint / size key changes
+const moonT = { tex: null, key: '', on: 0 };
+// painted distant ridges (Codex; art-src/grass/): a straight-alpha band uploaded once
+const mtn = { tex: null, on: 0, H: 0.16 };
+(() => {
+  const im = new Image();
+  im.onload = () => {
+    if (!(im.naturalWidth > 0)) return;
+    mtn.tex = gl.createTexture(); gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, mtn.tex);
+    const pm = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, pm);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    mtn.on = 1;
+  };
+  if (new URLSearchParams(location.search).get('procedural') !== '1') im.src = 'art/grass/mountains.png';
+})();
+function syncMoonTex() {
+  if (!LW.moonCanvas || Lt.moonP[2] < 0.01) return;
+  const ast = LW.env.astronomy && LW.env.astronomy.moon, px = Math.round(0.048 * H * GLS), opts = { alt: ast ? ast.altitude : undefined };
+  const key = px + '|' + LW.moonKey(opts);
+  if (key === moonT.key) return;
+  const cv = LW.moonCanvas(px, opts); if (!cv) return;
+  if (!moonT.tex) moonT.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, moonT.tex);
+  const pm = gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), fy = gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, pm); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, fy);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  moonT.key = key; moonT.on = 1;
+}
 function render(t) {
+  syncMoonTex();
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, glc.width, glc.height);
   gl.disable(gl.BLEND);
@@ -2804,6 +2913,8 @@ function render(t) {
   gl.uniform3f(u.uGrassMid, 0.28, 0.44, 0.11); gl.uniform3f(u.uGroundDark, 0.075, 0.135, 0.035);
   gl.uniform3f(u.uHill1, 0.3, 0.44, 0.3); gl.uniform3f(u.uHill2, 0.24, 0.42, 0.15);
   gl.uniform3fv(u.uSunP, Lt.sunP); gl.uniform3fv(u.uMoonP, Lt.moonP);
+  gl.uniform1f(u.uMoonOn, moonT.on); if (moonT.on) { gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, moonT.tex); gl.uniform1i(u.uMoonTex, 4); }
+  gl.uniform1f(u.uMtnOn, mtn.on); gl.uniform1f(u.uMtnH, mtn.H * H); if (mtn.on) { gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, mtn.tex); gl.uniform1i(u.uMtnTex, 5); }
   if (dbg.bg) gl.drawArrays(gl.TRIANGLES, 0, 3);
 
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -2947,7 +3058,7 @@ function frame() {
   // keep pandas from overlapping when idle at the same depth
   for (let i = 0; i < pandas.length; i++) for (let j = i + 1; j < pandas.length; j++) {
     const a = pandas[i], b = pandas[j];
-    if (Math.abs(a.s - b.s) > 0.06 || a.state === 'roll' || b.state === 'roll' || a.state === 'walk' || b.state === 'walk') continue;
+    if (Math.abs(a.s - b.s) > 0.06 || a.state === 'roll' || b.state === 'roll' || a.state === 'walk' || b.state === 'walk' || a.state === 'away' || b.state === 'away') continue;
     const d = b.x - a.x, m = (a.len + b.len) * 0.42;
     if (Math.abs(d) < m) { const push = Math.min((m - Math.abs(d)) * 0.5, 30 * dt) * (d >= 0 ? 1 : -1); a.x -= push; b.x += push; }
   }
@@ -2967,7 +3078,7 @@ function frame() {
   for (const b of birds) emitBird(b, t);
   for (const k of kiteBirds) emitKiteBird(k, t);
   drawList = [
-    ...pandas.map((p) => ({ L: p.prims, panda: p })), { L: basin.prims }, ...bundles.map((b) => ({ L: b.prims })),
+    ...pandas.filter((p) => p.vis == null || p.vis > 0.01).map((p) => ({ L: p.prims, panda: p })), { L: basin.prims }, ...bundles.map((b) => ({ L: b.prims })),
     ...birds.filter((b) => b.state !== 'away').map((b) => ({ L: b.prims })),
     ...kiteBirds.map((k) => ({ L: k.prims })),
   ].filter((a) => a.L.on !== false).sort((a, b) => a.L.footY - b.L.footY);

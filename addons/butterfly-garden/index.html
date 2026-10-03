@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Butterfly Garden</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0d150b}</style>
+</head>
+<body>
+<script src="astronomy.js"></script>
+<script src="kit.js"></script>
+<script src="lw.js"></script>
+<script>
+'use strict';
+// Butterfly Garden — a sunlit cottage-garden bed seen from slightly above. The kit's meadow does the ground cover,
+// flower drifts (wind sway, shadows, depth of field, breath bloom); this file adds the butterflies: flutter + glide,
+// landing and basking on flowers, scattering from a fast cursor, drifting toward a slow one, sheltering from rain.
+// atlas.png (generated, see art-src/kit-addons): <species>L/R dorsal wing halves (split at the body), flower heads,
+// foliage clumps (hosta, fern, grass, mantle); ground.jpg: a top-down garden-bed photo (texture-bombed by the kit).
+const FRAMES = {"monarchL":[10,10,104,158],"monarchR":[134,10,104,158],"morphoL":[258,10,104,181],"morphoR":[382,10,104,181],"swallowtailL":[506,10,104,180],"swallowtailR":[630,10,104,180],"whiteL":[754,10,104,167],"whiteR":[878,10,104,167],"cosmos":[10,211,150,150],"daisy":[180,211,150,150],"zinnia":[350,211,150,150],"echinacea":[520,211,150,155],"rudbeckia":[690,211,150,162],"scabiosa":[860,211,150,158],"hosta":[10,393,240,242],"fern":[270,393,240,240],"grass":[530,393,240,240],"mantle":[10,655,240,245]};
+const { rand, clamp, lerp, smooth, ease, angDiff, pick, noise1, TAU } = Kit.math;
+const DEG = Math.PI / 180;
+// span px @1000, flap Hz, share of time gliding, cruise speed px/s, spawn weight
+const SPECIES = {
+  white:       { span: 50, flap: 9.5, glide: 0.08, speed: 85, wt: 3, body: [0.28, 0.27, 0.25] },
+  monarch:     { span: 76, flap: 5.5, glide: 0.45, speed: 95, wt: 2, body: [0.08, 0.06, 0.05] },
+  swallowtail: { span: 82, flap: 5.0, glide: 0.5,  speed: 90, wt: 1.4, body: [0.1, 0.09, 0.06] },
+  morpho:      { span: 86, flap: 3.8, glide: 0.35, speed: 80, wt: 0.9, body: [0.12, 0.1, 0.08] },
+};
+let wings, meadow, flies = [], u = 1;
+
+meadow = Kit.meadow({ dof: 0.8, shadow: 0.6, push: 30, groundScale: 380, soil: [0.13, 0.1, 0.07],
+  foliage: { density: 1.1, kinds: [{ name: 'hosta', size: [120, 175], weight: 1, sway: 2 }, { name: 'fern', size: [120, 170], weight: 1.2, sway: 4 },
+                                  { name: 'grass', size: [90, 140], weight: 1.6, sway: 6, height: 0.2 }, { name: 'mantle', size: [100, 150], weight: 1.1, sway: 2 }] },
+  flowers: { clusters: 16, per: [3, 9], under: ['mantle', 'hosta', 'fern'],
+    kinds: [{ name: 'cosmos', size: [56, 78], weight: 2 }, { name: 'daisy', size: [44, 60], weight: 2 }, { name: 'zinnia', size: [52, 70], weight: 1.2 },
+            { name: 'echinacea', size: [56, 76], weight: 1.5 }, { name: 'rudbeckia', size: [50, 68], weight: 1.5 }, { name: 'scabiosa', size: [46, 60], weight: 1.2 }] } });
+
+// ── Butterflies ──
+function spawn(k, from = 'edge') {
+  const tot = Object.values(SPECIES).reduce((a, s) => a + s.wt, 0); let r = rand(tot), sp = 'white';
+  for (const n in SPECIES) if ((r -= SPECIES[n].wt) <= 0) { sp = n; break; }
+  const edge = from === 'bottom' ? 1 : Math.floor(rand(3)), x = edge === 0 ? k.mx(-60) : k.clearX(rand(0.1, 0.8)), y = edge === 0 ? rand(0.2, 0.8) * k.H : edge === 1 ? k.H + 60 : -60;
+  flies.push({ sp, S: SPECIES[sp], x, y, z: 120, vx: 0, vy: 0, ang: edge === 0 ? (k.layout.mirror ? Math.PI : 0) : edge === 1 ? -Math.PI / 2 : Math.PI / 2, state: 'fly', timer: rand(3, 6), phase: rand(TAU), wing: 0.5, glide: 0, seed: rand(99), a: 1, bloom: null, tx: k.clearX(rand(0.2, 0.8)), ty: rand(0.2, 0.8) * k.H, closed: false, closeT: rand(2, 5) });
+}
+function pickFlower(k, f) {
+  const free = meadow.blooms.filter((b) => Kit.steer.okToRest(b.x, k, b.y) && b.y > k.H * 0.08 && !flies.some((o) => o !== f && o.bloom === b));
+  const near = free.filter((b) => Math.hypot(b.x - f.x, b.y - f.y) < 520 * u);
+  return pick(near.length ? near : free);
+}
+function takeOff(f, k, scared, fromX, fromY) {
+  f.state = 'fly'; f.bloom = null; f.timer = scared ? 1.6 : rand(4, 9); f.scared = scared ? 1.6 : 0;
+  if (scared) { const a = Math.atan2(f.y - fromY, f.x - fromX) + rand(-0.5, 0.5); f.tx = clamp(f.x + Math.cos(a) * 420 * u, k.layout.clearPx[0] - 80, k.layout.clearPx[1] + 40); f.ty = clamp(f.y + Math.sin(a) * 420 * u, -80, k.H + 80); k.sound.flutter(f.x); }
+  else { f.tx = k.clearX(rand(0.08, 0.92)); f.ty = rand(0.15, 0.9) * k.H; }
+}
+function update(dt, t, k) {
+  const L = k.L, wx = LW.env.weather, wet = wx === 'rain' || wx === 'storm', B = k.breath;
+  const want = L.night > 0.62 || wx === 'snow' || k.L.snow > 0.2 ? 0 : wet ? 1 : Math.round(lerp(2, 7, smooth(0.5, 0.9, L.day)));
+  if (flies.filter((f) => f.state !== 'leave').length < want && Math.random() < dt / 2.5) spawn(k);
+  let n = 0;
+  for (const f of flies) if (f.state !== 'leave' && ++n > want) { f.state = 'leave'; f.bloom = null; const nearEdge = k.layout.mirror ? f.x > k.W * 0.6 : f.x < k.W * 0.4; f.tx = nearEdge ? k.mx(-120) : k.clearX(rand(0.2, 0.8)); f.ty = nearEdge ? f.y : -140; }
+  const cur = k.cursor, still = cur.inside && cur.speed < 140 && k.restOK(cur.x, cur.y, 0);
+  for (let i = flies.length - 1; i >= 0; i--) {
+    const f = flies[i], S = f.S;
+    // a fast sweep nearby scatters everyone
+    if (cur.inside && cur.speed > 650 && Math.hypot(cur.x - f.x, cur.y - f.y) < 190 * u && f.state !== 'leave' && !f.scared) takeOff(f, k, true, cur.x, cur.y);
+    if (f.state === 'perch') {
+      const [bx, by] = meadow.field.sway(f.bloom); f.x = bx + f.ox; f.y = by + f.oy; f.z = ease(f.z, 4, 6, dt);
+      f.ang += angDiff(f.ang, f.face) * (1 - Math.exp(-dt * 1.5));
+      f.closeT -= dt; if (f.closeT <= 0) { f.closed = !f.closed; f.closeT = f.closed ? rand(0.8, 2.5) : rand(2.5, 7); }
+      let target = f.closed ? 82 * DEG : (6 + 10 * (0.5 + 0.5 * Math.sin(t * 0.7 + f.seed))) * DEG;
+      if (wet) target = 86 * DEG;                                         // sheltering: wings shut
+      if (B.fade > 0.02) target = lerp(target, lerp(84, 4, B.level) * DEG, B.fade);   // calm: wings open on the in-breath
+      f.wing = ease(f.wing, target, f.closed ? 5 : 2.2, dt);
+      f.timer -= dt; if (f.timer <= 0 && B.fade < 0.3 && !wet) takeOff(f, k, false);
+      if (still && Math.hypot(cur.x - f.x, cur.y - f.y) < 360 * u && Math.random() < dt / 9 && B.fade < 0.3) takeOff(f, k, false), f.tx = cur.x, f.ty = cur.y;
+      continue;
+    }
+    // ── flight: steer to a flower (or a wander point / the cursor), erratic flutter + glides ──
+    f.timer -= dt; f.scared = Math.max(0, (f.scared || 0) - dt);
+    if (f.state === 'fly' && !f.bloom && f.timer <= 0 && !f.scared) { const b = pickFlower(k, f); if (b && (B.fade > 0.1 || wet || Math.random() < 0.55)) f.bloom = b; else takeOff(f, k, false); }
+    if (wet && f.bloom && f.bloom.bloom) f.bloom = pick(meadow.field.list.filter((p) => p.f === meadow.sheet.f.hosta && Kit.steer.okToRest(p.x, k, p.y)));   // under a hosta leaf
+    let tx = f.tx, ty = f.ty;
+    if (f.bloom) [tx, ty] = meadow.field.sway(f.bloom);
+    else if (still && !f.scared && Math.hypot(cur.x - f.x, cur.y - f.y) < 480 * u) { tx = cur.x + Math.cos(t * 0.9 + f.seed) * 60 * u; ty = cur.y + Math.sin(t * 1.1 + f.seed) * 45 * u; }
+    let [fx, fy, d] = Kit.steer.arrive(f, tx, ty, f.bloom ? 90 * u : 30, 1);
+    const jit = noise1(f.seed + t * 1.7) * 1.4, px = -fy, py = fx;             // butterflies never fly straight
+    fx += px * jit + noise1(f.seed * 3 + t * 0.6) * 0.3; fy += py * jit + noise1(f.seed * 5 + t * 0.6) * 0.3;
+    const [sx, sy] = Kit.steer.separate(f, flies, 95 * u, 2.2); fx += sx; fy += sy;
+    if (f.state !== 'leave') { const [bx2, by2] = Kit.steer.bounds(f, k.W, k.H, 60, 1.5); fx += bx2; fy += by2; const [cx2] = Kit.steer.calmZone(f, k, 1.2); fx += cx2; }
+    Kit.steer.move(f, fx, fy, dt, S.speed * u * (f.scared ? 2.6 : 1) * (0.75 + 0.4 * (0.5 + 0.5 * Math.sin(f.phase * 0.5))), f.scared ? 6 : 2.6);
+    // altitude: cruise high, sink onto the flower
+    const zT = f.bloom ? lerp(4, 70, smooth(10, 140 * u, d)) : 70 + 25 * Math.sin(t * 0.4 + f.seed) + (f.scared ? 60 : 0);
+    f.z = ease(f.z, zT, 2, dt);
+    // wings: flap bursts and glides
+    f.glide -= dt; if (f.glide < -rand(0.8, 2.2) && Math.random() < S.glide * dt * 3 && !f.scared) f.glide = rand(0.4, 1.2);
+    if (f.glide > 0) f.wing = ease(f.wing, 14 * DEG, 8, dt);
+    else { f.phase += TAU * S.flap * (f.scared ? 1.4 : 1) * dt; f.wing = (30 + 52 * Math.sin(f.phase)) * DEG; f.z += Math.cos(f.phase) * 0.6; }
+    if (f.bloom && d < 6 * u + 3 && f.z < 12) {
+      f.state = 'perch'; f.ox = f.x - tx; f.oy = f.y - ty; f.face = f.ang + rand(-1, 1); f.timer = rand(8, 24); f.closed = false; f.closeT = rand(3, 7);
+    }
+    if (f.state === 'leave' && (f.x < -100 || f.x > k.W + 100 || f.y < -100 || f.y > k.H + 100)) flies.splice(i, 1);
+  }
+}
+function drawFly(b, f, k, shadow) {
+  const S = f.S, sc = u * (1 + f.z / 420), w = S.span * sc / 2, fl = wings.f[f.sp + 'L'], h = w * fl.aspect;
+  const rot = f.ang + Math.PI / 2, c = Math.cos(rot), s = Math.sin(rot), sd = k.L.sunDir;
+  const ox = shadow ? sd[0] * (f.z + 6) : 0, oy = shadow ? sd[1] * (f.z + 6) : 0, sx = Math.max(0.04, Math.cos(f.wing));
+  const P = (x, y) => [f.x + ox + x * c - y * s, f.y + oy + x * s + y * c];
+  for (const side of [-1, 1]) {
+    const x0 = side < 0 ? -w * sx : 0, x1 = side < 0 ? 0 : w * sx, Q = [P(x0, -h / 2), P(x1, -h / 2), P(x1, h / 2), P(x0, h / 2)], fr = wings.f[f.sp + (side < 0 ? 'L' : 'R')];
+    if (shadow) b.quad4(fr, Q, [0, 0, 0], 0.3 * (0.4 + 0.6 * k.L.day) * (1 - k.L.cloud * 0.6) * f.a, 4, 1.2 + f.z * 0.03);
+    else { const lit = 1.06 - 0.38 * Math.sin(Math.max(0, f.wing)); b.quad4(fr, Q, k.L.tint.map((v) => v * lit), f.a); }
+  }
+  if (shadow) return;
+  const bc = S.body, [hx, hy] = P(0, -h * 0.3), [tx, ty] = P(0, h * 0.3);
+  b.line(hx, hy, tx, ty, 3.4 * sc, bc, f.a, 0); b.glow(...P(0, -h * 0.12), 3 * sc, bc, f.a, 0, 2);
+  for (const side of [-1, 1]) { const [ax, ay] = P(side * h * 0.16, -h * 0.62); b.line(hx, hy, ax, ay, 0.9 * sc, bc, f.a * 0.8, 0); b.glow(ax, ay, 1.4 * sc, bc, f.a * 0.8, 0, 2); }
+}
+
+Kit.scene({
+  assets: { atlas: 'atlas.png', ground: 'ground.jpg' },
+  setup(k) {
+    k.shade = 0.55;   // an unseen tree shades the widget side (auto: follows LW.layout)
+    wings = k.sheet(k.assets.atlas, FRAMES);
+    const cut = (kinds) => Object.fromEntries(kinds.map((q) => [q.name, Kit.slice(k.assets.atlas, FRAMES[q.name])]));
+    meadow.opt.flowers.images = cut(meadow.opt.flowers.kinds); meadow.opt.foliage.images = cut(meadow.opt.foliage.kinds); meadow.opt.groundImage = k.assets.ground;
+  },
+  resize(k) { u = Math.min(k.W, k.H) / 1000; for (const f of flies) if (f.bloom) { f.bloom = null; f.state = 'fly'; } },
+  layers: [
+    meadow,
+    Kit.sprites((b, k) => { b.use(wings); for (const f of flies) drawFly(b, f, k, true); }, 'shadows'),
+    Kit.sprites((b, k) => { b.use(wings); for (const f of flies.slice().sort((p, q) => p.z - q.z)) drawFly(b, f, k, false); }, 'butterflies'),
+    Kit.particles({ pollen: 26, fireflies: 22, petals: 0 }),
+    Kit.light({ glow: 0.4, threshold: 0.78, vignette: 0.42, contrast: 1.1, warmth: 0.05 }),
+  ],
+  update,
+  onDown(x, y, k) { for (const f of flies) if (Math.hypot(f.x - x, f.y - y) < 160 * u && f.state !== 'leave') takeOff(f, k, true, x, y); k.wind.puff(0.5); },
+  onAction: { release(k) { spawn(k, 'bottom'); const f = flies[flies.length - 1]; f.z = 160; f.tx = rand(0.2, 0.55) * k.W; f.ty = rand(0.3, 0.7) * k.H; k.sound.flutter(f.x); } },
+  // Calm: blooms open and close with the breath, a soft gust rides each in-breath; butterflies settle and bask in time.
+  breathe(level, phase, k) {
+    const B = k.breath; meadow.bloom = (level - 0.4) * 0.14 * B.fade;
+    if (phase === 'in') k.wind.puffs = Math.max(k.wind.puffs, 0.7 * B.k * B.fade);
+  },
+  music(m, k) { meadow.bloom = Math.max(meadow.bloom * 0.9, m.beat * 0.05); },
+  ambience: {
+    windLevel: 0.016,
+    tick(A, k, at, ctx) {
+      const L = k.L, dry = !['rain', 'storm', 'snow'].includes(LW.env.weather);
+      if (L.night < 0.4 && dry && Math.random() < 0.06) A.bird(ctx, A.out, at, 0.005);
+      if (L.day > 0.7 && dry && Math.random() < 0.012) A.bee(ctx, A.out, at, 0.0035);
+      if (L.night > 0.6 && dry) { if (Math.random() < 0.5) A.cricket(ctx, A.out, at + Math.random() * 0.2, 0.0026); if (Math.random() < 0.25) A.cricket(ctx, A.out, at + 0.12, 0.0016); }
+    },
+  },
+});
+</script>
+</body>
+</html>

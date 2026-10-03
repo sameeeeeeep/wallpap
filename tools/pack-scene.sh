@@ -15,7 +15,7 @@ assert os.path.exists(os.path.join(src, 'index.html')), 'index.html missing'
 out = 'site/scenes-pack'; os.makedirs(out, exist_ok=True)
 zipname = f'{sid}-{ver}.zip'
 stage = f'/tmp/wallpap-pack-{sid}'; shutil.rmtree(stage, ignore_errors=True)
-shutil.copytree(src, stage, ignore=shutil.ignore_patterns('lw.js', 'pet-motion.js', 'astronomy.js', '.DS_Store'))  # runtime comes from the app
+shutil.copytree(src, stage, ignore=shutil.ignore_patterns('lw.js', 'pet-motion.js', 'astronomy.js', '.DS_Store', '.source'))  # lw.js etc. come from the app (kit.js/moon.js ship in the zip too, for older apps)
 subprocess.run(['ditto', '-c', '-k', '--norsrc', '--noextattr', '--noqtn', stage, os.path.join(out, zipname)], check=True)
 thumb = None
 for t in ('thumb.jpg', 'thumb.png'):
@@ -25,7 +25,10 @@ cat_path = 'site/catalog.json'
 cat = json.load(open(cat_path)) if os.path.exists(cat_path) else {'scenes': []}
 cat['scenes'] = [s for s in cat['scenes'] if s['id'] != sid] + [{
     'id': sid, 'title': m.get('title', sid), 'category': m.get('category', 'More'), 'pro': m.get('pro', True),
-    'version': ver, 'zip': f'scenes-pack/{zipname}', **({'thumb': thumb} if thumb else {})}]
+    'version': ver, 'zip': f'scenes-pack/{zipname}', 'author': m.get('author', 'wallpap'),
+    **({'authorURL': m['authorURL']} if m.get('authorURL') else {}), **({'blurb': m['blurb']} if m.get('blurb') else {}),
+    **({'featured': True} if m.get('featured') else {}), **({'new': True} if m.get('new') else {}),
+    **({'music': True} if m.get('music') else {}), **({'thumb': thumb} if thumb else {})}]
 json.dump(cat, open(cat_path, 'w'), indent=2)
 print(f'packed {sid} v{ver} → site/scenes-pack/{zipname}')
 PY

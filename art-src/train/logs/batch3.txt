@@ -1,0 +1,11 @@
+OK orient-drink 1536x1024x
+OK shinkansen-drink 1585x992x
+OK swiss-drink 1536x1024x
+OK p-conductor 2055x765x
+OK p-steward 2172x724x
+OK indian-bridge 1484x1060x
+OK p-traveller 2172x724x
+OK p-hiker 2048x768x
+OK swiss-track 1536x1024x
+OK shinkansen-track 1536x1024x
+OK orient-track 1536x1024x

@@ -1,0 +1,38 @@
+name: Submit a scene
+description: Share a wallpap scene you made — featured scenes ship to everyone through the in-app catalog.
+title: "Scene: <title>"
+labels: ["scene-submission"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for making something! Read **docs/SCENES.md** first — it covers the scene format, the shared runtime and the quality bar.
+        Featured scenes appear in the app's **Discover** tab and on wallpap.live with your name and link.
+  - type: input
+    id: title
+    attributes: { label: Scene title, placeholder: "Snow Globe" }
+    validations: { required: true }
+  - type: input
+    id: author
+    attributes: { label: Credit as, description: "Name shown as “by …” in the app and on the site", placeholder: "Jane Doe" }
+    validations: { required: true }
+  - type: input
+    id: link
+    attributes: { label: Your link (optional), placeholder: "https://…" }
+  - type: input
+    id: zip
+    attributes: { label: Scene folder, description: "A link to a .zip of the folder (index.html + scene.json + thumb.jpg + assets)", placeholder: "https://…/snow-globe.zip" }
+    validations: { required: true }
+  - type: textarea
+    id: about
+    attributes: { label: What is it?, description: "One or two sentences, and what you can do in it" }
+    validations: { required: true }
+  - type: checkboxes
+    id: rights
+    attributes:
+      label: Rights
+      options:
+        - label: I made this (or have the rights to every asset in it) and I'm happy for wallpap to distribute it in the app.
+          required: true
+        - label: No people's likenesses, logos or trademarks are used without permission.
+          required: true

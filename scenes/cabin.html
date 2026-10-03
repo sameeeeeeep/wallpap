@@ -13,55 +13,49 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script src="pet-motion.js"></script>
 <script>
 'use strict';
 /* =====================================================================
-   Snowy Cabin — a warm log-cabin room on a snowy evening, as a music
-   wallpaper. Crackling fire (embers pop on beats), the album artwork in a
-   frame above the mantel lit by the fire, a record player on a sideboard
-   with the sleeve propped behind it (the music hero, all in the left
-   ~70%), a big window on the right onto pine forest + mountains (calm
-   background: snowfall, aurora on clear winter nights, blizzard, sleet,
-   fog — or a summer evening when it's warm out), an armchair with a
-   knitted blanket, cocoa steaming, fairy lights, bookshelves.
-   A golden puppy roams rug ↔ armchair ↔ door; an orange cat roams
-   windowsill (pawing at snowflakes) ↔ bookshelf ↔ armchair.
+   Snowy Cabin — a lived-in log cabin on a winter night (or a summer
+   evening), as a music wallpaper. Painted plates (Codex) for the room by
+   night and by day (identical geometry), a live view through the window
+   (four painted landscapes: winter/summer × day/night, graded for dusk and
+   weather, three depths of falling snow with wind and parallax, snow that
+   builds up on the outside of the panes and melts later, frost at the
+   corners, sleet/rain, fireflies, the real-phase moon), and a real fire:
+   a painted flipbook of flames behind a painted log grate with glowing
+   coals, embers, smoke curling up the flue, and the fire's light flickering
+   on the stones, hearth, rug and the animals.
 
-   Click the record player = play/pause · click the window = next.
+   Music: the record player on the walnut cabinet is THE player (artwork on
+   the spinning label + the sleeve leaning beside it + a small card with the
+   title). Click it = play/pause · click the window = next. The framed print
+   above the mantel is a display that mirrors the artwork.
 
-   World units: 1000 tall, width follows the aspect; the composition is a
-   1600-wide stage centred on screen (wider screens show more log wall).
-   The room (walls, furniture, window frame) is painted once per light
-   change as albedo × a soft light map, cached and crossfaded; the view
-   out of the window is baked separately per weather/time. Per frame we
-   draw: outside view → room → fire, turntable, framed art, sleeve, card →
-   animals → armchair layer → particles, fairy-light glows, overlays.
+   Pets: Maple (golden puppy: rug by the fire, in front of the record
+   cabinet) and Ember (orange cat: the armchair seat and its back, the rug).
+   Lit by the light where they are (warm firelight + a rim on the fire side,
+   cool window light by day), soft contact + fire-cast shadows, believable
+   scale for the furniture. LW.settings.pets === false → they walk out of
+   the room and stay away; back on → they wander in again.
 
-   ART SLOTS (optional) — scenes/art/cabin/*.png, procedural if missing:
-   ┌──────────────────┬────────────┬─────────────────────────────────────┐
-   │ file             │ size (px)  │ notes                               │
-   ├──────────────────┼────────────┼─────────────────────────────────────┤
-   │ room-night.png   │ 3200×2000  │ the room painted for the 1600×1000  │
-   │ room-day.png     │ 3200×2000  │ stage (centred). Window panes must  │
-   │                  │            │ be TRANSPARENT (the live outside    │
-   │                  │            │ view shows through). Leave OUT: the │
-   │                  │            │ fire, the framed art, turntable     │
-   │                  │            │ platter/arm, sleeve, card, armchair │
-   │                  │            │ (it is its own layer), animals.     │
-   │ armchair.png     │ 600×560    │ armchair + blanket + side table,    │
-   │                  │            │ drawn at stage x 190..490, bottom   │
-   │                  │            │ at y 930 (300×280 units).           │
-   │ outside-winter.png│ 1600×1600 │ view through the window (square,    │
-   │ outside-summer.png│ 1600×1600 │ cropped to the window, tinted by    │
-   │                  │            │ time of day). Weather is live.      │
-   └──────────────────┴────────────┴─────────────────────────────────────┘
-   ANIMALS use the shared illustrated sprites (scenes/art/sprites/):
-     cats/orange/{walk1,walk2,sit,loaf,sleep,stretch}.png   — Ember
-     dogs/golden/{walk1,walk2,sit,lie,belly-up}.png         — Maple
-   facing RIGHT, feet at the bottom edge; walk = alternate walk1/walk2
-   with a small bob. Each animal tints its sprite on its own canvas; the
-   procedural side-view rig is drawn until a set has loaded.
+   Layout: hero objects stay inside LW.layout.clear; side:'left' mirrors the
+   whole room (window on the left, hero on the right).
+
+   ART (scenes/art/cabin/):
+     room-night.jpg, room-day.jpg   1586×992 plates (the 1600×1000 stage), window glass is a
+                                    flat #0B1A2C placeholder (cut out at bake)
+     room-{night,day}-wide.jpg       a wider repaint of the room, used only for the side panels on
+                                    ultrawide screens (coat rack / snowshoes left, bench right)
+     outside-{winter,summer}-{night,day}.jpg  1254² window views
+     fire.jpg        8-frame flame flipbook on black (420×400 cells, base at y 372), added with 'lighter'
+     logs.png        burning log grate (transparent)
+     smoke.jpg       4 smoke wisps on black (screen)
+     turntable.png   record player without tonearm (transparent; tonearm + label art are live)
+     bowl.png, mug.png, glass.png, slippers.png   small lived-in props (transparent)
+   Pets use the shared sprites in scenes/art/sprites/ (dogs/golden, cats/orange).
    ===================================================================== */
 (() => {
 const SCENE_ID = 'cabin';
@@ -93,19 +87,12 @@ const later = (sec, fn) => timers.push({ at: nowS() + sec, fn });
 function runTimers() { const T = nowS(); for (let i = timers.length - 1; i >= 0; i--) if (timers[i].at <= T) { const f = timers[i].fn; timers.splice(i, 1); try { f(); } catch (e) { console.error(e); } } }
 const SANS = '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif';
 const SERIF = '"Hoefler Text", "Baskerville", "Iowan Old Style", Georgia, serif';
-const HAND = '"Snell Roundhand", "Bradley Hand", "Segoe Print", "Hoefler Text", Georgia, serif';
 function newCanvas(w, h) { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
 function rr(g, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
   g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
   g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h);
   g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
-}
-function ellGrad(g, x, y, rx, ry, col, a, stops = 6) {
-  g.save(); g.translate(x, y); g.scale(rx, ry);
-  const gr = g.createRadialGradient(0, 0, 0, 0, 0, 1);
-  for (let i = 0; i <= stops; i++) { const t = i / stops; gr.addColorStop(t, rgba(col, a * Math.exp(-2.6 * t * t) * (1 - t * t * t))); }
-  g.fillStyle = gr; g.fillRect(-1, -1, 2, 2); g.restore();
 }
 function sprite(size, stops) {
   const c = newCanvas(size, size), g = c.getContext('2d');
@@ -114,14 +101,12 @@ function sprite(size, stops) {
   g.fillStyle = gr; g.fillRect(0, 0, size, size); return c;
 }
 const GLOW_WARM = sprite(128, [[0, 'rgba(255,214,150,1)'], [0.18, 'rgba(255,190,110,0.5)'], [0.5, 'rgba(255,160,80,0.12)'], [1, 'rgba(255,140,60,0)']]);
-const GLOW_FIRE = sprite(128, [[0, 'rgba(255,190,110,1)'], [0.25, 'rgba(255,120,50,0.45)'], [0.6, 'rgba(220,70,20,0.1)'], [1, 'rgba(200,50,10,0)']]);
-const GLOW_WHITE = sprite(128, [[0, 'rgba(255,255,255,1)'], [0.2, 'rgba(255,255,255,0.45)'], [0.55, 'rgba(255,255,255,0.1)'], [1, 'rgba(255,255,255,0)']]);
-const GLOW_COOL = sprite(128, [[0, 'rgba(210,235,255,1)'], [0.25, 'rgba(160,205,255,0.4)'], [0.6, 'rgba(120,170,255,0.08)'], [1, 'rgba(100,150,255,0)']]);
+const GLOW_FIRE = sprite(128, [[0, 'rgba(255,170,90,1)'], [0.3, 'rgba(255,120,50,0.42)'], [0.65, 'rgba(220,70,20,0.09)'], [1, 'rgba(200,50,10,0)']]);
+const GLOW_SOFT = sprite(128, [[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,255,255,0.55)'], [0.7, 'rgba(255,255,255,0.12)'], [1, 'rgba(255,255,255,0)']]);
 const GLOW_FLY = sprite(64, [[0, 'rgba(240,255,170,1)'], [0.3, 'rgba(200,255,120,0.4)'], [1, 'rgba(160,230,80,0)']]);
-const BLOB = sprite(64, [[0, 'rgba(255,255,255,0.9)'], [0.45, 'rgba(255,255,255,0.45)'], [1, 'rgba(255,255,255,0)']]);
+const FLAKE = sprite(32, [[0, 'rgba(255,255,255,1)'], [0.45, 'rgba(255,255,255,0.75)'], [1, 'rgba(255,255,255,0)']]);
 const STEAM = sprite(64, [[0, 'rgba(255,244,230,0.8)'], [0.5, 'rgba(255,240,225,0.35)'], [1, 'rgba(255,236,220,0)']]);
-const DARK = sprite(64, [[0, 'rgba(10,6,6,0.85)'], [0.5, 'rgba(10,6,6,0.45)'], [1, 'rgba(10,6,6,0)']]);
-const VIGNETTE = (() => { const c = newCanvas(320, 200), g = c.getContext('2d'); g.setTransform(1, 0, 0, 200 / 320, 0, 0); const gr = g.createRadialGradient(160, 150, 60, 160, 160, 230); gr.addColorStop(0, 'rgba(8,4,4,0)'); gr.addColorStop(0.6, 'rgba(8,4,4,0.18)'); gr.addColorStop(1, 'rgba(8,4,4,0.62)'); g.fillStyle = gr; g.fillRect(0, 0, 320, 320); return c; })();
+const VIGNETTE = (() => { const c = newCanvas(320, 200), g = c.getContext('2d'); g.setTransform(1, 0, 0, 200 / 320, 0, 0); const gr = g.createRadialGradient(160, 150, 60, 160, 160, 230); gr.addColorStop(0, 'rgba(8,4,4,0)'); gr.addColorStop(0.6, 'rgba(8,4,4,0.16)'); gr.addColorStop(1, 'rgba(8,4,4,0.55)'); g.fillStyle = gr; g.fillRect(0, 0, 320, 320); return c; })();
 function drawSprite(g, sp, x, y, r, a, op = 'lighter') {
   if (a <= 0.003) return;
   g.globalCompositeOperation = op; g.globalAlpha = Math.min(1, a);
@@ -135,31 +120,27 @@ function drawSpriteXY(g, sp, x, y, rx, ry, a, op = 'lighter') {
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 function fitText(g, s, maxW) { s = s || ''; if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s + '…'; }
-function flameSprite(c0, c1) {
-  const c = newCanvas(64, 128), g = c.getContext('2d');
-  const gr = g.createLinearGradient(0, 128, 0, 0); gr.addColorStop(0, c0); gr.addColorStop(0.35, c0); gr.addColorStop(1, c1);
-  g.fillStyle = gr; g.beginPath(); g.moveTo(2, 128); g.bezierCurveTo(4, 70, 22, 40, 32, 0); g.bezierCurveTo(42, 40, 60, 70, 62, 128); g.closePath(); g.fill();
-  return c;
-}
-const FLAMES = [flameSprite('rgba(255,90,20,0.55)', 'rgba(200,40,10,0)'), flameSprite('rgba(255,150,40,0.7)', 'rgba(255,90,20,0)'), flameSprite('rgba(255,236,170,0.85)', 'rgba(255,190,90,0)')];
 const noise1 = (x) => { const i = Math.floor(x), f = x - i, h = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }; return lerp(h(i), h(i + 1), f * f * (3 - 2 * f)); };
 
 // =====================================================================
-//  art slots (optional PNGs; procedural fallback)
+//  art
 // =====================================================================
 const ART = {};
 let artDirty = false;
-function loadArtSlots() {
-  for (const name of ['room-night', 'room-day', 'armchair', 'outside-winter', 'outside-summer']) {
-    const im = new Image();
-    im.onload = () => { if (im.naturalWidth > 1) { ART[name] = im; artDirty = true; } };
+const ART_FILES = ['room-night.jpg', 'room-day.jpg', 'room-night-wide.jpg', 'room-day-wide.jpg', 'outside-winter-night.jpg', 'outside-winter-day.jpg', 'outside-summer-night.jpg',
+  'outside-summer-day.jpg', 'fire.jpg', 'logs.png', 'smoke.jpg', 'turntable.png', 'bowl.png', 'mug.png', 'glass.png', 'slippers.png'];
+function loadArtFiles() {
+  for (const f of ART_FILES) {
+    const im = new Image(), name = f.replace(/\.\w+$/, '');
+    im.onload = () => { if (im.naturalWidth > 1) { ART[name] = im; artDirty = true; if (/^(bowl|mug|glass|slippers)$/.test(name)) PROPS[name] = im; if (name === 'outside-winter-day') paintIdleArt(); } };
     im.onerror = () => {};
-    im.src = 'art/' + SCENE_ID + '/' + name + '.png';
+    im.src = 'art/' + SCENE_ID + '/' + f;
   }
 }
-
+// small props (cut-outs): drawn lit by the light where they stand
+const PROPS = {};
 // =====================================================================
-//  environment: time of day, weather, season (glides ~30 s; never pops)
+//  environment: time of day, weather, season (glides; never pops)
 // =====================================================================
 const KF = [
   { h: 0, top: '#060a1c', bot: '#18223f', day: 0 },
@@ -174,21 +155,14 @@ const KF = [
   { h: 24, top: '#060a1c', bot: '#18223f', day: 0 },
 ];
 KF.forEach((k) => { k.topC = hex(k.top); k.botC = hex(k.bot); });
-const WX = {
-  cloudy: { d: ['#9aa2b0', '#c8ccd2'], n: ['#141725', '#2a2a3c'], amt: 0.6, day: 0.85 },
-  rain: { d: ['#6c7584', '#959ca8'], n: ['#0b0d18', '#1d1d2e'], amt: 0.85, day: 0.6 },
-  storm: { d: ['#8a92a0', '#b8bec8'], n: ['#10121c', '#262838'], amt: 0.95, day: 0.55 },
-  snow: { d: ['#b4bac6', '#dde1e8'], n: ['#161a2a', '#2e3046'], amt: 0.8, day: 0.85 },
-  fog: { d: ['#b0b3ba', '#d2d4d8'], n: ['#1a1d28', '#363846'], amt: 0.85, day: 0.78 },
-};
+const WX = { cloudy: { amt: 0.6, day: 0.85 }, rain: { amt: 0.85, day: 0.6 }, storm: { amt: 0.95, day: 0.5 }, snow: { amt: 0.8, day: 0.8 }, fog: { amt: 0.85, day: 0.78 } };
 let E = null, Et = null;
 function seasonFor(env) {
   const s = (LW.settings && LW.settings.season) || 'auto';
   if (s === 'summer') return 1;
   if (s === 'winter') return 0;
   if (env.weather === 'snow') return 0;
-  // a snowy cabin by default; only a properly warm evening turns it to summer
-  return (+env.temp || 0) >= 22 ? 1 : 0;
+  return (+env.temp || 0) >= 22 ? 1 : 0;   // a snowy cabin by default; only a properly warm day turns it to summer
 }
 function computeTarget() {
   const env = LW.env || {};
@@ -196,36 +170,33 @@ function computeTarget() {
   let a = KF[0], b = KF[1];
   for (let i = 0; i < KF.length - 1; i++) if (hr >= KF[i].h && hr <= KF[i + 1].h) { a = KF[i]; b = KF[i + 1]; break; }
   const t = smooth((hr - a.h) / Math.max(0.001, b.h - a.h));
-  let top = mix3(a.topC, b.topC, t), bot = mix3(a.botC, b.botC, t);
+  const top = mix3(a.topC, b.topC, t), bot = mix3(a.botC, b.botC, t);
   let day = lerp(a.day, b.day, t);
   const w = env.weather || 'clear';
   const it = clamp(env.intensity == null ? 0.7 : +env.intensity, 0, 1);
   const summer = seasonFor(env);
   let snow = 0, rain = 0, storm = 0, fog = 0, cloud = 0.1, flurry = 0;
   const night = 1 - day;
-  let moon = night * (hr > 19 || hr < 6 ? 1 : 0);
+  let moon = night * (hr > 18.5 || hr < 6.5 ? 1 : 0);
   const X = WX[w];
+  // dusk / dawn: how golden the low sun is (0 at noon and at night)
+  const dusk = Math.max(0, 1 - Math.abs(day - 0.45) / 0.4) * (hr > 12 ? 1 : 0.8);
   if (X) {
-    const f = X.amt * (0.6 + 0.4 * it);
-    top = mix3(top, mix3(hex(X.n[0]), hex(X.d[0]), day), f);
-    bot = mix3(bot, mix3(hex(X.n[1]), hex(X.d[1]), day), f);
     day *= lerp(1, X.day, 0.6 + 0.4 * it);
-    moon *= w === 'cloudy' ? 0.3 : 0; cloud = w === 'cloudy' ? 0.8 : 1;
+    moon *= w === 'cloudy' ? 0.35 : 0; cloud = w === 'cloudy' ? 0.7 : 1;
     if (w === 'snow') snow = 0.35 + 0.6 * it;
-    if (w === 'storm') { storm = 1; if (summer) rain = 0.8 + 0.2 * it; else snow = 1; }   // blizzard in winter
+    if (w === 'storm') { storm = 1; if (summer) rain = 0.8 + 0.2 * it; else snow = 1; }   // a blizzard in winter
     if (w === 'rain') rain = 0.45 + 0.55 * it;                                             // sleet in winter
     if (w === 'fog') fog = 0.55 + 0.45 * it;
     if (w === 'cloudy' && !summer) flurry = 0.5;
-  } else if (!summer) flurry = 0.25;   // a clear snowy night still has a few drifting flakes
-  // aurora on clear winter nights
-  const aurora = !summer && w === 'clear' ? smooth((night - 0.6) / 0.4) : 0;
+  } else if (!summer) flurry = 0.22;   // a clear winter night still has a few drifting flakes
   const fireflies = summer && (w === 'clear' || w === 'cloudy') ? smooth((night - 0.35) / 0.5) * (1 - fog) : 0;
   moon *= LW.moonVisibility();
-  Et = { hour: hr, weather: w, it, top, bot, day, snow, rain, storm, fog, cloud, moon, flurry, summer, aurora, fireflies };
+  Et = { hour: hr, weather: w, it, top, bot, day, snow, rain, storm, fog, cloud, moon, flurry, summer, fireflies, dusk: dusk * (1 - cloud * 0.6) };
   if (!E) E = JSON.parse(JSON.stringify(Et));
 }
-const ENV_KEYS = ['day', 'snow', 'rain', 'storm', 'fog', 'cloud', 'moon', 'flurry', 'summer', 'aurora', 'fireflies', 'it'];
-let lastBake = -99, bakedSnap = null, fade = 1;
+const ENV_KEYS = ['day', 'snow', 'rain', 'storm', 'fog', 'cloud', 'moon', 'flurry', 'summer', 'fireflies', 'it', 'dusk'];
+let lastBake = -99, bakedSnap = null, fade = 1, bakedPlate = false;
 function updateEnv(dt) {
   const k = LW.envBlend(dt, 9);
   for (const key of ENV_KEYS) E[key] += (Et[key] - E[key]) * k;
@@ -234,16 +205,19 @@ function updateEnv(dt) {
   fade = Math.min(1, fade + dt / 1.6);
   const snap = envSnap();
   const diff = bakedSnap ? Math.max(...snap.map((v, i) => Math.abs(v - bakedSnap[i]))) : 1;
+  // the first plate to arrive is shown at once; later art / light changes crossfade
+  if (artDirty && !bakedPlate && ART['room-night']) { artDirty = false; bake(false); return; }
   if ((diff > 0.03 || artDirty) && nowS() - lastBake > 2.5 && fade >= 1) { artDirty = false; bake(true); }
 }
-const envSnap = () => [E.day, E.snow * 0.4, E.rain * 0.4, E.storm * 0.4, E.fog, E.cloud * 0.6, E.moon, E.summer, ...E.top.map((v) => v / 255), ...E.bot.map((v) => v / 255)];
+const envSnap = () => [E.day, E.snow * 0.4, E.rain * 0.4, E.storm * 0.5, E.fog, E.cloud * 0.6, E.summer, E.dusk, ...E.top.map((v) => v / 255), ...E.bot.map((v) => v / 255)];
 
 // =====================================================================
-//  layout (stage coordinates: 1600 × 1000, centred)
+//  layout. The plates are 1586×992 px, drawn on the 1600×1000 stage; all
+//  measurements below are in plate pixels, P() turns them into world units.
 // =====================================================================
+const IW = 1586, IH = 992, KX = 1600 / IW, KY = 1000 / IH;
 let dpr = 1, cssW = 1, cssH = 1, U = 1, W = 1600, H = 1000;
-let L = null;
-const FY = 830;   // where the back wall meets the floor
+let L = null, MIR = false;
 function computeLayout() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   cssW = Math.max(1, innerWidth); cssH = Math.max(1, innerHeight);
@@ -252,77 +226,79 @@ function computeLayout() {
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
   H = 1000; W = (cssW / cssH) * 1000; U = cv.height / 1000;
-  const sx = (W - 1600) / 2, o = { sx };
-  o.door = { x0: sx + 22, x1: sx + 178, y0: 418, y1: FY };
-  o.shelf = { x0: sx + 196, x1: sx + 404, y0: 200, y1: FY, boards: [298, 428, 558, 688] };
-  o.chair = { x0: sx + 196, x1: sx + 452, top: 598, seatY: 788, footY: 918, cx: sx + 324 };
-  o.table = { x: sx + 494, y: 774, r: 38, footY: 908 };
-  o.mug = { x: sx + 482, y: 772 };
-  o.glass = { x: sx + 510, y: 772 };
-  o.fire = { x0: sx + 528, x1: sx + 872, cx: sx + 700, mantelY: 474, box: { x0: sx + 600, x1: sx + 800, y0: 592, y1: 816 } };
-  o.fire.fy = 790;   // flame base (top of the logs)
-  o.frame = { x0: sx + 566, x1: sx + 834, y0: 176, y1: 444, pad: 22 };
-  o.frame.ax = o.frame.x0 + o.frame.pad; o.frame.ay = o.frame.y0 + o.frame.pad; o.frame.as = o.frame.x1 - o.frame.x0 - 2 * o.frame.pad;
-  o.card = { x: sx + 742, y: 474, w: 104, h: 54 };
-  o.board = { x0: sx + 884, x1: sx + 1112, top: 690, y1: FY };
-  o.tt = { x0: sx + 890, x1: sx + 1046, top: 646, bot: 690, cx: sx + 956, cy: 648, r: 58 };
-  o.sleeve = { x: sx + 944, y: 530, s: 130 };   // leaning on the wall behind the deck
-  o.win = { x0: sx + 1122, x1: sx + 1530, y0: 214, y1: 636 };
-  o.win.cx = (o.win.x0 + o.win.x1) / 2;
-  o.rug = { cx: sx + 690, cy: 908, rx: 272, ry: 50 };
-  o.lamp = { x: o.frame.x0 + (o.frame.x1 - o.frame.x0) / 2, y: o.frame.y0 - 14 };
+  // layout awareness: widgets on the left → mirror the room; keep the record player inside `clear`
+  const lay = LW.layout || { side: 'right', clear: [0, 0.72] };
+  MIR = lay.side === 'left';
+  const clr = lay.clear || [0, 0.72], c1 = MIR ? 1 - clr[0] : clr[1];
+  const base = (W - 1600) / 2;
+  const sx = Math.max(base - 80, Math.min(base, c1 * W - 1236 * KX - 10));
+  const P = (x, y) => ({ x: sx + x * KX, y: y * KY });
+  const R = (x0, y0, x1, y1) => { const a = P(x0, y0), b = P(x1, y1); return { x0: a.x, y0: a.y, x1: b.x, y1: b.y, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, w: b.x - a.x, h: b.y - a.y }; };
+  const o = { sx, P };
+  o.fire = R(612, 482, 850, 680);                 // the firebox opening
+  o.fire.fx = P(731, 0).x;                        // fire centre line
+  o.fire.base = P(0, 657).y;                      // flame base (hidden behind the logs)
+  o.fire.logs = { cx: P(731, 0).x, bot: P(0, 690).y, w: 184 * KX };
+  o.hearth = R(512, 682, 985, 760);
+  o.frame = R(655, 139, 833, 285);                // the picture frame's (black) interior
+  o.cab = R(980, 578, 1232, 586);                 // record cabinet top
+  o.tt = { cx: P(1094, 0).x, bot: P(0, 588).y, w: 186 * KX };   // record player (sprite)
+  o.sleeve = { x: P(990, 0).x, bot: P(0, 581).y, s: 122 * KX };  // leaning on the log wall (an LP sleeve is ~2/3 of the player's width)
+  o.card = { x: P(1112, 0).x, y: P(0, 416).y, w: 62, h: 38 };   // pinned to the log wall above the player
+  o.win = R(1250, 178, 1501, 552);
+  o.panes = [];
+  for (const [x0, x1] of [[1253, 1369], [1381, 1498]]) for (const [y0, y1] of [[181, 293], [304, 419], [430, 549]]) o.panes.push(R(x0 - 0.5, y0 - 0.5, x1 + 1.5, y1 + 1.5));
+  o.candles = [P(549, 293), P(905, 302)];
+  o.lantern = P(59, 357);
+  o.fairy = [[887, 15], [670, 18], [627, 24], [700, 32], [844, 34], [1128, 36], [814, 39], [1004, 37], [141, 41], [597, 42], [1071, 41], [742, 46], [999, 46], [1103, 46], [769, 46], [1036, 53], [494, 54], [192, 57], [221, 66], [458, 70], [265, 74], [353, 77], [430, 80], [381, 88], [310, 90]].map(([x, y]) => P(x, y));
+  o.glass = P(880, 703);                          // water reminder: on the hearth, right of the opening
+  o.mug = P(491, 623);                            // on the armchair's rolled arm
+  o.rug = P(775, 875);
+  // props on the floor (depth-sorted with the animals)
+  o.floorProps = [{ name: 'slippers', ...P(262, 912), w: 92 * KX }, { name: 'bowl', ...P(1018, 792), w: 62 * KX }];
   // where the animals go: floor points + raised nodes (chains = how to climb up)
-  const fp = (x, y, extra) => ({ plat: 'floor', x: sx + x, y, ...extra });
+  const fp = (x, y, extra) => ({ plat: 'floor', ...P(x, y), ...extra });
   o.nodes = {
-    seat: { x: sx + 330, y: 786, base: fp(338, 946), chain: ['seat'], plat: 'seat' },
-    back: { x: sx + 300, y: 600, base: fp(338, 946), chain: ['seat', 'back'], plat: 'back' },
-    shelf: { x: sx + 356, y: 558, base: fp(338, 946), chain: ['seat', 'back', 'shelf'], plat: 'shelf' },
-    sill: { x: o.win.x0 + 26, y: 640, base: fp(1092, 902), chain: ['sill'], plat: 'sill', hopDur: 1.15 },
+    seat: { ...P(398, 703), base: fp(420, 878), chain: ['seat'], plat: 'seat', k: 1.38 },
+    back: { ...P(318, 488), base: fp(420, 878), chain: ['seat', 'back'], plat: 'back', k: 1.26 },
   };
   o.spots = {
-    rug: fp(690, 914, { rest: ['loaf', 'curl', 'curl'], who: 'dog' }),
-    door: fp(104, 886, { rest: ['sit'], face: -1, who: 'dog', short: true }),
-    chair: { node: 'seat', rest: ['loaf', 'curl'], who: 'any' },
-    perch: { node: 'back', rest: ['loaf', 'sit'], who: 'cat' },
-    shelf: { node: 'shelf', rest: ['loaf', 'curl', 'sit'], who: 'cat' },
-    sill: { node: 'sill', rest: ['sit', 'sit', 'loaf'], who: 'cat', paw: true, short: true, face: 1 },
-    hearth: fp(560, 902, { rest: ['curl', 'loaf'], who: 'cat' }),
+    rug: fp(770, 908, { rest: ['loaf', 'curl', 'curl'], who: 'dog' }),
+    rugL: fp(585, 898, { rest: ['sit', 'curl'], who: 'any' }),
+    cab: fp(1080, 812, { rest: ['sit', 'loaf'], who: 'dog', face: -1, music: true }),
+    seat: { node: 'seat', rest: ['loaf', 'curl', 'sit'], who: 'cat' },
+    perch: { node: 'back', rest: ['loaf', 'sit'], who: 'cat', short: true },
+    hearthF: fp(900, 800, { rest: ['curl', 'loaf'], who: 'cat' }),
   };
-  // fairy lights: along the ceiling beam, the mantel and the window head
-  o.fairy = []; o.fairyStrings = [];
-  const string = (x0, x1, y, sag, span, step) => {
-    const i0 = o.fairy.length;
-    for (let a = x0; a < x1 - 1; a += span) {
-      const b = Math.min(x1, a + span);
-      for (let x = a + step / 2; x < b; x += step) { const u = (x - a) / (b - a); o.fairy.push({ x, y: y + Math.sin(u * Math.PI) * sag, ph: rand(0, 6), hue: (o.fairy.length * 7) % 5 }); }
-    }
-    o.fairyStrings.push({ i0, i1: o.fairy.length });
-  };
-  string(-40, W + 40, 98, 24, 220, 30);
-  string(sx + 518, sx + 882, 500, 10, 182, 24);
-  string(o.win.x0 - 14, o.win.x1 + 14, 202, 9, 136, 22);
+  // the way out (pets off): beyond the left edge of the screen (the door is off-camera)
+  o.exit = { plat: 'floor', x: -110, y: P(0, 930).y, rest: ['sit'], who: 'any' };
+  o.fireLight = P(731, 615);
   L = o;
+  // the breathing caption: dark floor right of the rug, under the record cabinet
+  const bx = (sx + 1130 * KX) / W;
+  LW.breathLabelAt = [MIR ? 1 - bx : bx, 0.855];
 }
+// world → screen transform (mirrored when the widgets are on the left)
+function setW(g) { if (MIR) g.setTransform(-U, 0, 0, U, cv.width, 0); else g.setTransform(U, 0, 0, U, 0, 0); }
+// draw something that must not read mirrored (text, artwork) in a local frame at x
+function unmirror(g, x) { if (MIR) { g.translate(x, 0); g.scale(-1, 1); g.translate(-x, 0); } }
 
 // =====================================================================
-//  light model (baked map + live lookups for animals)
+//  light model (live lookups for the animals and the live props)
 // =====================================================================
-function fireLv() { return (E.summer > 0.5 ? 0.82 : 1) * (1 - 0.35 * calm.lv); }
+// a warm summer afternoon has only embers in the grate; summer nights in the mountains get a small fire
+function fireLv() { return lerp(1, lerp(0.62, 0.06, smooth(E.day * 1.3)), E.summer) * (1 - 0.3 * calm.lv); }
 function lights() {
-  const f = fireLv(), d = E.day, n = 1 - d;
+  const f = fireLv() * (1 + 0.12 * fire.flick + 0.15 * fire.boost), d = E.day, n = 1 - d, F = L.fireLight;
   return [
-    { x: L.fire.cx, y: 720, rx: 760, ry: 560, c: [1.0, 0.6, 0.3], k: 1.0 * f * (0.55 + 0.45 * n) },
-    { x: L.fire.cx, y: 860, rx: 380, ry: 140, c: [1.0, 0.55, 0.28], k: 0.7 * f },
-    { x: L.lamp.x, y: L.lamp.y + 120, rx: 210, ry: 190, c: [1.0, 0.82, 0.6], k: 0.55 * (0.4 + 0.6 * n) },
-    { x: L.win.cx, y: 640, rx: 640, ry: 520, c: E.summer > 0.5 ? [1.0, 0.86, 0.7] : [0.82, 0.9, 1.0], k: 0.95 * d },
-    { x: L.win.cx, y: 900, rx: 420, ry: 130, c: [0.5, 0.6, 0.85], k: 0.35 * n * (E.moon + 0.4 * (1 - E.summer)) },
-    { x: W / 2, y: 120, rx: W * 0.7, ry: 160, c: [1.0, 0.78, 0.5], k: 0.32 * (0.35 + 0.65 * n) },
+    { x: F.x, y: F.y + 60, rx: 720, ry: 520, c: [1.0, 0.6, 0.3], k: 1.05 * f * (0.45 + 0.55 * n) },
+    { x: F.x, y: L.rug.y, rx: 420, ry: 140, c: [1.0, 0.56, 0.28], k: 0.6 * f * (0.5 + 0.5 * n) },
+    { x: L.win.cx, y: L.win.y1 + 60, rx: 700, ry: 520, c: E.summer > 0.5 ? [1.0, 0.88, 0.72] : [0.84, 0.9, 1.0], k: 0.85 * d },
+    { x: L.win.cx, y: 880, rx: 380, ry: 140, c: [0.55, 0.62, 0.85], k: 0.25 * n * (E.moon + 0.3 * (1 - E.summer)) },
+    { x: L.fire.fx, y: 300, rx: 360, ry: 220, c: [1.0, 0.8, 0.55], k: 0.16 * n },
   ];
 }
-function ambient() {
-  const nightA = [0.2, 0.16, 0.17], dayA = [0.72, 0.7, 0.68];
-  return mix3(nightA, dayA, E.day * (1 - 0.3 * E.cloud));
-}
+function ambient() { return mix3([0.17, 0.14, 0.15], [0.72, 0.7, 0.68], E.day * (1 - 0.25 * E.cloud)); }
 let LIGHTS = [];
 function lightAt(x, y) {
   const a = E.amb; let r = a[0], g = a[1], b = a[2];
@@ -333,532 +309,182 @@ function lightAt(x, y) {
   }
   return [Math.min(r, 1.15), Math.min(g, 1.1), Math.min(b, 1.05)];
 }
-function paintLightMap(g, sc) {
-  g.setTransform(sc, 0, 0, sc, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-  g.fillStyle = rgba(E.amb.map((v) => v * 255)); g.fillRect(0, 0, W, H);
-  g.globalCompositeOperation = 'lighter';
-  for (const l of LIGHTS) if (l.k > 0.002) ellGrad(g, l.x, l.y, l.rx, l.ry, l.c.map((v) => v * 255), l.k, 10);
-  g.globalCompositeOperation = 'source-over';
+// the painted plate already holds the room's light: sample it (blurred, once per bake) so a pet on
+// the dark floor is dark, one by the fire is bright and orange, one in the window light is cool
+const LS = { w: 96, h: 60, d: null };
+function bakeLightSampler() {
+  if (!ART['room-night']) { LS.d = null; return; }
+  const c = newCanvas(LS.w, LS.h), g = c.getContext('2d', { willReadFrequently: true });
+  g.filter = 'blur(1.2px)'; g.drawImage(roomCv, 0, 0, LS.w, LS.h); g.filter = 'none';
+  try { LS.d = g.getImageData(0, 0, LS.w, LS.h).data; } catch (e) { LS.d = null; }
 }
+function plateLight(x, y) {
+  if (!LS.d) return null;
+  const fx = clamp(x / W * LS.w - 0.5, 0, LS.w - 1.001), fy = clamp(y / H * LS.h - 0.5, 0, LS.h - 1.001);
+  const ix = fx | 0, iy = fy | 0, ux = fx - ix, uy = fy - iy, out = [0, 0, 0];
+  for (let k = 0; k < 3; k++) {
+    const a = LS.d[(iy * LS.w + ix) * 4 + k], b = LS.d[(iy * LS.w + ix + 1) * 4 + k], c = LS.d[((iy + 1) * LS.w + ix) * 4 + k], d = LS.d[((iy + 1) * LS.w + ix + 1) * 4 + k];
+    out[k] = lerp(lerp(a, b, ux), lerp(c, d, ux), uy) / 255;
+  }
+  // colour of the light = the surface colour normalised; its strength = how bright the surface is
+  const mx = Math.max(out[0], out[1], out[2], 0.02), L0 = (out[0] * 0.3 + out[1] * 0.55 + out[2] * 0.15);
+  const k = clamp(L0 / 0.32, 0.2, 1.08), hue = out.map((v) => lerp(1, v / mx, 0.55));
+  return hue.map((v) => v * k);
+}
+function petLight(x, y) {
+  const p = plateLight(x, y), m = lightAt(x, y);
+  return p ? p.map((v, i) => clamp(v * (1 + 0.1 * fire.flick * clamp(fireAt(x, y), 0, 1)) * 0.55 + m[i] * 0.45, 0, 1.1)) : m;
+}
+function fireAt(x, y) { const l = LIGHTS[0]; if (!l) return 0; const dx = (x - l.x) / l.rx, dy = (y - l.y) / l.ry; return l.k * Math.exp(-2.6 * (dx * dx + dy * dy)); }
 
 // =====================================================================
-//  baked layers: outside view, room, armchair
+//  baked layers: the room (plates blended, panes cut, side panels), the
+//  fire's light on it (for the flicker), the view out of the window
 // =====================================================================
 let roomCv = newCanvas(1, 1), prevRoomCv = null, spareRoom = newCanvas(1, 1);
 let outCv = newCanvas(1, 1), prevOutCv = null, spareOut = newCanvas(1, 1);
-let chairCv = newCanvas(1, 1), prevChairCv = null, spareChair = newCanvas(1, 1);
-let albCv = newCanvas(1, 1), maskCv = newCanvas(1, 1), lmCv = newCanvas(1, 1);
+let boostCv = newCanvas(1, 1);
 let bakeMs = 0;
+const OUT_M = 16;   // parallax margin around the window view (world units)
 function bake(cross) {
   const tb = Date.now();
   E.amb = ambient(); LIGHTS = lights();
   if (cross) {
     prevRoomCv = roomCv; [roomCv, spareRoom] = [spareRoom, roomCv];
     prevOutCv = outCv; [outCv, spareOut] = [spareOut, outCv];
-    prevChairCv = chairCv; [chairCv, spareChair] = [spareChair, chairCv];
     fade = 0;
-  } else { prevRoomCv = prevOutCv = prevChairCv = null; fade = 1; }
-  const w = cv.width, h = cv.height, sc = 1 / 3;
-  lmCv.width = Math.ceil(w * sc); lmCv.height = Math.ceil(h * sc);
-  paintLightMap(lmCv.getContext('2d'), U * sc);
-  bakeOutside();
+  } else { prevRoomCv = prevOutCv = null; fade = 1; }
   bakeRoom();
-  bakeChair();
-  if (!fairyStrips.length || fairyStrips.U !== U) { bakeFairy(); fairyStrips.U = U; }
-  lmCv.width = lmCv.height = 1; albCv.width = albCv.height = 1; maskCv.width = maskCv.height = 1;
+  bakeLightSampler();
+  bakeBoost();
+  bakeOutside();
+  bakedPlate = !!ART['room-night'] && !!(ART['outside-winter-night'] || ART['outside-winter-day']);
   lastBake = nowS(); bakedSnap = envSnap(); bakeMs = Date.now() - tb;
 }
-// layer ← layer × lightmap, keeping the layer's own alpha
-function litLayer(layer, ox = 0, oy = 0) {
-  maskCv.width = layer.width; maskCv.height = layer.height;
-  const m = maskCv.getContext('2d'); m.drawImage(layer, 0, 0);
-  const g = layer.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0);
-  g.globalCompositeOperation = 'multiply'; g.drawImage(lmCv, -ox, -oy, cv.width, cv.height);
-  g.globalCompositeOperation = 'destination-in'; g.drawImage(maskCv, 0, 0);
-  g.globalCompositeOperation = 'source-over';
-}
-
-// ---- outside (window) -------------------------------------------------------
-function pine(g, x, y, h, col, snowA, r) {
-  const w = h * 0.36;
-  g.fillStyle = col;
-  g.beginPath(); g.moveTo(x, y - h);
-  const tiers = 4;
-  for (let i = 1; i <= tiers; i++) { const ty = y - h + (h * i) / tiers, tw = w * (0.35 + 0.65 * i / tiers); g.lineTo(x + tw, ty); g.lineTo(x + tw * 0.45, ty - h * 0.04); }
-  for (let i = tiers; i >= 1; i--) { const ty = y - h + (h * i) / tiers, tw = w * (0.35 + 0.65 * i / tiers); g.lineTo(x - tw * 0.45, ty - h * 0.04); g.lineTo(x - tw, ty); }
-  g.closePath(); g.fill();
-  g.fillRect(x - w * 0.06, y - h * 0.02, w * 0.12, h * 0.06);
-  if (snowA > 0.02) {
-    g.fillStyle = `rgba(240,245,252,${snowA})`;
-    for (let i = 1; i <= tiers; i++) {
-      const ty = y - h + (h * i) / tiers, tw = w * (0.35 + 0.65 * i / tiers);
-      g.beginPath(); g.moveTo(x - tw * 0.9, ty - h * 0.01); g.quadraticCurveTo(x, ty - h * 0.13 - r() * h * 0.03, x + tw * 0.9, ty - h * 0.01); g.quadraticCurveTo(x, ty - h * 0.06, x - tw * 0.9, ty - h * 0.01); g.fill();
-    }
-    g.beginPath(); g.moveTo(x, y - h - 1); g.lineTo(x + w * 0.16, y - h * 0.82); g.lineTo(x - w * 0.16, y - h * 0.82); g.fill();
-  }
-}
-function bakeOutside() {
-  const R = L.win, ow = R.x1 - R.x0, oh = R.y1 - R.y0;
-  outCv.width = Math.round(ow * U); outCv.height = Math.round(oh * U);
-  const g = outCv.getContext('2d'); g.setTransform(U, 0, 0, U, 0, 0);
-  const sum = E.summer, d = E.day, n = 1 - d, snowy = 1 - sum;
-  // sky
-  const gr = g.createLinearGradient(0, 0, 0, oh * 0.62);
-  gr.addColorStop(0, rgba(E.top)); gr.addColorStop(1, rgba(E.bot));
-  g.fillStyle = gr; g.fillRect(0, 0, ow, oh);
-  const r = mulberry(17);
-  const starA = n * (1 - E.cloud * 0.95) * (1 - E.fog);
-  if (starA > 0.03) for (let i = 0; i < 120; i++) { const x = r() * ow, y = r() * oh * 0.5, s = r(); g.fillStyle = `rgba(255,250,235,${starA * (0.2 + 0.7 * s * s)})`; g.fillRect(x, y, s > 0.85 ? 1.8 : 1.1, s > 0.85 ? 1.8 : 1.1); }
-  if (E.moon > 0.02) {
-    const mx = ow * 0.72, my = oh * 0.17;
-    g.globalAlpha = E.moon * 0.45; g.drawImage(GLOW_WHITE, mx - 70, my - 70, 140, 140);
-    g.globalAlpha = E.moon; g.fillStyle = '#f4eedc'; g.beginPath(); g.arc(mx, my, 15, 0, TAU); g.fill();
-    g.fillStyle = 'rgba(200,190,170,0.35)'; g.beginPath(); g.arc(mx - 4, my - 3, 3.5, 0, TAU); g.arc(mx + 5, my + 5, 2.5, 0, TAU); g.fill();
-    g.globalAlpha = 1;
-  }
-  // clouds
-  if (E.cloud > 0.15) {
-    const col = mix3(mix3([60, 58, 80], [210, 214, 222], d), [255, 175, 135], 0.0);
-    const cs = newCanvas(64, 64), cg = cs.getContext('2d');
-    cg.drawImage(BLOB, 0, 0); cg.globalCompositeOperation = 'source-in'; cg.fillStyle = rgba(col); cg.fillRect(0, 0, 64, 64);
-    const cr = mulberry(9);
-    for (let i = 0; i < 10; i++) { const x = cr() * ow, y = 20 + cr() * oh * 0.35, rx = 80 + cr() * 120, ry = 20 + cr() * 22; g.globalAlpha = E.cloud * (0.25 + 0.3 * cr()); g.drawImage(cs, x - rx, y - ry, rx * 2, ry * 2); }
-    g.globalAlpha = 1;
-  }
-  const skyLow = mix3(E.bot, E.top, 0.2);
-  const haze = (c, k) => mix3(c, skyLow, k);
-  // mountains (two ranges)
-  const mt = (base, amp, seed, col, capA) => {
-    const mr = mulberry(seed), pts = [];
-    let x = -20; while (x < ow + 40) { pts.push([x, base - amp * (0.35 + 0.65 * mr())]); x += 40 + mr() * 60; }
-    g.fillStyle = rgba(col); g.beginPath(); g.moveTo(-20, oh);
-    pts.forEach(([px, py], i) => { if (i === 0) g.lineTo(px, py); else { const [qx, qy] = pts[i - 1]; g.quadraticCurveTo((qx + px) / 2, Math.min(qy, py) - 6, px, py); } });
-    g.lineTo(ow + 40, oh); g.closePath(); g.fill();
-    if (capA > 0.02) {
-      g.fillStyle = `rgba(240,244,250,${capA})`;
-      pts.forEach(([px, py]) => { if (py < base - amp * 0.6) { g.beginPath(); g.moveTo(px - 26, py + 22); g.lineTo(px, py - 1); g.lineTo(px + 24, py + 20); g.quadraticCurveTo(px, py + 12, px - 26, py + 22); g.fill(); } });
-    }
-  };
-  const mFar = mix3([150, 165, 195], [70, 90, 120], sum * 0.5), mNear = mix3([120, 132, 160], [60, 82, 92], sum);
-  const nightK = (c) => mix3(c, mul(c, [0.28, 0.32, 0.45]), n);
-  mt(oh * 0.52, oh * 0.24, 3, haze(nightK(mFar), 0.45 + E.fog * 0.4), snowy * (0.7 - 0.4 * n) + 0.1 * snowy);
-  mt(oh * 0.62, oh * 0.2, 7, haze(nightK(mNear), 0.25 + E.fog * 0.5), snowy * 0.55);
-  // ground
-  const gTop = oh * 0.7;
-  const groundC = sum > 0.5 ? mix3([70, 110, 60], [24, 40, 30], n) : mix3([236, 240, 246], [70, 82, 110], n * 0.85);
-  const gg = g.createLinearGradient(0, gTop, 0, oh);
-  gg.addColorStop(0, rgba(haze(groundC, 0.15 + E.fog * 0.4))); gg.addColorStop(1, rgba(mul(groundC, [0.92, 0.94, 0.98])));
-  g.fillStyle = gg; g.fillRect(0, gTop - 4, ow, oh - gTop + 4);
-  // forests (far → near)
-  const tr = mulberry(29);
-  const rows = [[oh * 0.66, 34, 22, 0.55], [oh * 0.74, 62, 30, 0.3], [oh * 0.9, 120, 54, 0.08]];
-  for (const [y, h, step, hz] of rows) {
-    const baseC = sum > 0.5 ? [34, 66, 44] : [34, 58, 56];
-    const col = haze(nightK(baseC), hz + E.fog * (0.55 - hz * 0.5));
-    for (let x = -10 + tr() * step; x < ow + 20; x += step * (0.6 + tr() * 0.7)) pine(g, x, y + tr() * 8, h * (0.75 + tr() * 0.5), rgba(col), snowy * (0.85 - 0.45 * n) * (1 - hz * 0.5), tr);
-  }
-  // a little neighbour's cabin light far off (warm, night only)
-  if (n > 0.3) { const lx = ow * 0.2, ly = oh * 0.69; g.fillStyle = `rgba(255,200,120,${0.85 * n})`; g.fillRect(lx, ly, 3, 3); g.globalAlpha = 0.5 * n; g.drawImage(GLOW_WARM, lx - 14, ly - 14, 30, 30); g.globalAlpha = 1; }
-  // fog
-  if (E.fog > 0.05) { const fc = mix3([150, 155, 175], [225, 228, 235], d); g.fillStyle = rgba(fc, 0.42 * E.fog); g.fillRect(0, 0, ow, oh); for (let i = 0; i < 4; i++) { g.globalAlpha = 0.25 * E.fog; g.drawImage(BLOB, -80 + i * ow * 0.32, oh * (0.5 + i * 0.08), ow * 0.6, 90); } g.globalAlpha = 1; }
-  // blizzard / storm whiteout
-  if (E.storm > 0.05 && !(sum > 0.5)) { g.fillStyle = rgba(mix3([120, 128, 150], [215, 220, 230], d), 0.35 * E.storm); g.fillRect(0, 0, ow, oh); }
-  // optional painted view
-  const pv = ART[sum > 0.5 ? 'outside-summer' : 'outside-winter'];
-  if (pv) { g.globalAlpha = 1; const s = Math.max(ow, oh); g.drawImage(pv, (ow - s) / 2, (oh - s) / 2, s, s); g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(mix3([90, 100, 150], [255, 255, 255], d)); g.fillRect(0, 0, ow, oh); g.globalCompositeOperation = 'source-over'; }
-  // frost creeping in from the pane corners (winter)
-  if (snowy > 0.3) {
-    const fa = snowy * (0.35 + 0.25 * n);
-    const panes = winPanes();
-    for (const p of panes) {
-      const px = p.x0 - R.x0, py = p.y0 - R.y0, pw = p.x1 - p.x0, ph = p.y1 - p.y0;
-      for (const [cx, cy] of [[px, py + ph], [px + pw, py + ph]]) {
-        const fg = g.createRadialGradient(cx, cy, 0, cx, cy, Math.min(pw, ph) * 0.55);
-        fg.addColorStop(0, `rgba(235,242,252,${fa})`); fg.addColorStop(0.5, `rgba(225,235,250,${fa * 0.35})`); fg.addColorStop(1, 'rgba(225,235,250,0)');
-        g.fillStyle = fg; g.fillRect(px, py, pw, ph);
-      }
-    }
-  }
-}
-function winPanes() {
-  const R = L.win, mw = 10, cols = 2, rowsN = 3, out = [];
-  const pw = (R.x1 - R.x0 - mw * (cols - 1)) / cols, ph = (R.y1 - R.y0 - mw * (rowsN - 1)) / rowsN;
-  for (let i = 0; i < cols; i++) for (let j = 0; j < rowsN; j++) { const x0 = R.x0 + i * (pw + mw), y0 = R.y0 + j * (ph + mw); out.push({ x0, y0, x1: x0 + pw, y1: y0 + ph }); }
-  return out;
-}
-
-// ---- the room (albedo) -------------------------------------------------------
-const WOOD = { log: [148, 96, 58], logD: [96, 58, 34], chink: [205, 180, 140], floor: [132, 84, 50], stone: [150, 140, 128] };
-function shade(c, k) { return rgba([c[0] * k, c[1] * k, c[2] * k]); }
-function paintWalls(g) {
-  const r = mulberry(41);
-  // log wall
-  const logH = 44;
-  for (let y = 84, i = 0; y < FY; y += logH, i++) {
-    const tint = 0.9 + r() * 0.18;
-    const lg = g.createLinearGradient(0, y, 0, y + logH);
-    lg.addColorStop(0, shade(WOOD.log, 0.82 * tint)); lg.addColorStop(0.3, shade(WOOD.log, 1.04 * tint)); lg.addColorStop(0.75, shade(WOOD.log, 0.9 * tint)); lg.addColorStop(1, shade(WOOD.logD, 0.9 * tint));
-    g.fillStyle = lg; g.fillRect(0, y, W, logH);
-    g.fillStyle = rgba(WOOD.chink, 0.5); g.fillRect(0, y + logH - 3, W, 3);
-    g.strokeStyle = 'rgba(60,34,18,0.22)'; g.lineWidth = 1;
-    for (let k = 0; k < 6; k++) { const x = r() * W, l = 60 + r() * 200; g.beginPath(); g.moveTo(x, y + 10 + r() * 24); g.bezierCurveTo(x + l * 0.3, y + 8 + r() * 28, x + l * 0.7, y + 8 + r() * 28, x + l, y + 10 + r() * 24); g.stroke(); }
-    for (let k = 0; k < 2; k++) { const x = r() * W, yy = y + 14 + r() * 16; g.fillStyle = 'rgba(70,40,22,0.45)'; g.beginPath(); g.ellipse(x, yy, 5 + r() * 4, 3 + r() * 2, 0, 0, TAU); g.fill(); g.strokeStyle = 'rgba(70,40,22,0.3)'; g.beginPath(); g.ellipse(x, yy, 10, 6, 0, 0, TAU); g.stroke(); }
-    // log ends (vertical joints) here and there
-    if (i % 3 === 1) { const x = (r() * W) | 0; g.fillStyle = 'rgba(50,28,14,0.35)'; g.fillRect(x, y + 2, 2, logH - 4); }
-  }
-  // ceiling + beam
-  g.fillStyle = shade(WOOD.logD, 0.7); g.fillRect(0, 0, W, 30);
-  const bg = g.createLinearGradient(0, 28, 0, 88);
-  bg.addColorStop(0, shade(WOOD.logD, 0.95)); bg.addColorStop(0.5, shade(WOOD.log, 0.92)); bg.addColorStop(1, shade(WOOD.logD, 0.7));
-  g.fillStyle = bg; g.fillRect(0, 28, W, 60);
-  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 86, W, 6);
-  for (let x = 40; x < W; x += 220) { g.fillStyle = 'rgba(40,24,14,0.6)'; g.beginPath(); g.arc(x, 98, 2.5, 0, TAU); g.fill(); }
-  // floor
-  const fg = g.createLinearGradient(0, FY, 0, H);
-  fg.addColorStop(0, shade(WOOD.floor, 0.78)); fg.addColorStop(1, shade(WOOD.floor, 1.02));
-  g.fillStyle = fg; g.fillRect(0, FY, W, H - FY);
-  g.strokeStyle = 'rgba(40,20,10,0.35)'; g.lineWidth = 1.4;
-  const vx = W / 2, vy = -900;
-  for (let x = -W; x < W * 2; x += 120) { const t = (FY - vy) / (H - vy); g.beginPath(); g.moveTo(vx + (x - vx) * t, FY); g.lineTo(x, H); g.stroke(); }
-  g.strokeStyle = 'rgba(40,20,10,0.18)';
-  for (let y = FY + 26, i = 0; y < H; y += 28 + i * 6, i++) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
-  // baseboard
-  g.fillStyle = shade(WOOD.logD, 0.8); g.fillRect(0, FY - 14, W, 14);
-  g.fillStyle = 'rgba(255,220,180,0.12)'; g.fillRect(0, FY - 14, W, 2);
-}
-function paintDoor(g) {
-  const D = L.door, w = D.x1 - D.x0;
-  g.fillStyle = shade(WOOD.logD, 0.7); g.fillRect(D.x0 - 12, D.y0 - 14, w + 24, D.y1 - D.y0 + 14);
-  const r = mulberry(5);
-  for (let i = 0; i < 5; i++) {
-    const x = D.x0 + (i * w) / 5, pw = w / 5;
-    g.fillStyle = shade([128, 80, 46], 0.86 + r() * 0.2); g.fillRect(x, D.y0, pw, D.y1 - D.y0);
-    g.fillStyle = 'rgba(40,20,10,0.35)'; g.fillRect(x, D.y0, 1.5, D.y1 - D.y0);
-  }
-  for (const yy of [D.y0 + 60, D.y1 - 90]) { g.fillStyle = shade([110, 66, 38], 1); g.fillRect(D.x0, yy, w, 22); g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(D.x0, yy + 20, w, 2); }
-  g.fillStyle = '#2a2420'; for (const yy of [D.y0 + 64, D.y1 - 86]) { rr(g, D.x0 - 4, yy, 46, 12, 4); g.fill(); }
-  g.fillStyle = '#c9a060'; g.beginPath(); g.arc(D.x1 - 22, 640, 7, 0, TAU); g.fill();
-  g.fillStyle = 'rgba(255,240,200,0.5)'; g.beginPath(); g.arc(D.x1 - 24, 638, 2.5, 0, TAU); g.fill();
-  // wreath
-  const wx = (D.x0 + D.x1) / 2, wy = D.y0 + 128;
-  for (let i = 0; i < 28; i++) { const a = (i / 28) * TAU; g.fillStyle = i % 2 ? '#2e5a3a' : '#3c6c44'; g.beginPath(); g.ellipse(wx + Math.cos(a) * 34, wy + Math.sin(a) * 34, 12, 6, a + 1.2, 0, TAU); g.fill(); }
-  for (let i = 0; i < 9; i++) { const a = (i / 9) * TAU + 0.3; g.fillStyle = '#b8322a'; g.beginPath(); g.arc(wx + Math.cos(a) * 36, wy + Math.sin(a) * 36, 3.2, 0, TAU); g.fill(); }
-  g.fillStyle = '#a82a24'; g.beginPath(); g.moveTo(wx - 12, wy + 34); g.lineTo(wx, wy + 40); g.lineTo(wx + 12, wy + 34); g.lineTo(wx + 8, wy + 58); g.lineTo(wx, wy + 44); g.lineTo(wx - 8, wy + 58); g.fill();
-  // mat + boots
-  g.fillStyle = '#6a4a3a'; rr(g, D.x0 - 6, FY + 4, w + 12, 14, 4); g.fill();
-  g.fillStyle = 'rgba(255,220,180,0.12)'; for (let x = D.x0; x < D.x1; x += 8) g.fillRect(x, FY + 6, 3, 10);
-  g.fillStyle = '#3a2a22'; rr(g, D.x1 + 14, FY - 46, 22, 50, 5); g.fill(); rr(g, D.x1 + 14, FY - 6, 34, 12, 5); g.fill();
-  rr(g, D.x1 + 40, FY - 42, 22, 46, 5); g.fill(); rr(g, D.x1 + 40, FY - 4, 34, 12, 5); g.fill();
-  // leash on a hook
-  g.strokeStyle = '#b8322a'; g.lineWidth = 3; g.beginPath(); g.moveTo(D.x0 - 18, D.y0 + 40); g.quadraticCurveTo(D.x0 - 26, D.y0 + 120, D.x0 - 14, D.y0 + 150); g.stroke();
-  g.fillStyle = '#2a2420'; g.beginPath(); g.arc(D.x0 - 18, D.y0 + 38, 4, 0, TAU); g.fill();
-}
-const BOOK_COLS = ['#8a3a2e', '#3e5a6e', '#c49a52', '#5a6e3e', '#7a5a8a', '#d8c8a8', '#2e3e4a', '#a85a3a', '#4a7a6a', '#b0763e'];
-function paintShelf(g) {
-  const S = L.shelf, r = mulberry(77);
-  g.fillStyle = shade([96, 60, 36], 0.75); g.fillRect(S.x0, S.y0, S.x1 - S.x0, S.y1 - S.y0);
-  g.fillStyle = shade([70, 42, 24], 1); g.fillRect(S.x0 + 12, S.y0 + 12, S.x1 - S.x0 - 24, S.y1 - S.y0 - 12);
-  const boards = [S.y0 + 12, ...S.boards, S.y1 - 10];
-  for (let b = 1; b < boards.length; b++) {
-    const by = boards[b], top = boards[b - 1] + 14;
-    // books
-    let x = S.x0 + 16;
-    const gap = b === 3 ? [S.x1 - 108, S.x1 - 14] : null;   // the cat's nook on the 3rd board
-    while (x < S.x1 - 18) {
-      if (gap && x >= gap[0] && x < gap[1]) { x = gap[1]; continue; }
-      const bw = 10 + r() * 14, bh = (by - top) * (0.62 + r() * 0.34);
-      if (r() < 0.12 && !gap) { // a little stack lying flat
-        for (let k = 0; k < 3; k++) { g.fillStyle = BOOK_COLS[(r() * BOOK_COLS.length) | 0]; g.fillRect(x, by - 10 - k * 10, 44, 9); }
-        x += 50; continue;
-      }
-      const lean = r() < 0.08 ? 0.12 : 0;
-      g.save(); g.translate(x, by); g.rotate(lean);
-      g.fillStyle = BOOK_COLS[(r() * BOOK_COLS.length) | 0]; g.fillRect(0, -bh, bw, bh);
-      g.fillStyle = 'rgba(255,240,210,0.35)'; g.fillRect(2, -bh + 8, bw - 4, 2); g.fillRect(2, -bh * 0.3, bw - 4, 2);
-      g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(bw - 2, -bh, 2, bh);
-      g.restore();
-      x += bw + 1 + (lean ? 6 : 0);
-      if (gap && x > gap[0] - 4 && x < gap[0]) x = gap[0];
-    }
-    if (b === 1) { // plant trailing over the edge
-      const px = S.x1 - 40; g.fillStyle = '#8a5a3a'; g.fillRect(px - 14, by - 26, 28, 26);
-      g.strokeStyle = '#3e6a40'; g.lineWidth = 2.4; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(px - 8 + k * 4, by - 24); g.quadraticCurveTo(px - 20 + k * 10, by + 10, px - 22 + k * 11, by + 40 + k * 8); g.stroke(); }
-      g.fillStyle = '#4c7c48'; for (let k = 0; k < 14; k++) { g.beginPath(); g.ellipse(px - 22 + r() * 44, by - 30 + r() * 70, 5, 3, r() * 3, 0, TAU); g.fill(); }
-    }
-    if (b === 2) { // a framed photo + lantern
-      g.fillStyle = '#2a1e16'; g.fillRect(S.x1 - 70, by - 60, 48, 60); g.fillStyle = '#d8c8a8'; g.fillRect(S.x1 - 64, by - 54, 36, 48);
-      g.fillStyle = '#7a8aa0'; g.beginPath(); g.moveTo(S.x1 - 64, by - 18); g.lineTo(S.x1 - 50, by - 38); g.lineTo(S.x1 - 40, by - 26); g.lineTo(S.x1 - 28, by - 40); g.lineTo(S.x1 - 28, by - 6); g.lineTo(S.x1 - 64, by - 6); g.fill();
-    }
-    // board
-    g.fillStyle = shade([120, 76, 44], 1); g.fillRect(S.x0 + 6, by, S.x1 - S.x0 - 12, 12);
-    g.fillStyle = 'rgba(255,225,190,0.16)'; g.fillRect(S.x0 + 6, by, S.x1 - S.x0 - 12, 2);
-  }
-  // side posts + crown
-  g.fillStyle = shade([110, 70, 40], 1); g.fillRect(S.x0, S.y0, 12, S.y1 - S.y0); g.fillRect(S.x1 - 12, S.y0, 12, S.y1 - S.y0);
-  g.fillRect(S.x0 - 6, S.y0 - 10, S.x1 - S.x0 + 12, 14);
-}
-function paintFireplace(g) {
-  const F = L.fire, B = F.box, r = mulberry(91);
-  // stone chimney breast
-  g.fillStyle = shade(WOOD.stone, 0.75); g.fillRect(F.x0, 86, F.x1 - F.x0, FY - 86);
-  for (let y = 90; y < FY; y += 34) {
-    let x = F.x0 + (((y / 34) | 0) % 2 ? -20 : 0);
-    while (x < F.x1) {
-      const sw = 40 + r() * 46, k = 0.82 + r() * 0.3, x0 = Math.max(F.x0 + 2, x + 2), x1 = Math.min(F.x1 - 2, x + sw - 2);
-      if (x1 - x0 > 6) {
-        const tone = mix3(WOOD.stone, [168, 150, 128], r());
-        g.fillStyle = shade(tone, k); rr(g, x0, y + 2, x1 - x0, 30, 9); g.fill();
-        g.fillStyle = 'rgba(255,245,230,0.12)'; rr(g, x0 + 3, y + 4, x1 - x0 - 6, 6, 3); g.fill();
-      }
-      x += sw;
-    }
-  }
-  // firebox opening (arched)
-  const archR = (B.x1 - B.x0) / 2;
-  g.fillStyle = shade([150, 136, 120], 0.95);
-  g.beginPath(); g.moveTo(B.x0 - 16, B.y1); g.lineTo(B.x0 - 16, B.y0 + archR * 0.4); g.ellipse((B.x0 + B.x1) / 2, B.y0 + archR * 0.4, archR + 16, archR * 0.62 + 16, 0, Math.PI, 0); g.lineTo(B.x1 + 16, B.y1); g.fill();
-  g.fillStyle = '#1a100c';
-  g.beginPath(); g.moveTo(B.x0, B.y1); g.lineTo(B.x0, B.y0 + archR * 0.4); g.ellipse((B.x0 + B.x1) / 2, B.y0 + archR * 0.4, archR, archR * 0.62, 0, Math.PI, 0); g.lineTo(B.x1, B.y1); g.fill();
-  // inner back wall brick hints + soot
-  g.strokeStyle = 'rgba(80,40,24,0.4)'; g.lineWidth = 1;
-  for (let y = B.y0 + 30; y < B.y1; y += 18) { g.beginPath(); g.moveTo(B.x0 + 20, y); g.lineTo(B.x1 - 20, y); g.stroke(); }
-  // grate + logs
-  g.fillStyle = '#141010'; g.fillRect(B.x0 + 20, B.y1 - 20, B.x1 - B.x0 - 40, 6);
-  for (let x = B.x0 + 28; x < B.x1 - 24; x += 18) g.fillRect(x, B.y1 - 30, 4, 28);
-  const logs = [[B.x0 + 30, B.y1 - 34, B.x1 - 40, B.y1 - 24, 14], [B.x0 + 50, B.y1 - 26, B.x1 - 30, B.y1 - 40, 13]];
-  for (const [x0, y0, x1, y1, th] of logs) {
-    g.strokeStyle = '#4a2c1a'; g.lineWidth = th * 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
-    g.strokeStyle = 'rgba(255,200,150,0.12)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0, y0 - th * 0.6); g.lineTo(x1, y1 - th * 0.6); g.stroke();
-    g.fillStyle = '#8a6a48'; g.beginPath(); g.ellipse(x1 + 2, y1, 6, th, 0, 0, TAU); g.fill();
-  }
-  // hearth slab
-  g.fillStyle = shade([130, 120, 110], 1); rr(g, F.x0 - 12, B.y1, F.x1 - F.x0 + 24, 34, 4); g.fill();
-  g.fillStyle = 'rgba(255,240,220,0.12)'; g.fillRect(F.x0 - 12, B.y1, F.x1 - F.x0 + 24, 3);
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(F.x0 - 12, B.y1 + 30, F.x1 - F.x0 + 24, 6);
-  // tools + log basket
-  g.strokeStyle = '#2a2420'; g.lineWidth = 3; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(F.x1 - 22 + k * 5, B.y1 - 4); g.lineTo(F.x1 - 28 + k * 6, B.y0 + 70); g.stroke(); }
-  g.fillStyle = '#2a2420'; g.beginPath(); g.arc(F.x1 - 22, B.y0 + 66, 5, 0, TAU); g.fill();
-  g.fillStyle = '#6a4a2e'; rr(g, F.x0 + 6, B.y1 - 48, 54, 46, 8); g.fill();
-  g.strokeStyle = 'rgba(40,20,10,0.4)'; g.lineWidth = 1.5; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(F.x0 + 8, B.y1 - 42 + k * 9); g.lineTo(F.x0 + 58, B.y1 - 42 + k * 9); g.stroke(); }
-  for (let k = 0; k < 3; k++) { g.fillStyle = '#7a5434'; g.beginPath(); g.ellipse(F.x0 + 18 + k * 14, B.y1 - 52, 7, 7, 0, 0, TAU); g.fill(); g.fillStyle = '#b08a60'; g.beginPath(); g.arc(F.x0 + 18 + k * 14, B.y1 - 52, 4, 0, TAU); g.fill(); }
-  // mantel beam
-  g.fillStyle = shade([110, 66, 36], 1); rr(g, F.x0 - 22, F.mantelY, F.x1 - F.x0 + 44, 28, 4); g.fill();
-  g.fillStyle = 'rgba(255,220,180,0.2)'; g.fillRect(F.x0 - 20, F.mantelY, F.x1 - F.x0 + 40, 3);
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(F.x0 - 18, F.mantelY + 28, F.x1 - F.x0 + 36, 6);
-  // candles on the mantel
-  for (const [x, h] of [[F.x0 - 2, 44], [F.x0 + 16, 30], [F.x1 + 2, 38]]) {
-    g.fillStyle = '#3a2a1e'; g.fillRect(x - 9, F.mantelY - 6, 18, 6);
-    g.fillStyle = '#efe4cc'; g.fillRect(x - 6, F.mantelY - 6 - h, 12, h);
-    g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(x + 2, F.mantelY - 6 - h, 4, h);
-  }
-  // pine garland along the mantel front
-  for (let x = F.x0 - 20; x < F.x1 + 20; x += 9) { const y = F.mantelY + 26 + Math.sin(((x - F.x0) / (F.x1 - F.x0)) * Math.PI * 2) * 4; g.fillStyle = (x / 9) % 2 < 1 ? '#2e5a3a' : '#3e6c48'; g.beginPath(); g.ellipse(x, y, 9, 5, 0.6, 0, TAU); g.fill(); }
-  // picture light (brass bar)
-  const lp = L.lamp;
-  g.fillStyle = '#7a5a2a'; g.fillRect(lp.x - 2, lp.y - 18, 4, 18);
-  g.fillStyle = '#c99a4a'; rr(g, lp.x - 70, lp.y - 6, 140, 12, 6); g.fill();
-  g.fillStyle = 'rgba(255,240,200,0.4)'; g.fillRect(lp.x - 64, lp.y - 5, 128, 2);
-}
-function paintFrame(g) {
-  const Fr = L.frame;
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(Fr.x0 + 6, Fr.y0 + 8, Fr.x1 - Fr.x0, Fr.y1 - Fr.y0);
-  const fg = g.createLinearGradient(Fr.x0, Fr.y0, Fr.x1, Fr.y1);
-  fg.addColorStop(0, '#5a3a20'); fg.addColorStop(0.5, '#7a5230'); fg.addColorStop(1, '#4a2e18');
-  g.fillStyle = fg; g.fillRect(Fr.x0, Fr.y0, Fr.x1 - Fr.x0, Fr.y1 - Fr.y0);
-  g.strokeStyle = 'rgba(255,220,170,0.25)'; g.lineWidth = 2; g.strokeRect(Fr.x0 + 4, Fr.y0 + 4, Fr.x1 - Fr.x0 - 8, Fr.y1 - Fr.y0 - 8);
-  g.fillStyle = '#efe6d4'; g.fillRect(Fr.ax - 8, Fr.ay - 8, Fr.as + 16, Fr.as + 16);   // mat
-  g.fillStyle = '#20160f'; g.fillRect(Fr.ax, Fr.ay, Fr.as, Fr.as);
-}
-function paintSideboard(g) {
-  const B = L.board, w = B.x1 - B.x0;
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse((B.x0 + B.x1) / 2, FY + 2, w * 0.56, 10, 0, 0, TAU); g.fill();
-  g.fillStyle = shade([120, 74, 42], 1); g.fillRect(B.x0, B.top, w, B.y1 - B.top - 14);
-  g.fillStyle = shade([140, 90, 52], 1); rr(g, B.x0 - 8, B.top - 8, w + 16, 12, 3); g.fill();
-  g.fillStyle = 'rgba(255,225,190,0.2)'; g.fillRect(B.x0 - 6, B.top - 8, w + 12, 2);
-  // doors with a woven panel + drawer
-  const dw = (w - 24) / 2;
-  for (let i = 0; i < 2; i++) {
-    const x = B.x0 + 8 + i * (dw + 8);
-    g.fillStyle = shade([104, 64, 36], 1); g.fillRect(x, B.top + 34, dw, B.y1 - B.top - 60);
-    g.fillStyle = shade([186, 150, 100], 0.9); g.fillRect(x + 10, B.top + 44, dw - 20, B.y1 - B.top - 80);
-    g.strokeStyle = 'rgba(90,60,30,0.35)'; g.lineWidth = 1;
-    for (let k = 0; k < 9; k++) { g.beginPath(); g.moveTo(x + 10, B.top + 48 + k * 7); g.lineTo(x + dw - 10, B.top + 48 + k * 7); g.stroke(); }
-    g.fillStyle = '#c9a060'; g.beginPath(); g.arc(i ? x + 12 : x + dw - 12, B.top + 80, 3.4, 0, TAU); g.fill();
-  }
-  g.fillStyle = shade([96, 58, 32], 1); g.fillRect(B.x0 + 8, B.top + 8, w - 16, 20);
-  g.fillStyle = '#c9a060'; rr(g, (B.x0 + B.x1) / 2 - 16, B.top + 15, 32, 5, 2); g.fill();
-  // legs
-  g.fillStyle = shade([80, 48, 26], 1); g.fillRect(B.x0 + 4, B.y1 - 14, 10, 14); g.fillRect(B.x1 - 14, B.y1 - 14, 10, 14);
-  paintTurntablePlinth(g);
-}
-function paintTurntablePlinth(g) {
-  // turntable plinth (platter + arm are live)
-  const T = L.tt;
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(T.x0 + 4, T.bot - 4, T.x1 - T.x0, 6);
-  const pg = g.createLinearGradient(0, T.top, 0, T.bot);
-  pg.addColorStop(0, '#9a6a3e'); pg.addColorStop(1, '#6a4426');
-  g.fillStyle = pg; rr(g, T.x0, T.top + 4, T.x1 - T.x0, T.bot - T.top - 4, 5); g.fill();
-  g.fillStyle = 'rgba(255,230,190,0.25)'; g.fillRect(T.x0 + 3, T.top + 5, T.x1 - T.x0 - 6, 2);
-  g.fillStyle = '#e8dcc0'; g.beginPath(); g.arc(T.x1 - 14, T.bot - 12, 4.5, 0, TAU); g.fill();
-  g.fillStyle = '#2a2420'; g.beginPath(); g.arc(T.x1 - 30, T.bot - 12, 3.5, 0, TAU); g.fill();
-}
-function paintWindow(g) {
-  const R = L.win, pad = 16;
-  // deep reveal + frame
-  g.fillStyle = shade([90, 56, 32], 0.9); g.fillRect(R.x0 - pad - 8, R.y0 - pad - 10, R.x1 - R.x0 + 2 * pad + 16, R.y1 - R.y0 + 2 * pad + 10);
-  g.fillStyle = shade([160, 112, 70], 1); g.fillRect(R.x0 - pad, R.y0 - pad, R.x1 - R.x0 + 2 * pad, R.y1 - R.y0 + 2 * pad);
-  g.fillStyle = 'rgba(255,230,190,0.18)'; g.fillRect(R.x0 - pad, R.y0 - pad, R.x1 - R.x0 + 2 * pad, 3);
-  // mullions (panes are cut out after lighting)
-  const P = winPanes();
-  g.fillStyle = shade([150, 104, 64], 1);
-  g.fillRect(R.x0, R.y0, R.x1 - R.x0, R.y1 - R.y0);
-  // sill
-  g.fillStyle = shade([150, 100, 60], 1); rr(g, R.x0 - pad - 22, R.y1 + 2, R.x1 - R.x0 + 2 * pad + 44, 22, 4); g.fill();
-  g.fillStyle = 'rgba(255,230,190,0.25)'; g.fillRect(R.x0 - pad - 20, R.y1 + 2, R.x1 - R.x0 + 2 * pad + 40, 3);
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(R.x0 - pad - 18, R.y1 + 24, R.x1 - R.x0 + 2 * pad + 36, 8);
-  // little things on the sill (right end: calm)
-  g.fillStyle = '#7a5a3a'; rr(g, R.x1 - 60, R.y1 - 26, 30, 28, 5); g.fill();
-  g.fillStyle = '#4c7c48'; for (let k = 0; k < 7; k++) { g.beginPath(); g.ellipse(R.x1 - 45 + Math.cos(k) * 10, R.y1 - 34 - (k % 3) * 6, 6, 3.4, k, 0, TAU); g.fill(); }
-  // curtains (soft folds) gathered at both sides
-  for (const side of [-1, 1]) {
-    const x = side < 0 ? R.x0 - pad - 34 : R.x1 + pad - 8, cw = 42;
-    const cg = g.createLinearGradient(x, 0, x + cw, 0);
-    cg.addColorStop(0, '#7a2e26'); cg.addColorStop(0.3, '#a8443a'); cg.addColorStop(0.6, '#8a3830'); cg.addColorStop(1, '#6a2620');
-    g.fillStyle = cg;
-    g.beginPath(); g.moveTo(x - 4, R.y0 - pad - 26); g.lineTo(x + cw + 4, R.y0 - pad - 26);
-    g.quadraticCurveTo(x + cw - 2, R.y0 + 160, x + cw + (side < 0 ? 8 : -2), R.y1 + 70); g.lineTo(x + (side < 0 ? 2 : -8), R.y1 + 70); g.quadraticCurveTo(x + 4, R.y0 + 160, x - 4, R.y0 - pad - 26); g.fill();
-    g.fillStyle = 'rgba(255,220,190,0.12)'; for (let k = 0; k < 3; k++) g.fillRect(x + 8 + k * 11, R.y0 - pad - 20, 2, R.y1 - R.y0 + 80);
-    // tie-back
-    g.fillStyle = '#c9a060'; rr(g, x - 2, R.y0 + 250, cw + 6, 7, 3); g.fill();
-  }
-  // curtain rod
-  g.fillStyle = '#3a2a1e'; rr(g, R.x0 - pad - 50, R.y0 - pad - 30, R.x1 - R.x0 + 2 * pad + 100, 7, 3); g.fill();
-  for (const x of [R.x0 - pad - 50, R.x1 + pad + 50]) { g.beginPath(); g.arc(x, R.y0 - pad - 26.5, 7, 0, TAU); g.fill(); }
-  return P;
-}
-function paintRug(g) {
-  const Rg = L.rug;
-  g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(Rg.cx + 6, Rg.cy + 6, Rg.rx, Rg.ry, 0, 0, TAU); g.fill();
-  const cols = ['#8a2e26', '#c9a060', '#3e5a4a', '#a8443a', '#e2d2b0', '#7a2a22'];
-  for (let i = 0; i < cols.length; i++) { const k = 1 - i * 0.14; g.fillStyle = cols[i]; g.beginPath(); g.ellipse(Rg.cx, Rg.cy, Rg.rx * k, Rg.ry * k, 0, 0, TAU); g.fill(); }
-  g.strokeStyle = 'rgba(0,0,0,0.14)'; g.lineWidth = 1;
-  for (let i = 0; i < 18; i++) { const k = 1 - i * 0.05; g.beginPath(); g.ellipse(Rg.cx, Rg.cy, Rg.rx * k, Rg.ry * k, 0, 0, TAU); g.stroke(); }
-}
-function paintRightWall(g) {
-  // calm far right: an old pair of skis + a lantern hook (stays quiet)
-  const x = L.win.x1 + 90;
-  if (x > W - 10) return;
-  g.fillStyle = '#9a6a3e'; for (let k = 0; k < 2; k++) { g.save(); g.translate(x + k * 16, FY); g.rotate(-0.05); rr(g, -4, -470, 9, 470, 4); g.fill(); g.restore(); }
-  g.fillStyle = '#b8322a'; g.fillRect(x - 6, FY - 300, 34, 6);
+function plate(g) {
+  const n = ART['room-night'], d = ART['room-day'], sx = L.sx;
+  if (!n && !d) return false;
+  if (n) g.drawImage(n, sx, 0, 1600, 1000);
+  if (d) { g.globalAlpha = n ? clamp(E.day * 1.05, 0, 1) : 1; g.drawImage(d, sx, 0, 1600, 1000); g.globalAlpha = 1; }
+  return true;
 }
 function bakeRoom() {
-  const w = cv.width, h = cv.height;
-  albCv.width = w; albCv.height = h; roomCv.width = w; roomCv.height = h;
-  const a = albCv.getContext('2d'); a.setTransform(U, 0, 0, U, 0, 0);
-  const night = ART['room-night'], dayI = ART['room-day'];
-  paintWalls(a);
-  paintDoor(a);
-  paintShelf(a);
-  paintFireplace(a);
-  paintFrame(a);
-  paintSideboard(a);
-  const panes = paintWindow(a);
-  paintRightWall(a);
-  paintRug(a);
-  if (night || dayI) {
-    a.globalAlpha = 1; if (night) a.drawImage(night, L.sx, 0, 1600, 1000);
-    if (dayI) { a.globalAlpha = night ? E.day : 1; a.drawImage(dayI, L.sx, 0, 1600, 1000); a.globalAlpha = 1; }
-  }
-  if (night || dayI) { LW.roomGrade(a,L.sx,0,1600,1000,E.day); paintTurntablePlinth(a); }
-  // cut the panes out so the live outside shows through
-  a.globalCompositeOperation = 'destination-out'; a.fillStyle = '#000';
-  for (const p of panes) a.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0);
-  a.globalCompositeOperation = 'source-over';
-  litLayer(albCv);
-  // emissive bits that ignore the light map: firebox inner glow, candle flames (static part)
-  a.setTransform(U, 0, 0, U, 0, 0);
-  const B = L.fire.box, f = fireLv();
-  a.save(); a.beginPath(); a.rect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0); a.clip();
-  const ig = a.createRadialGradient(L.fire.cx, B.y1 - 10, 4, L.fire.cx, B.y1 - 30, 160);
-  ig.addColorStop(0, `rgba(255,150,60,${0.55 * f})`); ig.addColorStop(0.5, `rgba(200,70,20,${0.22 * f})`); ig.addColorStop(1, 'rgba(120,30,10,0)');
-  a.globalCompositeOperation = 'lighter'; a.fillStyle = ig; a.fillRect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0);
-  a.restore(); a.globalCompositeOperation = 'source-over';
-  const g = roomCv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, w, h); g.drawImage(albCv, 0, 0);
-}
-// ---- armchair + side table: its own layer so animals can pass behind it ----
-const CH_X0 = 180, CH_Y0 = 560, CH_W = 380, CH_H = 380;   // stage-space box of the layer
-function paintChair(g) {
-  const C = L.chair, x0 = C.x0, x1 = C.x1, cx = C.cx;
-  const fab = [148, 92, 62], fabD = [110, 64, 42];
-  g.fillStyle = 'rgba(0,0,0,0.38)'; g.beginPath(); g.ellipse(cx + 10, C.footY + 2, (x1 - x0) * 0.56, 12, 0, 0, TAU); g.fill();
-  // legs
-  g.fillStyle = '#3a2416'; for (const x of [x0 + 18, x1 - 26]) { g.beginPath(); g.moveTo(x, C.footY - 22); g.lineTo(x + 8, C.footY - 22); g.lineTo(x + 6, C.footY); g.lineTo(x + 2, C.footY); g.fill(); }
-  // back + wings
-  const bg = g.createLinearGradient(0, C.top, 0, C.seatY);
-  bg.addColorStop(0, shade(fab, 1.05)); bg.addColorStop(1, shade(fabD, 1));
-  g.fillStyle = bg;
-  g.beginPath(); g.moveTo(x0 + 30, C.seatY); g.lineTo(x0 + 22, C.top + 40); g.quadraticCurveTo(x0 + 26, C.top, cx, C.top - 6); g.quadraticCurveTo(x1 - 26, C.top, x1 - 22, C.top + 40); g.lineTo(x1 - 30, C.seatY); g.closePath(); g.fill();
-  // buttons (tufting)
-  g.fillStyle = 'rgba(60,30,20,0.5)';
-  for (let j = 0; j < 3; j++) for (let i = 0; i < 4 - (j % 2); i++) { g.beginPath(); g.arc(x0 + 70 + i * 40 + (j % 2) * 20, C.top + 40 + j * 44, 3, 0, TAU); g.fill(); }
-  g.strokeStyle = 'rgba(255,220,190,0.12)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0 + 34, C.top + 30); g.quadraticCurveTo(cx, C.top + 4, x1 - 34, C.top + 30); g.stroke();
-  // seat cushion
-  const sg = g.createLinearGradient(0, C.seatY - 8, 0, C.seatY + 40);
-  sg.addColorStop(0, shade(fab, 1.12)); sg.addColorStop(1, shade(fabD, 0.95));
-  g.fillStyle = sg; rr(g, x0 + 34, C.seatY - 10, x1 - x0 - 68, 48, 14); g.fill();
-  g.fillStyle = 'rgba(255,230,200,0.12)'; rr(g, x0 + 40, C.seatY - 8, x1 - x0 - 80, 6, 3); g.fill();
-  // skirt
-  g.fillStyle = shade(fabD, 0.9); rr(g, x0 + 20, C.seatY + 32, x1 - x0 - 40, C.footY - 22 - C.seatY - 32, 6); g.fill();
-  // rolled arms
+  const w = Math.round(W * U), h = cv.height;
+  roomCv.width = w; roomCv.height = h;
+  const g = roomCv.getContext('2d'); g.setTransform(U, 0, 0, U, 0, 0);
+  g.fillStyle = '#1a100b'; g.fillRect(0, 0, W, H);
+  if (!plate(g)) return;
+  const sx = L.sx;
+  // wide screens: the room continues (a painted wide plate: coat rack + snowshoes on the left, a bench
+  // on the right), seamed onto the stage plate with a mirrored, feathered strip and falling into shadow
   for (const side of [-1, 1]) {
-    const ax = side < 0 ? x0 + 4 : x1 - 46, aw = 42;
-    const ag = g.createLinearGradient(ax, 0, ax + aw, 0);
-    ag.addColorStop(0, shade(fab, side < 0 ? 0.85 : 1.08)); ag.addColorStop(1, shade(fabD, side < 0 ? 1.0 : 0.85));
-    g.fillStyle = ag; rr(g, ax, C.seatY - 40, aw, C.footY - 18 - (C.seatY - 40), 18); g.fill();
-    g.fillStyle = shade(fab, 1.12); g.beginPath(); g.ellipse(ax + aw / 2, C.seatY - 34, aw / 2 + 2, 14, 0, 0, TAU); g.fill();
-    g.strokeStyle = 'rgba(60,30,20,0.35)'; g.lineWidth = 1.5; g.beginPath(); g.ellipse(ax + aw / 2, C.seatY - 34, aw / 2 - 6, 8, 0, 0, TAU); g.stroke();
+    const ext = side < 0 ? sx : W - (sx + 1600);
+    if (ext <= 0.5) continue;
+    const x0 = side < 0 ? 0 : sx + 1600, x1 = side < 0 ? sx : W;
+    g.save(); g.beginPath(); g.rect(x0, 0, x1 - x0, 1000); g.clip();
+    g.fillStyle = rgba(mix3([28, 17, 10], [92, 64, 44], E.day)); g.fillRect(x0, 0, x1 - x0, 1000);
+    const wn = ART['room-night-wide'], wd = ART['room-day-wide'];
+    if (wn || wd) {
+      const ww = 1000 * (wn || wd).naturalWidth / (wn || wd).naturalHeight, wx = side < 0 ? sx - 0.165 * ww : sx + 1600 - 0.865 * ww;
+      const wide = (x, flip) => {
+        g.save(); g.translate(x, 0); if (flip) g.scale(-1, 1);
+        if (wn) g.drawImage(wn, 0, 0, ww, 1000);
+        if (wd) { g.globalAlpha = wn ? clamp(E.day * 1.05, 0, 1) : 1; g.drawImage(wd, 0, 0, ww, 1000); g.globalAlpha = 1; }
+        g.restore();
+      };
+      wide(wx, false);
+      // very wide screens: the panel continues as its own mirror image (deep in shadow by then)
+      if (side < 0 && wx > 0) wide(wx, true);
+      if (side > 0 && wx + ww < W) wide(wx + 2 * ww, true);
+    }
+    // the seam: the stage plate's own edge, mirrored, feathering out over ~70 units
+    const fw = Math.min(70, ext), t = newCanvas(Math.ceil(fw * U), h), tg = t.getContext('2d');
+    tg.setTransform(-U, 0, 0, U, side < 0 ? fw * U : fw * U, 0);
+    tg.drawImage(roomCv, Math.round((side < 0 ? sx : sx + 1600 - fw) * U), 0, Math.round(fw * U), h, side < 0 ? 0 : 0, 0, fw, 1000);
+    tg.setTransform(1, 0, 0, 1, 0, 0); tg.globalCompositeOperation = 'destination-in';
+    const fg = tg.createLinearGradient(side < 0 ? t.width : 0, 0, side < 0 ? 0 : t.width, 0); fg.addColorStop(0, 'rgba(0,0,0,1)'); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    tg.fillStyle = fg; tg.fillRect(0, 0, t.width, h);
+    g.drawImage(t, side < 0 ? sx - fw : sx + 1600, 0, fw, 1000);
+    const sh = g.createLinearGradient(side < 0 ? sx : sx + 1600, 0, side < 0 ? 0 : W, 0); sh.addColorStop(0, 'rgba(10,6,4,0.05)'); sh.addColorStop(1, `rgba(10,6,4,${0.5 - 0.2 * E.day})`);
+    g.fillStyle = sh; g.fillRect(x0, 0, x1 - x0, 1000);
+    g.restore();
   }
-  // knitted blanket draped over the right arm + seat edge (cable knit, cream)
-  {
-    const bx = x1 - 120, by = C.seatY - 30;
-    const kg = g.createLinearGradient(bx, by, bx + 130, by + 150);
-    kg.addColorStop(0, '#efe4cc'); kg.addColorStop(1, '#cbbc9c');
-    g.fillStyle = kg;
-    g.beginPath(); g.moveTo(bx, by + 6); g.quadraticCurveTo(bx + 60, by - 30, x1 + 2, by - 12); g.lineTo(x1 + 8, by + 120); g.quadraticCurveTo(bx + 90, by + 160, bx + 40, by + 130); g.quadraticCurveTo(bx + 10, by + 60, bx, by + 6); g.fill();
-    g.strokeStyle = 'rgba(140,120,90,0.45)'; g.lineWidth = 2;
-    for (let k = 0; k < 5; k++) { const x = bx + 22 + k * 20; g.beginPath(); for (let y = by - 10 + k * 3; y < by + 130; y += 10) { g.moveTo(x - 4, y); g.quadraticCurveTo(x, y + 5, x + 4, y + 10); } g.stroke(); }
-    g.fillStyle = '#d8ccb0'; for (let k = 0; k < 7; k++) { g.fillRect(bx + 40 + k * 12, by + 132 + Math.sin(k) * 4, 3, 14); }
+  // a touch of the summer: the room is warmer and a little brighter in summer daylight
+  if (E.summer > 0.02 && E.day > 0.05) { g.globalCompositeOperation = 'soft-light'; g.fillStyle = `rgba(255,214,150,${0.25 * E.summer * E.day})`; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over'; }
+  // dusk: the low sun warms the window side
+  if (E.dusk > 0.02) {
+    const gr = g.createRadialGradient(L.win.cx, L.win.y1 + 120, 40, L.win.cx, L.win.y1 + 120, 700);
+    gr.addColorStop(0, rgba(E.bot, 0.4 * E.dusk)); gr.addColorStop(1, rgba(E.bot, 0));
+    g.globalCompositeOperation = 'soft-light'; g.fillStyle = gr; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over';
   }
-  // cushion (plaid) in the corner
-  g.save(); g.translate(x0 + 70, C.seatY - 30); g.rotate(-0.2);
-  g.fillStyle = '#3e5a4a'; rr(g, -32, -30, 64, 56, 14); g.fill();
-  g.strokeStyle = 'rgba(200,60,50,0.5)'; g.lineWidth = 3; for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(-30, k * 16); g.lineTo(30, k * 16); g.moveTo(k * 18, -28); g.lineTo(k * 18, 24); g.stroke(); }
-  g.restore();
-  // side table + cocoa mug + a book
-  const T = L.table;
-  g.fillStyle = 'rgba(0,0,0,0.32)'; g.beginPath(); g.ellipse(T.x + 4, T.footY + 2, 34, 7, 0, 0, TAU); g.fill();
-  g.fillStyle = '#5a3a22'; g.fillRect(T.x - 5, T.y + 6, 10, T.footY - T.y - 12); g.beginPath(); g.ellipse(T.x, T.footY - 4, 24, 6, 0, 0, TAU); g.fill();
-  g.fillStyle = '#7a5030'; g.beginPath(); g.ellipse(T.x, T.y + 6, T.r, 10, 0, 0, TAU); g.fill();
-  g.fillStyle = '#946038'; g.beginPath(); g.ellipse(T.x, T.y, T.r, 10, 0, 0, TAU); g.fill();
-  g.fillStyle = '#3e5a6e'; g.save(); g.translate(T.x + 14, T.y - 3); g.rotate(0.15); g.fillRect(-18, -6, 34, 7); g.fillStyle = '#efe6d4'; g.fillRect(-16, -7, 30, 2); g.restore();
-  const M = L.mug;
-  g.fillStyle = '#b8443a'; rr(g, M.x - 12, M.y - 30, 24, 30, 5); g.fill();
-  g.strokeStyle = '#b8443a'; g.lineWidth = 4; g.beginPath(); g.arc(M.x - 13, M.y - 16, 7, Math.PI * 0.5, Math.PI * 1.5); g.stroke();
-  g.fillStyle = '#5a2e1e'; g.beginPath(); g.ellipse(M.x, M.y - 30, 11, 3.4, 0, 0, TAU); g.fill();
-  g.fillStyle = '#f6efe2'; g.beginPath(); g.arc(M.x - 3, M.y - 32, 3, 0, TAU); g.arc(M.x + 3, M.y - 31, 2.6, 0, TAU); g.fill();   // marshmallows
-  g.fillStyle = 'rgba(255,255,255,0.7)'; g.beginPath(); g.moveTo(M.x - 4, M.y - 18); g.lineTo(M.x, M.y - 22); g.lineTo(M.x + 4, M.y - 18); g.lineTo(M.x, M.y - 14); g.fill();
+  // cut the panes out: the live view shows through
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+  for (const p of L.panes) g.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0);
+  g.globalCompositeOperation = 'source-over';
 }
-function bakeChair() {
-  const ox = (L.sx + CH_X0) * U, oy = CH_Y0 * U;
-  chairCv.width = Math.round(CH_W * U); chairCv.height = Math.round(CH_H * U);
-  const g = chairCv.getContext('2d'); g.setTransform(U, 0, 0, U, -ox, -oy);
-  if (ART.armchair) g.drawImage(ART.armchair, L.sx + 190, 930 - 280, 300, 280); else paintChair(g);
-  litLayer(chairCv, ox, oy);
+// the part of the room the fire lights, pre-multiplied by a warm falloff: added on top with the
+// flicker it makes the stones, hearth, rug, chair and floor brighten and ebb with the flames
+let boostRect = null;
+function bakeBoost() {
+  const F = L.fireLight, rx = 620, x0 = F.x - rx, y0 = 180, w = rx * 2, h = 1000 - y0, s = U * 0.5;
+  boostRect = { x0, y0, w, h };
+  boostCv.width = Math.max(1, Math.round(w * s)); boostCv.height = Math.max(1, Math.round(h * s));
+  const g = boostCv.getContext('2d'); g.setTransform(s, 0, 0, s, -x0 * s, -y0 * s);
+  g.clearRect(x0, y0, w, h);
+  if (!ART['room-night']) return;
+  g.drawImage(roomCv, 0, 0, roomCv.width, roomCv.height, 0, 0, W, H);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = 'rgb(255,178,110)'; g.fillRect(x0, y0, w, h);
+  g.globalCompositeOperation = 'destination-in';
+  g.save(); g.translate(F.x, F.y + 120); g.scale(1, 0.78);
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, rx);
+  gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.35, 'rgba(0,0,0,0.6)'); gr.addColorStop(0.7, 'rgba(0,0,0,0.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(-rx, -rx * 1.4, rx * 2, rx * 2.8); g.restore();
+  g.globalCompositeOperation = 'source-over';
+}
+// ---- the view through the window (painted, graded; weather is live) ----
+function outsidePaint(g, x, y, w, h, summer) {
+  const s = summer ? 'summer' : 'winter', n = ART['outside-' + s + '-night'], d = ART['outside-' + s + '-day'];
+  if (!n && !d) return false;
+  const S = h, px = x + w / 2 - 0.52 * S;   // square painting, cropped to the portrait window
+  if (n) g.drawImage(n, px, y, S, S);
+  if (d) { g.globalAlpha = n ? clamp(E.day * 1.1 - 0.05, 0, 1) : 1; g.drawImage(d, px, y, S, S); g.globalAlpha = 1; }
+  return true;
+}
+let tmpCv = newCanvas(1, 1);
+function bakeOutside() {
+  const R = L.win, m = OUT_M, ow = R.w + 2 * m, oh = R.h + 2 * m;
+  outCv.width = Math.round(ow * U); outCv.height = Math.round(oh * U);
+  const g = outCv.getContext('2d'); g.setTransform(U, 0, 0, U, 0, 0);
+  g.fillStyle = rgba(mix3([10, 18, 34], [190, 200, 214], E.day)); g.fillRect(0, 0, ow, oh);
+  const sum = E.summer;
+  if (sum < 0.99) outsidePaint(g, 0, 0, ow, oh, false);
+  if (sum > 0.01) {
+    tmpCv.width = outCv.width; tmpCv.height = outCv.height;
+    const t = tmpCv.getContext('2d'); t.setTransform(U, 0, 0, U, 0, 0);
+    if (outsidePaint(t, 0, 0, ow, oh, true)) { g.globalAlpha = sum; g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(tmpCv, 0, 0); g.setTransform(U, 0, 0, U, 0, 0); g.globalAlpha = 1; }
+    tmpCv.width = tmpCv.height = 1;
+  }
+  // dusk / dawn: the sky and snow catch the low sun's colour
+  if (E.dusk > 0.02) {
+    const gr = g.createLinearGradient(0, 0, 0, oh);
+    gr.addColorStop(0, rgba(E.top, 0.5 * E.dusk)); gr.addColorStop(0.45, rgba(E.bot, 0.55 * E.dusk)); gr.addColorStop(1, rgba(E.bot, 0.25 * E.dusk));
+    g.globalCompositeOperation = 'soft-light'; g.fillStyle = gr; g.fillRect(0, 0, ow, oh); g.globalCompositeOperation = 'source-over';
+  }
+  // overcast / snowing / fog: flatter colour, and haze that grows with distance (higher in the frame)
+  const flat = clamp(0.35 * E.cloud * (E.weather === 'clear' ? 0 : 1) + 0.25 * E.snow + 0.4 * E.storm + 0.35 * E.fog, 0, 0.85);
+  if (flat > 0.02) { g.globalCompositeOperation = 'saturation'; g.fillStyle = `rgba(128,128,128,${flat * 0.7})`; g.fillRect(0, 0, ow, oh); g.globalCompositeOperation = 'source-over'; }
+  const haze = clamp(0.3 * E.snow + 0.55 * E.storm + 0.65 * E.fog + 0.1 * E.rain, 0, 0.92);
+  if (haze > 0.02) {
+    const hc = mix3([52, 60, 82], [214, 220, 228], E.day);
+    const gr = g.createLinearGradient(0, 0, 0, oh);
+    gr.addColorStop(0, rgba(hc, haze * 0.9)); gr.addColorStop(0.55, rgba(hc, haze * 0.85)); gr.addColorStop(0.8, rgba(hc, haze * 0.45)); gr.addColorStop(1, rgba(hc, haze * 0.2));
+    g.fillStyle = gr; g.fillRect(0, 0, ow, oh);
+  }
 }
 
 // =====================================================================
-//  music: now playing, artwork, palette
+//  music
+// =====================================================================
 // =====================================================================
 const music = {
   np: null, ever: false, playing: false, key: '', artKey: '', art: null, pal: null, bpm: 92, lv: 0,
@@ -947,22 +573,19 @@ function genCover(s) {
   for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(s * 0.08, s * (0.62 + i * 0.03)); g.lineTo(s * 0.58, s * (0.62 + i * 0.03)); g.stroke(); }
   return c;
 }
-// the idle print in the frame: a little painted winter landscape
-const IDLE_ART = (() => {
-  const s = 400, c = newCanvas(s, s), g = c.getContext('2d');
-  const sk = g.createLinearGradient(0, 0, 0, s * 0.7); sk.addColorStop(0, '#2a3460'); sk.addColorStop(1, '#d8907a');
-  g.fillStyle = sk; g.fillRect(0, 0, s, s);
-  g.fillStyle = '#f4ead0'; g.beginPath(); g.arc(s * 0.7, s * 0.26, s * 0.07, 0, TAU); g.fill();
-  g.fillStyle = '#6a6488'; g.beginPath(); g.moveTo(0, s * 0.62); g.lineTo(s * 0.25, s * 0.38); g.lineTo(s * 0.45, s * 0.56); g.lineTo(s * 0.68, s * 0.34); g.lineTo(s, s * 0.6); g.lineTo(s, s); g.lineTo(0, s); g.fill();
-  g.fillStyle = '#efe8f0'; g.beginPath(); g.moveTo(s * 0.2, s * 0.43); g.lineTo(s * 0.25, s * 0.38); g.lineTo(s * 0.31, s * 0.44); g.fill(); g.beginPath(); g.moveTo(s * 0.62, s * 0.4); g.lineTo(s * 0.68, s * 0.34); g.lineTo(s * 0.74, s * 0.41); g.fill();
-  g.fillStyle = '#e8e2ea'; g.fillRect(0, s * 0.74, s, s * 0.26);
-  const r = mulberry(3);
-  for (let i = 0; i < 16; i++) { const x = r() * s, h = s * (0.1 + r() * 0.1); g.fillStyle = '#2e4a4a'; g.beginPath(); g.moveTo(x, s * 0.76 - h); g.lineTo(x + h * 0.3, s * 0.77); g.lineTo(x - h * 0.3, s * 0.77); g.fill(); }
-  g.fillStyle = '#5a3a2a'; g.fillRect(s * 0.42, s * 0.7, s * 0.14, s * 0.08); g.fillStyle = '#3a2420'; g.beginPath(); g.moveTo(s * 0.4, s * 0.7); g.lineTo(s * 0.49, s * 0.63); g.lineTo(s * 0.58, s * 0.7); g.fill();
-  g.fillStyle = '#ffcf7a'; g.fillRect(s * 0.46, s * 0.72, s * 0.03, s * 0.03);
-  g.fillStyle = 'rgba(255,250,240,0.06)'; for (let i = 0; i < 2000; i++) g.fillRect(r() * s, r() * s, 1, 1);   // paper grain
-  return c;
-})();
+
+// the idle print in the frame (nothing played yet): a sepia print of the mountains out of the window
+const IDLE_ART = newCanvas(400, 400);
+(() => { const g = IDLE_ART.getContext('2d'); g.fillStyle = '#3a3026'; g.fillRect(0, 0, 400, 400); })();
+function paintIdleArt() {
+  const im = ART['outside-winter-day']; if (!im) return;
+  const g = IDLE_ART.getContext('2d'), s = im.naturalWidth;
+  g.filter = 'sepia(0.55) contrast(1.05) brightness(0.95)';
+  g.drawImage(im, s * 0.12, s * 0.2, s * 0.62, s * 0.62, 0, 0, 400, 400);
+  g.filter = 'none';
+  artGen++;
+}
+
 function rebuildArt(swap) {
   artGen++;
   const next = music.art || genCover(400);
@@ -973,194 +596,16 @@ function rebuildArt(swap) {
 }
 
 // =====================================================================
-//  animals — a golden puppy + an orange cat. Each owns its frozen coat,
-//  its state and its own tint canvases; the array is frozen, never reordered.
+//  animals — a golden puppy + an orange cat. Each owns its identity, its
+//  state and its own tint canvases; the array is frozen, never reordered.
 // =====================================================================
-const COAT_CAT = Object.freeze({ name: 'Ember', species: 'cat', pattern: 'tabby', socks: true, base: '#e0904a', light: '#f6c483', shade: '#ad5f2b', stripe: '#c0662c', white: '#fbf3e6', eye: '#a8c95e', nose: '#e8908e', ear: '#f2a9a4', outline: '#4a2818', pad: '#ef9ea6' });
-const COAT_DOG = Object.freeze({ name: 'Maple', species: 'dog', pattern: 'solid', base: '#e2b47e', light: '#f6d8ae', shade: '#b8875a', stripe: '#c89a66', white: '#fff3e0', eye: '#2a1912', nose: '#2b1d19', ear: '#c48a56', outline: '#5a4632', pad: '#3a2a22', collar: '#b8322a' });
-const COAT_RGB = new Map();
-function coatRGB(coat) { if (!COAT_RGB.has(coat)) { const o = {}; for (const k in coat) if (typeof coat[k] === 'string' && coat[k][0] === '#') o[k] = hex(coat[k]); COAT_RGB.set(coat, Object.freeze(o)); } return COAT_RGB.get(coat); }
-function petPal(coat, m) { const c = coatRGB(coat), o = {}; for (const k in c) o[k] = rgba(mul(c[k], m)); return o; }
-function ik(ax, ay, bx, by, l1, l2, bend) {
-  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1;
-  const dd = Math.min(d, l1 + l2 - 0.01);
-  const a = (l1 * l1 - l2 * l2 + dd * dd) / (2 * dd), h = Math.sqrt(Math.max(0, l1 * l1 - a * a));
-  const ux = dx / d, uy = dy / d;
-  let nx = -uy, ny = ux;
-  if ((nx >= 0 ? 1 : -1) !== bend) { nx = -nx; ny = -ny; }
-  return [ax + ux * a + nx * h, ay + uy * a + ny * h];
-}
-function addEll(p, x, y, rx, ry, rot = 0) { p.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); p.ellipse(x, y, Math.max(0.1, rx), Math.max(0.1, ry), rot, 0, TAU); }
-function addQuad(p, a, b, c, d) { const area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]); if (area < 0) { const t = b; b = d; d = t; } p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(c[0], c[1]); p.lineTo(d[0], d[1]); p.closePath(); }
-function addTri(p, a, b, c) { const area = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]); if (area < 0) { const t = b; b = c; c = t; } p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); p.lineTo(c[0], c[1]); p.closePath(); }
-function limb(pts, ws) {
-  const p = new Path2D();
-  for (let i = 0; i < pts.length; i++) addEll(p, pts[i][0], pts[i][1], ws[i] / 2, ws[i] / 2);
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
-    const d = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / d, ny = (x1 - x0) / d, w0 = ws[i] / 2, w1 = ws[i + 1] / 2;
-    addQuad(p, [x0 + nx * w0, y0 + ny * w0], [x1 + nx * w1, y1 + ny * w1], [x1 - nx * w1, y1 - ny * w1], [x0 - nx * w0, y0 - ny * w0]);
-  }
-  return p;
-}
-function tailPath(p, seg, bx, by, floorY) {
-  const pts = [[bx, by]];
-  let x = bx, y = by;
-  for (let i = 0; i < p.tailN; i++) { x += Math.cos(p.tailA[i]) * seg; y += Math.sin(p.tailA[i]) * seg; if (floorY != null && y > floorY) y = floorY; pts.push([x, y]); }
-  const path = new Path2D();
-  path.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2; path.quadraticCurveTo(pts[i][0], pts[i][1], mx, my); }
-  path.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
-  return { path, pts };
-}
-function stepTail(p, targetFn, dt, kS0 = 60, dmp = 10) {
-  const n = p.tailN, sub = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / sub;
-  for (let s = 0; s < sub; s++) for (let i = 0; i < n; i++) { const kS = kS0 - i * 3.5; p.tailV[i] += ((targetFn(i) - p.tailA[i]) * kS - p.tailV[i] * dmp) * h; p.tailA[i] += p.tailV[i] * h; }
-}
-function drawParts(g, parts, OW, outline) {
-  g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = outline;
-  for (const pt of parts) { g.lineWidth = pt.stroke ? pt.width + OW * 2 : OW * 2; g.stroke(pt.path); }
-  for (const pt of parts) {
-    if (pt.stroke) { g.strokeStyle = pt.stroke; g.lineWidth = pt.width; g.stroke(pt.path); if (pt.after) pt.after(g); g.strokeStyle = outline; continue; }
-    if (pt.own) { g.strokeStyle = outline; g.lineWidth = OW * 1.6; g.stroke(pt.path); }
-    g.fillStyle = pt.fill; g.fill(pt.path);
-    if (pt.after) pt.after(g);
-  }
-}
-// ---- procedural side-view rig (fallback until the sprites load) ----
-const CK = ['tx', 'ty', 'trx', 'try', 'ta', 'cx', 'cy', 'cr', 'hx', 'hy', 'hr', 'hdx', 'hdy', 'tilt', 'sx', 'sy', 'jx', 'jy', 'f1', 'f2', 'b1', 'b2', 'legs', 'haunch', 'ear', 'eye', 'paws'];
-const POSES = {
-  stand: { tx: 0, ty: -53, trx: 37, try: 17, ta: 0.02, cx: 24, cy: -54, cr: 18, hx: -24, hy: -53, hr: 17, hdx: 47, hdy: -88, tilt: 0, sx: 24, sy: -47, jx: -24, jy: -47, f1: 26, f2: 18, b1: -22, b2: -30, legs: 1, haunch: 0, ear: 0, eye: 1, paws: 0 },
-  sit: { tx: -4, ty: -40, trx: 28, try: 22, ta: -1.0, cx: 10, cy: -58, cr: 18, hx: -14, hy: -23, hr: 22, hdx: 20, hdy: -96, tilt: 0, sx: 12, sy: -50, jx: -12, jy: -20, f1: 18, f2: 11, b1: 6, b2: 0, legs: 1, haunch: 1, ear: 0, eye: 1, paws: 0 },
-  loaf: { tx: 0, ty: -24, trx: 40, try: 22, ta: 0, cx: 24, cy: -26, cr: 18, hx: -24, hy: -25, hr: 20, hdx: 40, hdy: -54, tilt: 0, sx: 24, sy: -20, jx: -22, jy: -20, f1: 30, f2: 24, b1: -22, b2: -28, legs: 0, haunch: 0, ear: 0, eye: 0.82, paws: 1 },
-  curl: { tx: -2, ty: -22, trx: 36, try: 22, ta: 0, cx: 12, cy: -21, cr: 19, hx: -16, hy: -24, hr: 21, hdx: 24, hdy: -31, tilt: 0.42, sx: 12, sy: -16, jx: -14, jy: -16, f1: 24, f2: 20, b1: -20, b2: -24, legs: 0, haunch: 0, ear: 0.5, eye: 0, paws: 0 },
-  stretch: { tx: 0, ty: -40, trx: 40, try: 17, ta: 0.42, cx: 26, cy: -26, cr: 17, hx: -26, hy: -56, hr: 18, hdx: 54, hdy: -38, tilt: -0.15, sx: 26, sy: -20, jx: -26, jy: -48, f1: 66, f2: 58, b1: -24, b2: -32, legs: 1, haunch: 0, ear: 0.4, eye: 0.15, paws: 0 },
-  sniff: { tx: 0, ty: -50, trx: 37, try: 17, ta: 0.16, cx: 24, cy: -48, cr: 18, hx: -24, hy: -55, hr: 17, hdx: 62, hdy: -52, tilt: -0.12, sx: 24, sy: -41, jx: -24, jy: -49, f1: 28, f2: 20, b1: -22, b2: -30, legs: 1, haunch: 0, ear: -0.1, eye: 0.9, paws: 0 },
-};
-const POSE_NAMES = Object.keys(POSES);
-const TAIL = {
-  stand: (t) => lerp(-2.25, -1.35, t) + smooth((t - 0.7) / 0.3) * 0.9,
-  sit: (t) => lerp(2.7, -0.15, smooth(t * 1.1)),
-  loaf: (t) => lerp(2.9, 0.15, smooth(t)),
-  curl: (t) => lerp(2.2, -0.35, smooth(t * 0.95)),
-  stretch: (t) => lerp(-2.0, -1.5, t) + smooth((t - 0.6) / 0.4) * 0.6,
-  sniff: (t) => lerp(-2.6, -1.9, t) + smooth((t - 0.7) / 0.3) * 0.7,
-};
-const TAIL_FRONT = { stand: 0, sit: 1, loaf: 1, curl: 1, stretch: 0, sniff: 0 };
-function blendPose(c) {
-  const P = {};
-  let tot = 0; for (const n of POSE_NAMES) tot += c.w[n];
-  tot = tot || 1;
-  for (const k of CK) { let v = 0; for (const n of POSE_NAMES) if (c.w[n] > 0.0005) v += POSES[n][k] * c.w[n]; P[k] = v / tot; }
-  let tf = 0; for (const n of POSE_NAMES) tf += TAIL_FRONT[n] * c.w[n]; P.tailFront = tf / tot;
-  return P;
-}
-function tailTarget(c, i, sway) {
-  const t = i / (c.tailN - 1);
-  let a = 0, tot = 0;
-  for (const n of POSE_NAMES) if (c.w[n] > 0.0005) { a += TAIL[n](t) * c.w[n]; tot += c.w[n]; }
-  return a / (tot || 1) + sway * smooth((t - 0.3) / 0.7);
-}
-function drawRig(g, c) {
-  const P = c.P, F = c.F, coat = c.coat, pal = petPal(coat, c.light), OW = 2.3, dog = coat.species === 'dog';
-  g.save();
-  g.translate(c.x, c.y); g.scale(c.k * c.faceS * c.rigK, c.k * c.rigK);
-  const parts = [];
-  const sh = [P.sx, P.sy], hip = [P.jx, P.jy], legsW = P.legs * (dog ? 1.15 : 1);
-  const tb = [P.hx - P.hr * 0.75, P.hy + 2];
-  const tp = tailPath(c, dog ? 7.4 : 8.6, tb[0], tb[1], -2.5);
-  const tailPart = { path: tp.path, stroke: pal.base, width: dog ? 13 : 10.5, after: (gg) => {
-    if (coat.pattern === 'tabby') { gg.save(); gg.setLineDash([5, 7]); gg.strokeStyle = pal.stripe; gg.lineWidth = 9.5; gg.stroke(tp.path); gg.restore(); }
-    if (dog) { gg.strokeStyle = pal.light; gg.lineWidth = 5; gg.globalAlpha = 0.7; gg.stroke(tp.path); gg.globalAlpha = 1; }
-  } };
-  if (P.tailFront < 0.5) parts.push(tailPart);
-  const gaitOff = (o) => {
-    if (c.walk < 0.01) return [0, 0];
-    const p = (c.gait + o) % 1, S = 20;
-    if (p < 0.6) { const u = p / 0.6; return [S * (0.5 - u) * c.walk, 0]; }
-    const u = (p - 0.6) / 0.4; return [S * (-0.5 + smooth(u)) * c.walk, -Math.sin(u * Math.PI) * 7 * c.walk];
-  };
-  const air = c.air || 0;
-  const pawPos = (base, o, front) => { const [dx, dy] = gaitOff(o); return [base + dx + air * (front ? 8 : -10), dy - air * 14]; };
-  const fl1 = pawPos(P.f1, 0.25, true), fl2 = pawPos(P.f2, 0.75, true), bl1 = pawPos(P.b1, 0, false), bl2 = pawPos(P.b2, 0.5, false);
-  const sock = (fill) => (coat.socks ? pal.white : fill);
-  const frontLeg = (pw, s0, fill, own, w0) => {
-    const wrist = [pw[0] - 2, pw[1] - 4], el = ik(s0[0], s0[1], wrist[0], wrist[1], 22, 23, -1);
-    parts.push({ path: limb([s0, el, wrist], [12 * w0, 9.5 * w0, 8.5 * w0]), fill, own });
-    const pp = new Path2D(); addEll(pp, pw[0] + 2, pw[1] - 3.6, 7.6 * w0, 4.6 * w0); parts.push({ path: pp, fill: sock(fill), own: true });
-  };
-  const hindLeg = (pw, h0, fill, own, w0) => {
-    const knee = [h0[0] + 9, lerp(h0[1], pw[1], 0.42)], hock = [pw[0] - 7, pw[1] - 15];
-    parts.push({ path: limb([h0, knee, hock, [pw[0], pw[1] - 4]], [19 * w0, 11 * w0, 8 * w0, 7.6 * w0]), fill, own });
-    const pp = new Path2D(); addEll(pp, pw[0] + 2, pw[1] - 3.4, 8 * w0, 4.4 * w0); parts.push({ path: pp, fill: sock(fill), own: true });
-  };
-  if (legsW > 0.05) { if (P.haunch < 0.6) hindLeg(bl2, [hip[0] - 4, hip[1]], pal.shade, false, legsW * (1 - P.haunch)); frontLeg(fl2, [sh[0] - 5, sh[1]], pal.shade, false, legsW); }
-  const body = new Path2D();
-  addEll(body, P.tx, P.ty, P.trx, P.try, P.ta); addEll(body, P.hx, P.hy, P.hr, P.hr * 0.98); addEll(body, P.cx, P.cy, P.cr, P.cr);
-  const topY = Math.min(P.ty - P.try, P.hy - P.hr, P.cy - P.cr) - 4;
-  const bg = g.createLinearGradient(0, topY, 0, 0); bg.addColorStop(0, pal.light); bg.addColorStop(0.5, pal.base); bg.addColorStop(1, pal.shade);
-  parts.push({ path: body, fill: bg, after: (gg) => {
-    gg.save(); gg.clip(body);
-    if (coat.pattern === 'tabby') {
-      gg.strokeStyle = pal.stripe; gg.lineCap = 'round'; gg.save(); gg.translate(P.tx, P.ty); gg.rotate(P.ta);
-      for (let i = 0; i < 5; i++) { const x = -P.trx * 0.55 + i * P.trx * 0.26; gg.lineWidth = 4.6 - i * 0.3; gg.beginPath(); gg.moveTo(x - 3, -P.try - 4); gg.quadraticCurveTo(x + 4, -P.try * 0.3, x - 1, P.try * 0.15); gg.stroke(); }
-      gg.restore();
-    }
-    gg.fillStyle = pal.white; gg.beginPath(); gg.ellipse(P.cx + P.cr * 0.55, P.cy + 1, P.cr * 0.55, P.cr * 0.85, 0.2, 0, TAU); gg.fill();
-    gg.translate(-1.5, 3); gg.strokeStyle = pal.light; gg.globalAlpha = 0.35; gg.lineWidth = 3; gg.stroke(body);
-    gg.restore();
-  } });
-  if (P.haunch > 0.05) {
-    const hp = new Path2D(); addEll(hp, P.hx + 4, P.hy + 4, 19 * P.haunch + 2, 16 * P.haunch + 2, -0.2); parts.push({ path: hp, fill: pal.base, own: true });
-    const fp = new Path2D(); addEll(fp, P.b1 + 6, -3.8, 9 * P.haunch, 4.6 * P.haunch); parts.push({ path: fp, fill: sock(pal.base), own: true });
-  }
-  if (legsW > 0.05) { if (P.haunch < 0.6) hindLeg(bl1, hip, pal.base, true, legsW * (1 - P.haunch)); frontLeg(fl1, sh, pal.base, true, legsW); }
-  if (P.paws > 0.05) { const tp1 = new Path2D(); addEll(tp1, P.cx + 14, -4, 9 * P.paws, 4.6 * P.paws); addEll(tp1, P.cx + 4, -3.4, 8.4 * P.paws, 4.2 * P.paws); parts.push({ path: tp1, fill: sock(pal.base), own: true }); }
-  if (P.tailFront >= 0.5) parts.push(tailPart);
-  const hx = P.hdx, hy = P.hdy, fx = hx + F.ht * 7;
-  if (!dog) for (const side of [-1, 1]) {
-    const e = clamp(P.ear + (side > 0 ? c.earTw : c.earTw * 0.3) - c.earPerk * 0.3, -0.4, 1.3);
-    const ex = hx + side * 14 + F.ht * 4, ey = hy - 15, ang = side * (0.28 + e * 0.9) + P.tilt;
-    const hgt = 24 * (1 - Math.max(0, e) * 0.22), hw = 11.5;
-    const rot = (x, y) => [ex + x * Math.cos(ang) - y * Math.sin(ang), ey + x * Math.sin(ang) + y * Math.cos(ang)];
-    const a1 = rot(-hw, 5), a2 = rot(hw, 5), tip = rot(side * 1.2, -hgt), c1 = rot(-hw * 0.72, -hgt * 0.5), c2 = rot(hw * 0.62, -hgt * 0.58);
-    const ep = new Path2D(); ep.moveTo(a1[0], a1[1]); ep.quadraticCurveTo(c1[0], c1[1], tip[0], tip[1]); ep.quadraticCurveTo(c2[0], c2[1], a2[0], a2[1]); ep.closePath();
-    parts.push({ path: ep, fill: pal.base });
-  }
-  const head = new Path2D();
-  addEll(head, hx, hy, 27, 23.5, P.tilt);
-  if (dog) addEll(head, fx + 4, hy + 13, 17, 12.5);   // muzzle
-  else for (const s of [-1, 1]) addEll(head, hx + s * 17 + F.ht * 3, hy + 10.5, 12, 9.5);
-  const hg = g.createLinearGradient(0, hy - 24, 0, hy + 30); hg.addColorStop(0, pal.light); hg.addColorStop(0.5, pal.base); hg.addColorStop(1, pal.shade);
-  parts.push({ path: head, fill: hg, after: (gg) => { if (dog) { gg.fillStyle = pal.white; gg.beginPath(); gg.ellipse(fx + 4, hy + 16, 13, 9, 0, 0, TAU); gg.fill(); } } });
-  drawParts(g, parts, OW, pal.outline);
-  if (dog) {   // floppy ears + collar
-    for (const s of [-1, 1]) {
-      g.save(); g.translate(hx + s * 20 + F.ht * 3, hy - 12); g.rotate(s * 0.25 + (c.earTw || 0) * 0.3);
-      const ep = new Path2D(); ep.moveTo(-s * 5, -3); ep.bezierCurveTo(s * 14, -8, s * 17, 16, s * 10, 28); ep.bezierCurveTo(s * 3, 34, -s * 6, 28, -s * 6, 18); ep.closePath();
-      g.lineJoin = 'round'; g.strokeStyle = pal.outline; g.lineWidth = OW * 2; g.stroke(ep); g.fillStyle = pal.ear; g.fill(ep); g.restore();
-    }
-    g.strokeStyle = pal.collar; g.lineWidth = 5; g.beginPath(); g.ellipse(P.cx + 4, P.cy - 6, 15, 6, -0.6, 0.2, Math.PI - 0.2); g.stroke();
-  }
-  // face
-  const ey = hy + 2, sep = dog ? 12.5 : 11.6;
-  for (const s of [-1, 1]) {
-    const ex = fx + s * sep;
-    if (F.happy > 0.5 || F.eye < 0.2) { g.strokeStyle = pal.outline; g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(ex - 5.5, ey + 1); g.quadraticCurveTo(ex, F.happy > 0.5 ? ey - 5 : ey + 5, ex + 5.5, ey + 1); g.stroke(); }
-    else { g.fillStyle = dog ? pal.eye : pal.eye; const ry = (dog ? 5.6 : 7) * F.eye; g.beginPath(); g.ellipse(ex, ey, dog ? 5.4 : 6.4, ry, 0, 0, TAU); g.fill(); g.fillStyle = '#15111a'; if (!dog) { g.beginPath(); g.ellipse(ex + F.lx * 2, ey, 2.4, ry * 0.85, 0, 0, TAU); g.fill(); } g.fillStyle = '#fff'; g.beginPath(); g.arc(ex - 1.8, ey - 2, 1.8, 0, TAU); g.fill(); }
-  }
-  const ny = hy + (dog ? 8 : 10.5);
-  g.fillStyle = pal.nose; g.beginPath(); g.ellipse(fx + (dog ? 4 : 0), ny, dog ? 6.5 : 3.4, dog ? 4.5 : 2.4, 0, 0, TAU); g.fill();
-  g.strokeStyle = pal.outline; g.lineWidth = 1.2; g.beginPath(); g.moveTo(fx + (dog ? 4 : 0), ny + 2); g.lineTo(fx + (dog ? 4 : 0), ny + 5); g.stroke();
-  if (F.mouth > 0.1) { g.fillStyle = '#6e2f3a'; g.beginPath(); g.ellipse(fx + (dog ? 4 : 0), ny + 8, 4, 2 + F.mouth * 5, 0, 0, TAU); g.fill(); }
-  g.restore();
-}
-
-// ---- illustrated sprites ----
+const COAT_CAT = Object.freeze({ name: 'Ember', species: 'cat', base: '#e0904a' });
+const COAT_DOG = Object.freeze({ name: 'Maple', species: 'dog', base: '#e2b47e' });
+const POSE_NAMES = ['stand', 'sit', 'loaf', 'curl', 'stretch', 'sniff'];
 const SPR = {};
 function loadSpriteSet(set, poses) {
   if (SPR[set]) return;
-  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set) };
+  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set), cyc: LW.petCycleLoad('art/sprites/', set) };
   for (const p of poses) {
     const im = new Image();
     im.onload = () => { if (im.naturalWidth > 1) o.img[p] = im; o.pending--; };
@@ -1168,7 +613,6 @@ function loadSpriteSet(set, poses) {
     im.src = 'art/sprites/' + set + '/' + p + '.png';
   }
 }
-// a drawn in-between frame (pose change / turn / jump) stands in for the pose while it plays
 function spriteFor(c) {
   const sp = spriteBase(c);
   return sp && c.seqF ? { im: SPR[c.spr].seq.img[c.seqF], kind: c.seqF.startsWith('jump-') ? 'jump' : 'seq' } : sp;
@@ -1179,50 +623,73 @@ function spriteBase(c) {
   const I = S.img;
   if (c.act && c.act.t === 'hop' && c.hopPh && S.seq.has('jump')) return { im: S.seq.img[LW.petJumpFrame(c.hopPh, c.hopU)], kind: 'jump' };
   if (c.act && c.act.t === 'hop') return { im: (c.air > 0.1 ? I.walk2 : I.walk1) || I.walk1, kind: 'hop' };
-  if (c.walk > 0.3) return { im: (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
+  if (c.walk > 0.3) return { im: (c.gaitF && (S.cyc.img[c.gaitF] || I[c.gaitF])) || (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
   if (c.happyT > 0 && c.happyPose && I[c.happyPose]) return { im: I[c.happyPose], kind: 'happy' };
   let best = 'sit', bw = -1; for (const n of POSE_NAMES) if (c.w[n] > bw) { bw = c.w[n]; best = n; }
-  if (c.pawK > 0.05 && I.walk1) return { im: I.walk1, kind: 'paw' };
   const map = c.sprMap;
   let key = map[best]; const fb = { loaf: 'sit', lie: 'sit', stretch: 'walk1', sleep: 'loaf', sit: 'walk1' };
   while (key && !I[key]) key = fb[key];
   return { im: I[key] || I.walk1, kind: best, faked: map[best] !== key || (best === 'stretch' && !I.stretch) };
 }
-const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2;
-// once per update: lay out the set's drawn in-between frames, then pick the one to show
+const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2 || !!(im && im.petCycle);
+function sprCycStep(c) {
+  const S = SPR[c.spr]; c.gaitF = null;
+  if (!S || S.pending > 0 || !S.img.walk1 || !S.cyc) return;
+  LW.petCyclePrep(S.cyc, { im: S.img.walk1, k: 1, fa: 0.5 });
+  const now = nowS(), dt = c.gaitT ? Math.min(0.1, now - c.gaitT) : 0; c.gaitT = now;
+  if (c.walk > 0.3) c.gaitF = LW.petGait(c, S.cyc, c.gait / 0.03, LW.petUnit(c.kind, S.img.walk1) * S.img.walk1.naturalHeight, 'walk', { dt });
+}
 function sprSeqStep(c) {
+  sprCycStep(c);
   const S = SPR[c.spr]; c.seqF = null;
   const sp = spriteBase(c); if (!sp) return;
   const sleepN = c.sprMap.curl, T = S.seq;
   if (!LW.petSeqPrep(T, (f) => { const n = f === 'sleep' ? sleepN : f, im = S.img[n]; return im ? { im, k: LW.petPoseScale(c.kind, n, S.img.walk1, im), fa: 0.5 } : null; }) && !Object.keys(T.seq).length) return;
   const key = sp.im.petName || Object.keys(S.img).find((k) => S.img[k] === sp.im);
-  const fam = key === 'walk2' ? 'walk1' : key === sleepN ? 'sleep' : key.startsWith('jump-') ? 'jump' : key;
+  const fam = key === 'walk2' || /^(walk|run)-\d/.test(key) ? 'walk1' : key === sleepN ? 'sleep' : key.startsWith('jump-') ? 'jump' : key;
   const f = LW.petSeqStep(c, T, fam, c.face, nowS());
-  if (f && T.img[f]) { c.seqF = f; if (f.startsWith('turn-')) c.faceS = c.face; }   // the frames do the turning
+  if (f && T.img[f]) { c.seqF = f; if (f.startsWith('turn-')) c.faceS = c.face; }
 }
-function tintSprite(cv2, im, w, h, light) {
+// each animal keeps ITS OWN cache of lit sprites (one canvas per pose image), re-lit only when its
+// quantized light changes — never per frame. Lit = sprite × light colour; rim = the edge facing the fire.
+function tintSprite(cv2, im, w, h, light, grade) {
   const pw = Math.max(1, Math.round(w * U)), ph = Math.max(1, Math.round(h * U));
   if (cv2.width !== pw || cv2.height !== ph) { cv2.width = pw; cv2.height = ph; }
   const a = cv2.getContext('2d');
-  a.globalCompositeOperation = 'copy'; a.drawImage(im, 0, 0, pw, ph);
-  a.globalCompositeOperation = 'multiply'; a.fillStyle = rgba(light.map((v) => clamp(v * 1.06, 0, 1) * 255)); a.fillRect(0, 0, pw, ph);
+  a.globalCompositeOperation = 'copy'; a.filter = grade || 'none'; a.drawImage(im, 0, 0, pw, ph); a.filter = 'none';
+  a.globalCompositeOperation = 'multiply'; a.fillStyle = rgba(light.map((v) => clamp(v, 0, 1) * 255)); a.fillRect(0, 0, pw, ph);
+  // light above 1 (close to the fire) lifts the fur a little instead of clipping
+  if (grade) {   // pets: a little occlusion toward the ground they rest on
+    const og = a.createLinearGradient(0, ph * 0.7, 0, ph); og.addColorStop(0, 'rgb(255,255,255)'); og.addColorStop(1, 'rgb(150,140,135)');
+    a.globalCompositeOperation = 'multiply'; a.fillStyle = og; a.fillRect(0, 0, pw, ph);
+  }
   a.globalCompositeOperation = 'destination-in'; a.drawImage(im, 0, 0, pw, ph);
   a.globalCompositeOperation = 'source-over';
 }
-// each animal keeps ITS OWN cache of tinted sprites (one canvas per pose image),
-// re-tinted only when its (quantized) light changes — never per frame
-const K_MAX = 1.15;
+const K_MAX = 1.6;
+// the pets are illustrated; soften their saturation/contrast a little toward the painted plate
+const PET_GRADE = 'saturate(0.82) contrast(0.92) brightness(0.96)';
 function tinted(c, im, sc1) {
-  const q = (v) => Math.round(clamp(v * 1.06, 0, 1) * 48) / 48;
+  const q = (v) => Math.round(clamp(v, 0, 1.2) * 40) / 40;
   const lt = [q(c.light[0]), q(c.light[1]), q(c.light[2])], key = lt.join(',') + '|' + U;
   if (!c.tint) c.tint = new Map();
   let e = c.tint.get(im);
-  if (!e) { e = { cv: newCanvas(2, 2), key: '' }; c.tint.set(im, e); }
-  if (e.key !== key) { tintSprite(e.cv, im, im.naturalWidth * sc1 * K_MAX, im.naturalHeight * sc1 * K_MAX, lt); e.key = key; }
-  return e.cv;
+  if (!e) { e = { cv: newCanvas(2, 2), key: '', rim: {} }; c.tint.set(im, e); }
+  if (e.key !== key) { tintSprite(e.cv, im, im.naturalWidth * sc1 * K_MAX, im.naturalHeight * sc1 * K_MAX, lt, PET_GRADE); e.key = key; }
+  return e;
+}
+function rimOf(e, im, side) {
+  const key = side + '|' + e.cv.width;
+  if (e.rim[side] && e.rim[side].key === key) return e.rim[side].cv;
+  const w = e.cv.width, h = e.cv.height, c = newCanvas(w, h), a = c.getContext('2d'), d = Math.max(2, Math.round(w * 0.035));
+  a.drawImage(im, 0, 0, w, h);
+  a.globalCompositeOperation = 'source-in'; a.fillStyle = 'rgb(255,168,92)'; a.fillRect(0, 0, w, h);
+  a.globalCompositeOperation = 'destination-out'; a.drawImage(im, side > 0 ? -d : d, Math.round(d * 0.5), w, h);
+  e.rim[side] = { cv: c, key };
+  return c;
 }
 function drawAnimalSprite(g, c, sp, T) {
-  const S = SPR[c.spr], sc1 = LW.petUnit(c.kind,S.img.walk1), sc = sc1 * c.k;
+  const S = SPR[c.spr], sc1 = LW.petUnit(c.kind, S.img.walk1), sc = sc1 * c.k;
   if (sp.im !== c.sprA) {
     const sw = c.sprA ? LW.petSwap(c.sprA, sp.im, isWalkFrame(c.sprA, S), isWalkFrame(sp.im, S)) : 'cut';
     if (sw !== 'cut') { c.sprB = c.sprA; c.sprT = 0; c.sprFd = sw === 'quick' ? 0.12 : 0.24; }
@@ -1232,48 +699,38 @@ function drawAnimalSprite(g, c, sp, T) {
   const awake = 1 - c.s, playing = music.np && music.np.playing;
   const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
   const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
-  let sx = 1, sy = 1 + (0.016 + 0.014 * calm.lv) * br - 0.04 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;
-  if (sp.kind === 'walk') bob = Math.abs(Math.sin(c.gait * TAU)) * 2.4 * c.k;
+  let sx = 1, sy = 1 + (0.014 + 0.012 * calm.lv) * br - 0.035 * Math.max(0, c.nod) * vibe, rot = 0;
   if (sp.kind === 'hop') { sy *= 1 - 0.14 * c.crouch + 0.06 * c.air; sx *= 1 + 0.06 * c.crouch; rot = c.air > 0.05 ? -0.12 * Math.cos(c.air * Math.PI) : 0; }
   if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.07 * c.w.stretch; }
-  if (sp.kind === 'sniff') rot = 0.07 * c.w.sniff;
-  if (sp.kind === 'paw') { sy *= 1 + 0.04 * c.pawK; rot = -0.08 * c.pawK; }
-  if (c.wagK > 0.01 && sp.kind !== 'walk') rot += Math.sin(T * 14) * 0.012 * c.wagK;
-  g.save(); g.translate(c.x, c.y - bob); g.scale((Math.sign(c.faceS) || c.face) * (0.78 + 0.22 * Math.abs(c.faceS)) * sx, sy); g.rotate(rot);
+  if (c.wagK > 0.01 && sp.kind !== 'walk') rot += Math.sin(T * 14) * 0.01 * c.wagK;
+  const faceSign = Math.sign(c.faceS) || c.face;
+  g.save(); g.translate(c.x, c.y); g.scale(faceSign * (0.78 + 0.22 * Math.abs(c.faceS)) * sx, sy); g.rotate(rot);
   const transition = LW.poseFrame(c.sprB, c.sprA, c.sprT);
-  LW.petComposite(g,c,transition.layers.map(layer=>{
-    const im=layer.pose,key=Object.keys(S.img).find(k=>S.img[k]===im);
-    const pk=LW.petPoseScale(c.kind||'cat',key,S.img.walk1,im),w=im.naturalWidth*sc*pk,h=im.naturalHeight*sc*pk;
-    return {image:tinted(c,im,sc1),x:-w/2,y:-h,w,h,alpha:layer.alpha};
+  let main = null;
+  LW.petComposite(g, c, transition.layers.map((layer) => {
+    const im = layer.pose, key = Object.keys(S.img).find((k) => S.img[k] === im);
+    const pk = LW.petPoseScale(c.kind || 'cat', key, S.img.walk1, im), w = im.naturalWidth * sc * pk, h = im.naturalHeight * sc * pk;
+    const e = tinted(c, im, sc1), fr = { image: e.cv, x: -w * (im.petFa != null ? im.petFa : 0.5), y: -h, w, h, alpha: layer.alpha };
+    if (!main || layer.alpha > main.alpha) main = Object.assign({ e, im }, fr);
+    return fr;
   }));
-  g.globalAlpha = 1;
-  // the cat's raised paw tapping at snowflakes on the glass
-  if (sp.kind === 'paw' && c.pawK > 0.05) {
-    const w = sp.im.naturalWidth * sc, h = sp.im.naturalHeight * sc;
-    // a front leg lifts from the chest, reaching up past the nose to the glass
-    const up = c.pawK, tap = Math.sin(c.pawT * 9) * 0.5 + 0.5;
-    const shx = w * 0.24, shy = -h * 0.3;
-    const px = lerp(w * 0.32, w * 0.66 + 4 * tap * c.k, up), py = lerp(-h * 0.08, -h * (0.8 + 0.12 * tap), up);
-    const pal = petPal(c.coat, c.light);
-    g.lineCap = 'round'; g.strokeStyle = pal.outline; g.lineWidth = 11 * c.k; g.beginPath(); g.moveTo(shx, shy); g.quadraticCurveTo(w * 0.6, -h * 0.3, px, py); g.stroke();
-    g.strokeStyle = pal.base; g.lineWidth = 8.5 * c.k; g.stroke();
-    g.fillStyle = pal.white; g.beginPath(); g.ellipse(px, py, 5.5 * c.k, 4.4 * c.k, -0.9, 0, TAU); g.fill();
+  // rim light on the side facing the fire (in sprite-local terms)
+  if (main && c.rimK > 0.03) {
+    const side = Math.sign(L.fire.fx - c.x) * faceSign >= 0 ? 1 : -1;
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = Math.min(0.85, c.rimK) * main.alpha;
+    g.drawImage(rimOf(main.e, main.im, side), main.x, main.y, main.w, main.h);
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   }
   g.restore();
 }
-
-// ---- animal state ----
 function makeAnimal(id, coat, opts) {
   const c = {
     x: 0, y: 0, k: 1, face: 1, faceS: 1, plat: 'floor', node: null, spot: null, dest: null,
-    w: {}, P: null, F: null, light: [1, 1, 1], rigK: 1,
-    gait: 0, walk: 0, s: 0, blink: 0, blinkT: rand(1, 4), blinkDur: 0.16, earTw: 0, earTwV: 0, earT: rand(3, 8),
-    yawn: 0, yawnT: -1, nextYawn: rand(40, 100), happyT: 0, lastStim: nowS(), wakeUntil: 0, lookX: 0.4, lookY: 0, breathP: rand(0, 6),
-    nod: 0, nodV: 0, earPerk: 0, tailN: 11, tailInit: false, plan: [], act: null, roamT: rand(10, 22), stretchT: -1, wantStretch: false,
-    air: 0, crouch: 0, restT: 0, pawT: 0, pawK: 0, pawNext: rand(2, 5), wagK: 0,
+    w: {}, light: [1, 1, 1], rimK: 0, gait: 0, walk: 0, s: 0, happyT: 0, lastStim: nowS(), wakeUntil: 0, breathP: rand(0, 6),
+    nod: 0, nodV: 0, earPerk: 0, plan: [], act: null, roamT: rand(14, 26), stretchT: -1, wantStretch: false,
+    air: 0, crouch: 0, restT: 0, wagK: 0, gone: false, leaving: false,
   };
   for (const n of POSE_NAMES) c.w[n] = n === 'loaf' ? 1 : 0;
-  c.tailA = new Float32Array(c.tailN); c.tailV = new Float32Array(c.tailN);
   Object.defineProperty(c, 'id', { value: id, writable: false, enumerable: true });
   Object.defineProperty(c, 'coat', { value: coat, writable: false, enumerable: true });
   Object.defineProperty(c, 'kind', { value: coat.species, writable: false, enumerable: true });
@@ -1281,39 +738,39 @@ function makeAnimal(id, coat, opts) {
   return c;
 }
 const dog = makeAnimal('maple', COAT_DOG, {
-  spr: 'dogs/golden', refW: 168, rigK: 1.15, speed: 58, happyPose: 'belly-up', home: 'rug',
+  spr: 'dogs/golden', speed: 62, happyPose: 'belly-up', home: 'rug', sound: 'woof',
   sprMap: { stand: 'walk1', sniff: 'walk1', sit: 'sit', loaf: 'lie', curl: 'lie', stretch: 'walk1' },
-  pref: { rug: 3, chair: 1.6, door: 1.1 },
+  pref: { rug: 3, rugL: 1.2, cab: 1.4 },
 });
 const cat = makeAnimal('ember', COAT_CAT, {
-  spr: 'cats/orange', refW: 158, rigK: 0.95, speed: 52, home: 'sill',
+  spr: 'cats/orange', speed: 56, home: 'seat', sound: 'purr',
   sprMap: { stand: 'walk1', sniff: 'walk1', sit: 'sit', loaf: 'loaf', curl: 'sleep', stretch: 'stretch' },
-  pref: { sill: 2.2, shelf: 1.8, perch: 1.2, chair: 1.6, hearth: 0.9 },
+  pref: { seat: 2.6, perch: 1.1, rugL: 1.3, hearthF: 1.2 },
 });
 const animals = Object.freeze([dog, cat]);
 
 const calm = { on: false, t: 0, lv: 0, auto: 0 };
 // Diegetic breathing: the hearth carries the breath (fire + embers + room light swell on the in-breath,
-// hold still, ebb on the out-breath); lw.js only draws a quiet caption. Mirror the guide's clock.
+// hold still, ebb on the out-breath; the snow outside slows); lw.js only draws a quiet caption.
 LW.breathDiegetic = true;
-LW.breathLabelAt = [0.66, 0.86];   // dark floor right of the rug, under the record cabinet: clear of the hearth, the dog and the Dock
-const guide = { on: false, t0: 0, a: 0 };
+const guide = { on: false, t0: 0 };
 LW.on('calm', (on) => { if (on && !guide.on) { guide.on = true; guide.t0 = nowS(); } });
-function stepGuide(dt) { guide.a += ((LW.calm ? 1 : 0) - guide.a) * Math.min(1, dt * 1.5); if (!LW.calm && guide.a < 0.01) guide.on = false; }
-function breathSt() { return LW.breathState(guide.on ? nowS() - guide.t0 : 0); }
-function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1 full lungs
+function stepGuide() { if (!LW.calm && calm.lv < 0.01) guide.on = false; }
+function breathT() { const t = LW.breathTime ? LW.breathTime() : 0; return t > 0 ? t : nowS() - guide.t0; }
+function breathSt() { return LW.breathState(guide.on ? breathT() : 0); }
+function breath() { return guide.on ? breathSt().level : 0; }
 function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
-function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
+function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }
 const toW = (px) => (px / cssH) * 1000;
-function ptrW() { return { x: toW(LW.pointer.x), y: toW(LW.pointer.y) }; }
-let ptrSpeed = 0, ptrLast = null;
-const kFloor = (y) => 0.9 + (y - 860) / 100 * 0.14;
-function nodeK(n) { return n.plat === 'shelf' ? 0.86 : n.plat === 'sill' ? 0.84 : 0.95; }
-function spotPos(name) { const S = L.spots[name]; return S.node ? L.nodes[S.node] : S; }
+function ptrW() { const x = toW(LW.pointer.x); return { x: MIR ? W - x : x, y: toW(LW.pointer.y) }; }
+// apparent size from depth: the plate's floor is ~3.6 px/cm at the armchair's feet (y 850 px)
+const kFloor = (y) => { const yi = y / KY, s = 3.6 + (yi - 850) * 0.0115; return clamp(1.36 * s / 3.95, 0.7, 1.7); };
+function spotPos(name) { const S = name === 'exit' ? L.exit : L.spots[name]; return S.node ? L.nodes[S.node] : S; }
+function spotDef(name) { return name === 'exit' ? L.exit : L.spots[name]; }
 function placeAnimal(c, name) {
-  const S = L.spots[name];
+  const S = spotDef(name);
   c.spot = name; c.dest = null; c.plan = []; c.act = null; c.air = 0; c.crouch = 0;
-  if (S.node) { const N = L.nodes[S.node]; c.node = S.node; c.plat = N.plat; c.x = N.x; c.y = N.y; c.k = nodeK(N); }
+  if (S.node) { const N = L.nodes[S.node]; c.node = S.node; c.plat = N.plat; c.x = N.x; c.y = N.y; c.k = N.k; }
   else { c.node = null; c.plat = 'floor'; c.x = S.x; c.y = S.y; c.k = kFloor(S.y); }
   c.restPose = S.rest[0];
 }
@@ -1321,18 +778,15 @@ function spotOK(c, name) {
   const S = L.spots[name];
   if (S.who !== 'any' && S.who !== c.kind) return false;
   const other = animals.find((o) => o !== c);
-  const busy = (n) => other.spot === n || other.dest === n;
-  if (busy(name)) return false;
-  if (name === 'chair' && (busy('perch') || busy('shelf')) && c.kind === 'cat') return true;
+  if (!other.gone && (other.spot === name || other.dest === name)) return false;
   return true;
 }
 function spotWeight(c, name) {
   if (!spotOK(c, name)) return 0;
   let w = c.pref[name] || 0;
-  const playing = music.np && music.np.playing;
-  if (name === 'rug' && E.day < 0.5) w *= 1.4;
-  if (name === 'sill' && (E.snow + E.flurry + E.rain + E.fireflies) > 0.2) w *= 1.4;   // something to watch
-  if (name === 'door' && playing) w *= 0.6;
+  const playing = music.np && music.np.playing, night = 1 - E.day;
+  if ((name === 'rug' || name === 'hearthF') && night > 0.5) w *= 1.5;   // the fire is the best place at night
+  if (L.spots[name].music && playing) w *= 2;                          // listening by the record player
   if (name === c.spot) w *= 0.05;
   return w;
 }
@@ -1343,10 +797,10 @@ function pickSpot(c) {
   return c.home;
 }
 function planTrip(c, dest) {
-  const D = L.spots[dest], plan = [];
+  const D = spotDef(dest), plan = [];
   const cur = c.node ? L.nodes[c.node].chain : [], dc = D.node ? L.nodes[D.node].chain : [];
   let p = 0;
-  if (cur.length && dc.length && L.nodes[cur[0]].base === L.nodes[dc[0]].base) while (p < cur.length && p < dc.length && cur[p] === dc[p]) p++;
+  if (cur.length && dc.length) while (p < cur.length && p < dc.length && cur[p] === dc[p]) p++;
   if (c.s > 0.5 || c.w.curl > 0.4) plan.push({ t: 'pose', pose: 'stretch', dur: 2.4 });
   plan.push({ t: 'pose', pose: 'stand', dur: 0.6 });
   for (let i = cur.length - 1; i >= Math.max(p, 1); i--) plan.push({ t: 'hop', node: cur[i - 1] });
@@ -1358,29 +812,41 @@ function planTrip(c, dest) {
 }
 function goal(c, T) {
   const playing = music.np && music.np.playing;
-  const S = L.spots[c.spot] || {}, rest = S.rest || ['sit'];
+  const S = spotDef(c.spot) || {}, rest = S.rest || ['sit'];
   if (calm.on) return rest.includes('curl') ? 'curl' : 'loaf';
   if (c.stretchT >= 0) return 'stretch';
-  if (c.pawK > 0.05) return 'stand';
   if (T < c.wakeUntil || c.happyT > 0) return c.kind === 'dog' ? 'sit' : (rest[0] === 'curl' ? 'loaf' : rest[0]);
   if (playing && c.kind === 'dog' && (T - music.newTrackT) % 120 < 30) return 'sit';   // perks up for a new song
   if (playing) return c.restPose === 'curl' ? 'loaf' : c.restPose;
   if (T - c.lastStim > 50) return rest.includes('curl') ? 'curl' : 'loaf';
   return c.restPose || rest[0];
 }
+// pets on/off (LW.settings.pets): leave the room on foot, come back the same way
+function petsWanted() { return !(LW.settings && LW.settings.pets === false); }
+function syncPets() {
+  const want = petsWanted();
+  for (const c of animals) {
+    if (!want && !c.gone && !c.leaving) { c.leaving = true; c.stretchT = -1; c.wantStretch = false; planTrip(c, 'exit'); c.roamT = 1e9; }
+    else if (want && (c.gone || c.leaving)) {
+      if (c.gone) { placeAnimal(c, 'exit'); c.w.stand = 1; for (const n of POSE_NAMES) c.w[n] = n === 'stand' ? 1 : 0; }
+      c.gone = false; c.leaving = false; c.roamT = rand(30, 60);
+      later(c === cat ? 2.5 : 0.2, () => { if (!c.gone && !c.leaving) planTrip(c, c.home); });
+    }
+  }
+}
 function updateAnimal(c, dt, T) {
+  if (c.gone) return;
   const playing = music.np && music.np.playing;
-  const S = L.spots[c.spot];
-  // roam on a natural schedule; short visits (door, sill) end sooner
-  if (!c.act && !c.plan.length && !calm.on && c.stretchT < 0) {
+  const S = spotDef(c.spot);
+  if (!c.act && !c.plan.length && !calm.on && c.stretchT < 0 && !c.leaving) {
     c.restT += dt;
     c.roamT -= dt * (playing ? 1.2 : 1) * (c.s > 0.5 ? 0.6 : 1) * (S && S.short ? 1.8 : 1);
-    if (c.roamT <= 0) { c.roamT = rand(30, 70); planTrip(c, pickSpot(c)); }
+    if (c.roamT <= 0) { c.roamT = rand(35, 75); planTrip(c, pickSpot(c)); }
   }
-  if (calm.on && (c.plan.length || c.act) && (!c.act || c.act.t !== 'hop')) {
+  if (calm.on && !c.leaving && (c.plan.length || c.act) && (!c.act || c.act.t !== 'hop')) {
     // settle: finish where you are (on the floor that's fine too)
     c.plan = []; c.act = null; c.dest = null;
-    if (c.plat === 'floor' && (!S || Math.hypot(S.x - c.x, S.y - c.y) > 20)) c.spot = c.kind === 'dog' ? 'rug' : c.spot;
+    if (c.plat === 'floor' && (!S || S === L.exit || Math.hypot(S.x - c.x, S.y - c.y) > 20)) c.spot = c.kind === 'dog' ? 'rug' : 'rugL';
   }
   if (!c.act && c.plan.length) { c.act = c.plan.shift(); c.act.e = 0; }
   let target = goal(c, T), walking = false;
@@ -1388,12 +854,12 @@ function updateAnimal(c, dt, T) {
   const a = c.act;
   if (a) {
     a.e += dt;
-    const v = c.speed * c.k * (playing ? 1.06 : 1);
+    const v = c.speed * c.k * (playing ? 1.05 : 1);
     if (a.t === 'pose') { target = a.pose; if (a.e > a.dur) c.act = null; }
     else if (a.t === 'walk') {
       target = 'stand';
       if (!a.s0) a.s0 = { x: c.x, y: c.y };
-      if (c.w.stand > 0.85 && a.e > .45 && !LW.petSeqBusy(c)) {
+      if (c.w.stand > 0.85 && a.e > 0.45 && !LW.petSeqBusy(c)) {
         const span = a.x - a.s0.x;
         if (Math.abs(a.x - c.x) > 1.5) {
           c.face = Math.sign(a.x - c.x); walking = true;
@@ -1409,15 +875,15 @@ function updateAnimal(c, dt, T) {
       if (!a.from) {
         a.from = { x: c.x, y: c.y, k: c.k };
         if (a.floor) a.to = { x: a.floor.x, y: a.floor.y, k: kFloor(a.floor.y) };
-        else { const N = L.nodes[a.node]; a.to = { x: N.x, y: N.y, k: nodeK(N) }; }
-        a.dur = (a.node && L.nodes[a.node].hopDur) || (a.floor && c.node && L.nodes[c.node].hopDur) || 0.95;
+        else { const N = L.nodes[a.node]; a.to = { x: N.x, y: N.y, k: N.k }; }
+        a.dur = 1.0;
         c.face = Math.sign(a.to.x - c.x) || c.face;
       }
       const t = a.e / a.dur;
       c.hopPh = t < 0.25 ? 'crouch' : t < 0.85 ? 'air' : 'land'; c.hopU = (t - 0.25) / 0.6;
       if (t < 0.25) c.crouch = smooth(t / 0.25);
       else if (t < 0.85) {
-        const u = (t - 0.25) / 0.6, top = Math.min(a.from.y, a.to.y) - 55;
+        const u = (t - 0.25) / 0.6, top = Math.min(a.from.y, a.to.y) - 50;
         const ex = (1 - u) * (1 - u), mid = 2 * u * (1 - u), ee = u * u;
         c.x = ex * a.from.x + mid * (a.from.x + a.to.x) / 2 + ee * a.to.x;
         c.y = ex * a.from.y + mid * top + ee * a.to.y;
@@ -1429,22 +895,16 @@ function updateAnimal(c, dt, T) {
         sLand(c);
       }
     } else if (a.t === 'rest') {
-      const R = L.spots[a.spot];
+      const R = spotDef(a.spot);
       c.spot = a.spot; c.dest = null; c.restT = 0;
       c.restPose = R.rest[(Math.random() * R.rest.length) | 0];
       if (R.face) c.face = R.face; else if (Math.random() < 0.5) c.face = -c.face;
       if (R.short) c.roamT = rand(18, 32);
       if (c.wantStretch) { c.wantStretch = false; c.stretchT = 0; }
       c.act = null;
+      if (a.spot === 'exit') { c.gone = true; c.leaving = false; return; }
     }
   } else c.crouch = 0;
-  // the cat paws at snowflakes (or fireflies / raindrops) from the sill
-  const atSill = !c.act && c.spot === 'sill' && c.node === 'sill' && !calm.on;
-  const watch = E.snow + E.flurry + E.rain * 0.6 + E.fireflies;
-  c.pawNext -= dt;
-  if (atSill && c.pawT <= 0 && c.pawNext <= 0 && watch > 0.15 && c.s < 0.4) { c.pawT = rand(1.6, 2.6); c.pawNext = rand(4, 9); c.face = 1; }
-  if (c.pawT > 0) { c.pawT -= dt; if (!atSill) c.pawT = 0; }
-  c.pawK = approach(c.pawK, c.pawT > 0 ? 1 : 0, 6, dt);
   c.walk = approach(c.walk, walking ? 1 : 0, 8, dt);
   c.faceS = approach(c.faceS, c.face, 9, dt);
   if (Math.abs(c.faceS) < 0.12) c.faceS = c.face * 0.12;
@@ -1453,176 +913,247 @@ function updateAnimal(c, dt, T) {
   for (const n of POSE_NAMES) c.w[n] = approach(c.w[n], n === target ? 1 : 0, rate, dt);
   sprSeqStep(c);
   c.s = c.w.curl;
-  if (c.stretchT >= 0) { c.stretchT += dt; if (c.stretchT > 4.6) { c.stretchT = -1; c.lastStim = T; } if (c.stretchT > 1.2 && c.stretchT < 1.3 && c.yawnT < 0) c.yawnT = 0; }
+  if (c.stretchT >= 0) { c.stretchT += dt; if (c.stretchT > 4.6) { c.stretchT = -1; c.lastStim = T; } }
   c.happyT = Math.max(0, c.happyT - dt); c.earPerk = Math.max(0, c.earPerk - dt);
   c.wagK = approach(c.wagK, c.kind === 'dog' && (c.happyT > 0 || (playing && c.s < 0.3)) ? 1 : 0, 3, dt);
-  c.nextYawn -= dt;
-  if (c.nextYawn <= 0 && c.s < 0.3 && c.yawnT < 0) { c.yawnT = 0; c.nextYawn = rand(60, 140); }
-  if (c.yawnT >= 0) { c.yawnT += dt; c.yawn = Math.sin(clamp(c.yawnT / 2.2, 0, 1) * Math.PI) ** 1.4; if (c.yawnT > 2.2) { c.yawnT = -1; c.yawn = 0; } }
-  c.blinkT -= dt;
-  if (c.blinkT <= 0) { c.blink = Math.random() < 0.3 ? 0.6 : 0.16; c.blinkDur = c.blink; c.blinkT = rand(2.2, 6); }
-  c.blink = Math.max(0, c.blink - dt);
-  const blinkF = c.blink > 0 ? Math.sin((1 - c.blink / c.blinkDur) * Math.PI) : 0;
-  c.earT -= dt;
-  if (c.earT <= 0) { c.earTwV += rand(10, 16) * (Math.random() < 0.5 ? 1 : -0.6); c.earT = rand(3, 10); }
-  c.earTwV += (-c.earTw * 120 - c.earTwV * 9) * dt; c.earTw += c.earTwV * dt;
   c.breathP += dt * TAU * (calm.lv > 0.5 ? 0.1 : c.s > 0.5 ? 0.22 : 0.33);
-  const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
   c.nodV += (-c.nod * 70 - c.nodV * 10) * dt; c.nod += c.nodV * dt;
-  const pw = ptrW(), inside = LW.pointer.inside;
-  let tlx = 0.3, tly = 0.1;
-  const hx = c.x + 46 * c.k * c.face, hy = c.y - 80 * c.k;
-  if (inside && Math.hypot(pw.x - hx, pw.y - hy) < 520) { tlx = clamp((pw.x - hx) / 300, -1, 1) * c.face; tly = clamp((pw.y - hy) / 220, -1, 1); if (ptrSpeed > 40) c.lastStim = T; }
-  c.lookX = approach(c.lookX, tlx, 3, dt); c.lookY = approach(c.lookY, tly, 3, dt);
-  const Pz = blendPose(c), awake = 1 - c.s;
-  Pz.try *= 1 + 0.03 * br; Pz.ty -= 0.6 * br; Pz.hdy -= 0.5 * br * awake;
-  if (c.walk > 0.01) { const b = Math.sin(c.gait * TAU * 2) * 1.2 * c.walk; Pz.ty += b; Pz.cy += b; Pz.hy += b; Pz.hdy += b * 0.6; }
-  if (c.crouch) { const q = c.crouch * 10; Pz.ty += q; Pz.cy += q; Pz.hy += q; Pz.hdy += q * 0.9; Pz.sy += q; Pz.jy += q; }
-  Pz.hdx += c.lookX * 2.2 * awake; Pz.hdy += c.lookY * 2 * awake;
-  const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
-  Pz.hdy += c.nod * 5 * vibe;
-  c.F = { ht: 0.42 + c.lookX * 0.3 * awake, eye: c.s > 0.6 ? 0 : clamp(Pz.eye * (1 - blinkF) * (1 - c.yawn * 0.85), 0, 1), happy: c.happyT > 0 ? 1 : 0, lx: c.lookX, ly: c.lookY, mouth: c.yawn };
-  const sway = (playing ? Math.sin((T * music.bpm / 60) * Math.PI * 0.5) * 0.3 * vibe : Math.sin(T * 0.7) * 0.1 * awake) + (c.kind === 'dog' ? Math.sin(T * 14) * 0.25 * c.wagK : 0);
-  if (!c.tailInit) { for (let i = 0; i < c.tailN; i++) c.tailA[i] = tailTarget(c, i, 0); c.tailInit = true; }
-  stepTail(c, (i) => tailTarget(c, i, sway + c.walk * Math.sin(c.gait * TAU) * 0.15), dt, 46, 8);
-  c.P = Pz;
-  c.light = lightAt(c.x, c.y - 50 * c.k);
+  const hy = c.y - 50 * c.k;
+  c.light = petLight(c.x, hy);
+  c.rimK = fireAt(c.x, hy) * 0.75 * (1 + 0.25 * fire.flick) * (1 - 0.55 * E.day);
 }
-function behindChair(c) { return c.plat === 'floor' && !(c.act && c.act.t === 'hop') && c.y < L.chair.footY; }
+function drawShadow(g, c) {
+  // a soft contact shadow under the body, plus a long faint one thrown away from the fire
+  const air = c.air || 0, sw = (c.kind === 'dog' ? 64 : 52) * c.k * (1 - air * 0.5), sy = c.air > 0 ? c.y + air * 30 * c.k : c.y;
+  const dark = 0.5 * (1 - air) * (0.75 + 0.25 * (1 - E.day));
+  g.save(); g.translate(c.x, sy + 1); g.scale(1, 0.16);
+  const gr = g.createRadialGradient(0, 0, 1, 0, 0, sw);
+  gr.addColorStop(0, `rgba(14,6,3,${dark})`); gr.addColorStop(0.6, `rgba(14,6,3,${dark * 0.4})`); gr.addColorStop(1, 'rgba(14,6,3,0)');
+  g.fillStyle = gr; g.fillRect(-sw, -sw, sw * 2, sw * 2); g.restore();
+  const fk = fireAt(c.x, c.y - 40) * (1 - 0.6 * E.day);
+  if (fk > 0.05 && c.plat === 'floor') {
+    const dx = c.x - L.fireLight.x, away = Math.sign(dx) || 1, len = sw * (1.2 + 0.5 * clamp(Math.abs(dx) / 500, 0, 1));
+    g.save(); g.translate(c.x + away * len * 0.55, sy + 3); g.scale(1, 0.13);
+    const g2 = g.createRadialGradient(0, 0, 1, 0, 0, len);
+    const a2 = Math.min(0.35, fk * 0.35) * (1 - air) * (1 - 0.12 * fire.flick);
+    g2.addColorStop(0, `rgba(10,4,2,${a2})`); g2.addColorStop(1, 'rgba(10,4,2,0)');
+    g.fillStyle = g2; g.fillRect(-len, -len, len * 2, len * 2); g.restore();
+  }
+}
 function drawAnimal(g, c, T) {
-  const sw = (c.kind === 'dog' ? 70 : 58) * c.k * (1 - c.air * 0.6), sa = 0.4 * (1 - c.air);
-  const sy = c.air > 0 ? c.y + c.air * 30 * c.k : c.y;
-  const gr = g.createRadialGradient(c.x, sy, 2, c.x, sy, sw);
-  gr.addColorStop(0, `rgba(20,8,4,${sa})`); gr.addColorStop(1, 'rgba(20,8,4,0)');
-  g.save(); g.translate(c.x, sy); g.scale(1, 0.18); g.translate(-c.x, -sy); g.fillStyle = gr; g.beginPath(); g.arc(c.x, sy, sw, 0, TAU); g.fill(); g.restore();
+  if (c.gone) return;
   const sp = spriteFor(c);
-  if (sp) drawAnimalSprite(g, c, sp, T); else drawRig(g, c);
+  if (!sp) return;   // sprites still loading
+  drawShadow(g, c);
+  drawAnimalSprite(g, c, sp, T);
 }
-function hitAnimal(c, x, y) { const lx = (x - c.x) / c.k, ly = (y - c.y) / c.k, half = c.kind === 'dog' ? 80 : 70; return lx > -half && lx < half && ly > -130 && ly < 10; }
+function hitAnimal(c, x, y) { if (c.gone) return false; const lx = (x - c.x) / c.k, ly = (y - c.y) / c.k, half = c.kind === 'dog' ? 75 : 62; return lx > -half && lx < half && ly > -115 && ly < 10; }
 
 // =====================================================================
-//  live layer: fire, embers, turntable, framed art, sleeve, card, steam
+//  the fire: painted flames (flipbook) behind a painted log grate with
+//  glowing coals; embers; smoke into the flue; its light on the room
 // =====================================================================
-const fire = { flick: 0, t: 0, boost: 0, tongues: [] };
-const embers = [], notes = [], hearts = [], steam = [], flakes = [], drops = [], flies = [], taps = [], glassDrops = [];
-let steamAcc = 0, flash = { t: 9, next: 8 };
-function initFire() { fire.tongues = []; for (let i = 0; i < 9; i++) fire.tongues.push({ u: (i + 0.5) / 9 + rand(-0.03, 0.03), ph: rand(0, 50), h: rand(0.6, 1), w: rand(0.75, 1.15) }); }
+const fire = { flick: 0, boost: 0, t: 0, ph: 0, seq: [0, 3, 5, 1, 6, 2, 7, 4], seqB: [4, 1, 7, 2, 0, 6, 3, 5] };
+const embers = [], smoke = [], steam = [], words = [], flakes = [[], [], []], drops = [], flies = [], glassDrops = [];
+let steamAcc = 0, smokeAcc = 0, flash = { t: 9, next: 8 }, snowAcc = 0.5;
 function updateFire(dt, T) {
   fire.t += dt;
-  const n = noise1(T * 2.3) * 0.6 + noise1(T * 5.1 + 9) * 0.4;
-  fire.flick = (n - 0.5) * 2 * (1 - 0.6 * calm.lv * breathHold());   // the flames settle on the holds
-  fire.boost = Math.max(0, fire.boost - dt * 1.6);
+  const n = noise1(T * 2.1) * 0.55 + noise1(T * 5.3 + 9) * 0.3 + noise1(T * 11.7 + 3) * 0.15;
+  fire.flick = (n - 0.5) * 2 * (1 - 0.7 * calm.lv * breathHold());   // the flames settle on the holds
+  fire.boost = Math.max(0, fire.boost - dt * 1.4);
+  fire.ph += dt * (10.5 + 3 * fire.boost) * (1 - 0.5 * calm.lv * breathHold());
   const lv = fireLv();
-  // embers drifting up (more with the bass)
-  const rate = (5 + 7 * music.lv * LW.music.bass) * lv * (1 + calm.lv * (2.2 * breath() - 0.6));   // calm: embers swell with the in-breath
+  const rate = (4 + 6 * music.lv * LW.music.bass) * lv * (1 + calm.lv * (2.2 * breath() - 0.6));
   if (Math.random() < rate * dt) spawnEmber(false);
+  const B = L.fire;
   for (let i = embers.length - 1; i >= 0; i--) {
     const e = embers[i]; e.t += dt;
-    e.vy -= 40 * dt; e.vx += Math.sin(T * 3 + e.ph) * 30 * dt; e.vx *= 1 - dt * 0.8;
+    e.vy -= (e.out ? -260 : 50) * dt; e.vx += Math.sin(T * 3 + e.ph) * 30 * dt; e.vx *= 1 - dt * 0.8;
     e.x += e.vx * dt; e.y += e.vy * dt;
-    if (e.t > e.life || e.y < L.fire.box.y0 + 10 && !e.out) embers.splice(i, 1);
-    else if (e.out && e.y > L.fire.box.y1 + 30) { e.vy = -Math.abs(e.vy) * 0.3; e.vx *= 0.5; }
+    if (e.out && e.y > L.hearth.y0 + 8) { e.y = L.hearth.y0 + 8; e.vy = 0; e.vx *= 0.6; }
+    if (e.t > e.life || (!e.out && e.y < B.y0 - 4)) embers.splice(i, 1);
   }
   if (embers.length > 120) embers.splice(0, embers.length - 120);
+  // smoke curling up from the flame tips into the flue
+  smokeAcc += dt * 1.6 * lv;
+  while (smokeAcc > 1) { smokeAcc -= 1; smoke.push({ x: B.fx + rand(-55, 55), y: B.base - rand(70, 95), t: 0, life: rand(3.2, 5), cell: (Math.random() * 4) | 0, w: rand(34, 52), flip: Math.random() < 0.5, vx: rand(-4, 4), ph: rand(0, 6) }); }
+  for (let i = smoke.length - 1; i >= 0; i--) { const s = smoke[i]; s.t += dt; s.y -= (16 + 10 * s.t) * dt; s.x += (s.vx + Math.sin(T * 0.9 + s.ph) * 5) * dt; if (s.t > s.life) smoke.splice(i, 1); }
 }
 function spawnEmber(pop) {
-  const B = L.fire.box;
-  embers.push({ x: lerp(B.x0 + 50, B.x1 - 50, Math.random()), y: L.fire.fy - rand(0, 20), vx: rand(-14, 14) + (pop ? rand(-50, 50) : 0), vy: pop ? rand(-170, -90) : rand(-70, -30), t: 0, life: pop ? rand(0.8, 1.4) : rand(1.2, 2.4), r: pop ? rand(1.4, 2.4) : rand(0.8, 1.6), ph: rand(0, 6), out: pop && Math.random() < 0.25 });
+  const B = L.fire;
+  embers.push({ x: B.fx + rand(-70, 70), y: B.base - rand(10, 30), vx: rand(-12, 12) + (pop ? rand(-40, 40) : 0), vy: pop ? rand(-150, -80) : rand(-60, -25), t: 0, life: pop ? rand(0.8, 1.5) : rand(1.0, 2.2), r: pop ? rand(1.0, 1.8) : rand(0.6, 1.3), ph: rand(0, 6), out: pop && Math.random() < 0.3 });
+}
+let LOGS_DARK = null;
+function logsDark(im) {   // the grate with its coals cooled to ash-dark (for a dying summer fire)
+  if (LOGS_DARK) return LOGS_DARK;
+  const c = newCanvas(im.naturalWidth, im.naturalHeight), g = c.getContext('2d');
+  g.drawImage(im, 0, 0); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#1c120d'; g.fillRect(0, 0, c.width, c.height);
+  return (LOGS_DARK = c);
+}
+function fireLevelNow() {
+  const lv = fireLv() * (1 + 0.12 * fire.boost + 0.08 * music.lv * LW.music.bass);
+  return lv * (1 + calm.lv * (0.45 * (calm.lv > 0.01 ? breath() : 0) - 0.2));   // calm: tall on full lungs, low on empty
+}
+function drawFlames(g, cx, base, wk, hk, alpha, idx, flip) {
+  const im = ART.fire; if (!im) return;
+  const fw = 420, fh = 400, w = L.fire.w * 0.98 * wk, h = w * (fh / fw) * hk;
+  const f0 = Math.floor(idx) % 8, f1 = (f0 + 1) % 8, m = idx - Math.floor(idx);
+  const seq = flip ? fire.seqB : fire.seq;
+  g.save(); g.translate(cx, base); if (flip) g.scale(-1, 1);
+  const y = -h * (372 / fh);
+  g.globalAlpha = alpha * (1 - m); g.drawImage(im, seq[f0] * fw, 0, fw, fh, -w / 2, y, w, h);
+  g.globalAlpha = alpha * m; g.drawImage(im, seq[f1] * fw, 0, fw, fh, -w / 2, y, w, h);
+  g.restore();
 }
 function drawFire(g, T) {
-  const B = L.fire.box, F = L.fire, lv = fireLv() * (1 + 0.12 * fire.boost + 0.08 * music.lv * LW.music.bass);
-  const cb = calm.lv > 0.01 ? breath() : 0;
-  const lvB = lv * (1 + calm.lv * (0.5 * cb - 0.22));   // the fire draws in with the breath: low on empty lungs, tall on full
-  g.save(); g.beginPath(); g.rect(B.x0, B.y0, B.x1 - B.x0, B.y1 - B.y0 + 4); g.clip();
+  const B = L.fire, lvB = fireLevelNow(), fl = fire.flick;
+  g.save(); g.beginPath(); g.rect(B.x0, B.y0, B.w, B.h + 12); g.clip();
+  // the back of the firebox, lit by the flames
   g.globalCompositeOperation = 'lighter';
-  const span = B.x1 - B.x0 - 70, x0 = B.x0 + 35;
-  for (const [layer, wk, hk] of [[0, 1.0, 1.0], [1, 0.7, 0.78], [2, 0.4, 0.5]]) {
-    for (const tg of fire.tongues) {
-      const cx = x0 + tg.u * span, mid = 1 - Math.abs(tg.u - 0.5) * 1.3;
-      const nh = noise1(T * (2.2 + layer * 0.6) + tg.ph) * 0.55 + 0.45;
-      const h = (60 + 90 * mid) * tg.h * nh * hk * lvB;
-      const w = (22 + 16 * mid) * tg.w * wk;
-      const sway = (noise1(T * 1.7 + tg.ph * 2) - 0.5) * 22 + Math.sin(T * 4 + tg.ph) * 4;
-      const by = F.fy + 6;
-      g.setTransform(U * w / 32, 0, -U * sway / 128, U * h / 128, U * cx, U * by);   // translate · skewX(sway) · scale
-      g.drawImage(FLAMES[layer], -32, -128);
-    }
+  drawSpriteXY(g, GLOW_FIRE, B.fx, B.base - 40, 175, 150, (0.6 + 0.14 * fl) * lvB);
+  // flames: two flipbook layers (one mirrored, narrower, out of phase) — painted fire, procedural flicker
+  const hk = (0.86 + 0.26 * lvB) * (1 + 0.07 * fl);
+  const fa = smooth(lvB / 0.45);   // below that the flames die back to coals
+  drawFlames(g, B.fx - 6, B.base, 1.0, hk, 0.95 * Math.min(1.1, lvB) * fa, fire.ph, false);
+  drawFlames(g, B.fx + 16, B.base + 2, 0.72, hk * 0.8, 0.55 * Math.min(1.1, lvB) * fa, fire.ph * 1.13 + 3.5, true);
+  g.globalCompositeOperation = 'screen';
+  // smoke drawn over the flame tips, rising into the flue (lit warm from below)
+  const sm = ART.smoke;
+  if (sm) for (const s of smoke) {
+    const k = s.t / s.life, a = Math.sin(Math.min(1, k * 3) * Math.PI * 0.5) * (1 - k) * 0.2 * fireLv(), w = s.w * (1 + k * 0.8), h = w * 2;
+    g.save(); g.globalAlpha = a; g.translate(s.x, s.y); if (s.flip) g.scale(-1, 1);
+    g.drawImage(sm, s.cell * 300, 0, 300, 600, -w / 2, -h, w, h); g.restore();
   }
-  g.setTransform(U, 0, 0, U, 0, 0);
-  // glowing log undersides + coals
-  drawSpriteXY(g, GLOW_FIRE, F.cx, F.fy + 14, 110, 26, 0.55 * lvB);
-  for (let i = 0; i < 12; i++) { const x = B.x0 + 40 + i * ((B.x1 - B.x0 - 80) / 11), k = noise1(T * 1.3 + i * 7); g.fillStyle = `rgba(255,${120 + 80 * k | 0},40,${(0.35 + 0.5 * k) * lvB})`; g.beginPath(); g.arc(x, F.fy + 18 + (i % 3) * 3, 2.4 + k * 2, 0, TAU); g.fill(); }
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
   g.restore();
-  // embers (can float out of the box on pops)
+  // the log grate (glowing coals painted in), its coals breathing with the flames
+  const lg = ART.logs, Lg = L.fire.logs;
+  if (lg) {
+    const w = Lg.w, h = w * lg.naturalHeight / lg.naturalWidth, x = Lg.cx - w / 2, y = Lg.bot - h;
+    g.drawImage(lg, x, y, w, h);
+    // daylight / low fire: the coals' painted glow is what the fire is; bright fire: they glow harder
+    // embers only (summer afternoon): the coals' painted glow is too hot for a dying fire — darken it
+    if (lvB < 0.45) { g.globalAlpha = (1 - lvB / 0.45) * 0.6; g.drawImage(logsDark(lg), x, y, w, h); g.globalAlpha = 1; }
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = clamp((0.16 + 0.16 * fl + 0.2 * fire.boost) * lvB, 0, 0.6);
+    g.drawImage(lg, x, y, w, h); g.globalAlpha = 1;
+    // small front tongues licking over the front log
+    g.save(); g.beginPath(); g.rect(B.x0, B.y0, B.w, B.h + 12); g.clip();
+    drawFlames(g, B.fx + 4, Lg.bot - h * 0.32, 0.7, 0.32 * (1 + 0.1 * fl), 0.42 * Math.min(1, lvB) * (0.35 + 0.65 * smooth(lvB / 0.45)), fire.ph * 0.93 + 5.2, false);
+    g.restore();
+    g.globalCompositeOperation = 'source-over';
+  }
+  // embers / sparks
   g.globalCompositeOperation = 'lighter';
-  const eK = 1 + calm.lv * (0.7 * cb - 0.2);   // embers glow larger on full lungs
+  const eK = 1 + calm.lv * (0.7 * breath() - 0.2);
   for (const e of embers) {
-    const k = 1 - e.t / e.life, a = Math.min(1, k * 1.6) * (0.6 + 0.4 * Math.sin(T * 20 + e.ph));
-    g.fillStyle = `rgba(255,${170 + 60 * k | 0},90,${a})`; g.beginPath(); g.arc(e.x, e.y, e.r * eK, 0, TAU); g.fill();
+    const k = 1 - e.t / e.life, a = Math.min(1, k * 1.6) * (0.55 + 0.45 * Math.sin(T * 23 + e.ph));
+    g.fillStyle = `rgba(255,${170 + 60 * k | 0},90,${a})`;
+    g.beginPath(); g.ellipse(e.x, e.y, e.r * eK, e.r * eK * (1 + Math.min(2.5, Math.abs(e.vy) / 60)), 0, 0, TAU); g.fill();
   }
   g.globalCompositeOperation = 'source-over';
-  // the fire lights the room (flicker)
-  drawSprite(g, GLOW_FIRE, F.cx, F.fy - 40, 210 * (1 + 0.04 * fire.flick), (0.32 + 0.06 * fire.flick + 0.1 * fire.boost) * lvB);
-  drawSprite(g, GLOW_WARM, F.cx, F.fy + 30, 400 * (1 + 0.03 * fire.flick), (0.07 + 0.025 * fire.flick + 0.04 * fire.boost) * lvB * (1 - 0.5 * E.day));
-  // candle flames
-  for (const [x, h] of [[F.x0 - 2, 44], [F.x0 + 16, 30], [F.x1 + 2, 38]]) {
-    const fy = F.mantelY - 6 - h - 7, f = 1 + 0.15 * Math.sin(T * 9 + x);
-    g.fillStyle = 'rgba(255,220,140,0.95)'; g.beginPath(); g.ellipse(x, fy, 3 * f, 7 * f, Math.sin(T * 3 + x) * 0.15, 0, TAU); g.fill();
-    drawSprite(g, GLOW_WARM, x, fy, 26, 0.35 * (1 - 0.4 * calm.lv));
+}
+// the fire's light on the room: the lit room flickers (boost layer) + a warm pool on hearth and rug
+function drawFireLight(g) {
+  const lvB = fireLevelNow(), fl = fire.flick, night = 1 - E.day;
+  if (boostRect && ART['room-night']) {
+    const a = clamp((0.13 + 0.12 * fl + 0.16 * fire.boost) * lvB * (0.35 + 0.65 * night), 0, 0.5);
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = a;
+    g.drawImage(boostCv, boostRect.x0, boostRect.y0, boostRect.w, boostRect.h);
+    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  }
+  drawSpriteXY(g, GLOW_FIRE, L.fire.fx, L.hearth.y0 + 10, 230, 46, (0.16 + 0.06 * fl) * lvB * (0.4 + 0.6 * night));
+  drawSpriteXY(g, GLOW_FIRE, L.fire.fx, L.rug.y + 10, 420, 110, (0.07 + 0.025 * fl) * lvB * (0.3 + 0.7 * night));
+}
+// candles, the shelf lantern and the fairy lights (painted bulbs; these are their live glows)
+function drawSmallLights(g, T) {
+  const night = 1 - E.day * 0.85, cl = 1 - calm.lv * 0.5, playing = !!(music.np && music.np.playing);
+  for (let i = 0; i < L.candles.length; i++) {
+    const p = L.candles[i], f = 0.8 + 0.2 * noise1(T * 6 + i * 13);
+    drawSpriteXY(g, GLOW_WARM, p.x, p.y + 1, 7 * f, 11 * f, 0.55 * night * cl);
+    drawSprite(g, GLOW_WARM, p.x, p.y + 4, 46 * f, 0.13 * night * cl);
+  }
+  const lf = 0.85 + 0.15 * noise1(T * 4.3 + 40);
+  drawSprite(g, GLOW_WARM, L.lantern.x, L.lantern.y, 40 * lf, 0.2 * night * cl);
+  const wave = playing ? 0.3 * music.pulse * music.lv : 0;
+  for (let i = 0; i < L.fairy.length; i++) {
+    const p = L.fairy[i], tw = 0.75 + 0.25 * Math.sin(T * (0.6 + (i % 5) * 0.13) + i * 2.1);
+    drawSprite(g, GLOW_WARM, p.x, p.y, 13, (0.22 * tw + wave) * night * cl);
   }
 }
-function drawTurntable(g, T) {
-  const tt = L.tt, cx = tt.cx, cy = tt.cy, r = tt.r, ry = r * 0.34;
-  const playing = !!(music.np && music.np.playing);
-  // platter + record (foreshortened disc)
-  g.fillStyle = '#1a1614'; g.beginPath(); g.ellipse(cx, cy + 3, r + 2, ry + 2, 0, 0, TAU); g.fill();
-  g.fillStyle = '#c8c4bc'; g.beginPath(); g.ellipse(cx, cy + 5, r + 2, ry + 2, 0, 0, Math.PI); g.fill();
-  g.fillStyle = '#121012'; g.beginPath(); g.ellipse(cx, cy, r, ry, 0, 0, TAU); g.fill();
-  const lt = lightAt(cx, cy - 20);
-  g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 1;
-  for (let k = 0.45; k < 0.98; k += 0.09) { g.beginPath(); g.ellipse(cx, cy, r * k, ry * k, 0, 0, TAU); g.stroke(); }
-  // rotating sheen (shows the spin)
-  const ang = music.spin;
-  g.save(); g.beginPath(); g.ellipse(cx, cy, r, ry, 0, 0, TAU); g.clip();
-  g.translate(cx, cy); g.scale(1, 0.34);
-  g.globalCompositeOperation = 'lighter';
-  for (const off of [0, Math.PI]) {
-    const gr = g.createLinearGradient(Math.cos(ang + off) * r * 0.2, Math.sin(ang + off) * r * 0.2, Math.cos(ang + off) * r, Math.sin(ang + off) * r);
-    gr.addColorStop(0, 'rgba(255,230,200,0)'); gr.addColorStop(1, rgba(mul([255, 220, 180], lt), 0.12));
-    g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r, ang + off - 0.25, ang + off + 0.25); g.fill();
-  }
-  g.globalCompositeOperation = 'source-over';
-  // label = album art, spinning
-  const lr = r * 0.36;
-  g.rotate(ang);
-  g.beginPath(); g.arc(0, 0, lr, 0, TAU); g.clip();
-  if (music.ever && coverCv) g.drawImage(coverCv, -lr, -lr, lr * 2, lr * 2); else { g.fillStyle = '#c8442e'; g.fillRect(-lr, -lr, lr * 2, lr * 2); g.fillStyle = '#efe4cc'; g.fillRect(-lr, -2, lr * 2, 4); }
-  g.restore();
-  g.fillStyle = '#ddd'; g.beginPath(); g.ellipse(cx, cy, 2, 1, 0, 0, TAU); g.fill();
-  // tonearm: pivot at the back right, swings onto the record when playing
-  const px = tt.x1 - 16, py = tt.top + 6, armA = lerp(-1.95, -2.55, music.arm);
-  const len = r * 1.05, hx = px + Math.cos(armA) * len, hy = py + Math.sin(armA) * len * 0.34 + 2 - 4 * (1 - music.arm) * 0;
-  g.fillStyle = '#2a2420'; g.beginPath(); g.arc(px, py, 6, 0, TAU); g.fill();
-  g.strokeStyle = '#d8d4cc'; g.lineWidth = 2.6; g.lineCap = 'round'; g.beginPath(); g.moveTo(px, py - 2); g.quadraticCurveTo(px - 10, py - 6, hx, hy - 6); g.stroke();
-  g.fillStyle = '#2a2a2a'; g.save(); g.translate(hx, hy - 5); g.rotate(armA + Math.PI * 0.5); g.fillRect(-4, -6, 8, 11); g.restore();
-  g.fillStyle = '#9a9a9a'; g.beginPath(); g.arc(px + 9, py - 3, 3.4, 0, TAU); g.fill();
-  // power LED
-  g.fillStyle = playing ? 'rgba(255,90,60,0.95)' : 'rgba(120,60,40,0.6)'; g.beginPath(); g.arc(tt.x0 + 12, tt.bot - 12, 2, 0, TAU); g.fill();
-  if (playing) drawSprite(g, GLOW_RED || GLOW_WARM, tt.x0 + 12, tt.bot - 12, 8, 0.4);
-}
+
+// =====================================================================
+//  the record player (THE music object), the sleeve, the card, the print
+// =====================================================================
 const GLOW_RED = sprite(32, [[0, 'rgba(255,120,80,1)'], [0.4, 'rgba(255,80,40,0.3)'], [1, 'rgba(255,60,30,0)']]);
+function ttRect() {
+  const im = ART.turntable, T = L.tt, w = T.w, h = im ? w * im.naturalHeight / im.naturalWidth : w * 0.5;
+  return { x: T.cx - w / 2, y: T.bot - h, w, h };
+}
+function litDraw(g, im, x, y, w, h, lt, key, holder) {
+  // an object sprite × the light where it stands (cached per quantized light)
+  const q = (v) => Math.round(clamp(v, 0, 1.15) * 30) / 30, k = lt.map(q).join(',') + '|' + U + '|' + key;
+  if (holder.key !== k) {
+    holder.key = k; holder.cv = holder.cv || newCanvas(2, 2);
+    tintSprite(holder.cv, im, w, h, lt.map(q));
+  }
+  g.drawImage(holder.cv, x, y, w, h);
+}
+const ttHold = {}, propHold = {};
+function drawTurntable(g, T) {
+  const im = ART.turntable; if (!im) return;
+  const r = ttRect(), playing = !!(music.np && music.np.playing);
+  const lt = lightAt(r.x + r.w * 0.4, r.y + r.h * 0.4).map((v) => Math.max(v, 0.3));
+  // soft contact shadow on the cabinet top
+  drawSpriteXY(g, GLOW_SOFT, r.x + r.w / 2, r.y + r.h - 2, r.w * 0.52, 5, 0.5, 'source-over');
+  litDraw(g, im, r.x, r.y, r.w, r.h, lt, 'tt', ttHold);
+  // label = album art, spinning (centre measured on the sprite)
+  const cx = r.x + r.w * 0.47, cy = r.y + r.h * 0.237, rx = r.w * 0.11, ry = r.h * 0.0917;
+  g.save(); g.translate(cx, cy); g.scale(1, ry / rx);
+  if (MIR) g.scale(-1, 1);   // records spin clockwise in a mirrored room too
+  g.beginPath(); g.arc(0, 0, rx, 0, TAU); g.clip();
+  g.rotate(music.spin);
+  if (music.ever && coverCv) g.drawImage(coverCv, -rx, -rx, rx * 2, rx * 2);
+  else { g.fillStyle = '#b8402c'; g.fillRect(-rx, -rx, rx * 2, rx * 2); g.fillStyle = '#e9dcc0'; g.beginPath(); g.arc(0, 0, rx * 0.55, 0, TAU); g.fill(); g.fillStyle = '#b8402c'; g.beginPath(); g.arc(0, 0, rx * 0.42, 0, TAU); g.fill(); }
+  g.rotate(-music.spin);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => clamp(v * 1.05, 0.35, 1) * 255)); g.fillRect(-rx, -rx, rx * 2, rx * 2);
+  g.globalCompositeOperation = 'source-over';
+  g.restore();
+  // a highlight sweeping round the grooves while it spins
+  if (music.rpm > 0.02) {
+    g.save(); g.translate(r.x + r.w * 0.468, r.y + r.h * 0.28); g.scale(1, 0.4);
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.07 * music.rpm * lum(lt);
+    const a = -music.spin * (MIR ? -1 : 1) * 0.15;
+    g.rotate(a); g.fillStyle = 'rgb(255,226,190)';
+    g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r.w * 0.33, -0.18, 0.18); g.fill(); g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, r.w * 0.33, Math.PI - 0.18, Math.PI + 0.18); g.fill();
+    g.restore();
+  }
+  g.fillStyle = rgba(mul([210, 210, 210], lt)); g.beginPath(); g.ellipse(cx, cy - 2, 1.4, 1, 0, 0, TAU); g.fill();
+  // tonearm: from the pivot (back right) to the arm rest, or onto the outer grooves when playing
+  const px = r.x + r.w * 0.806, py = r.y + r.h * 0.12;
+  const rest = [r.x + r.w * 0.905, r.y + r.h * 0.6], on = [r.x + r.w * 0.69, r.y + r.h * 0.5];
+  const u = smooth(music.arm), hx = lerp(rest[0], on[0], u), hy = lerp(rest[1], on[1], u) - 2.5 * Math.sin(u * Math.PI);
+  const metal = rgba(mul([226, 224, 218], lt)), dark = rgba(mul([40, 38, 36], lt));
+  g.lineCap = 'round';
+  g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2.4; g.beginPath(); g.moveTo(px + 1, py + 3); g.quadraticCurveTo((px + hx) / 2 + 6, (py + hy) / 2 + 2, hx + 1, hy + 3); g.stroke();
+  g.strokeStyle = metal; g.lineWidth = 1.9; g.beginPath(); g.moveTo(px, py); g.quadraticCurveTo((px + hx) / 2 + 6, (py + hy) / 2 - 2, hx, hy); g.stroke();
+  g.save(); g.translate(hx, hy); g.rotate(Math.atan2(hy - py, hx - px) + 0.35);
+  g.fillStyle = dark; g.fillRect(-2.6, -1.5, 9, 5); g.fillStyle = metal; g.fillRect(-2.6, -1.5, 9, 1.2); g.restore();
+  g.fillStyle = dark; g.beginPath(); g.ellipse(px, py, 4.2, 2.6, 0, 0, TAU); g.fill();
+  g.fillStyle = metal; g.beginPath(); g.ellipse(px - 0.8, py - 0.8, 1.6, 1, 0, 0, TAU); g.fill();
+  // power pilot on the plinth
+  const lx = r.x + r.w * 0.14, ly = r.y + r.h * 0.74;
+  g.fillStyle = playing ? 'rgba(255,110,70,0.95)' : 'rgba(90,50,40,0.6)'; g.beginPath(); g.arc(lx, ly, 1.1, 0, TAU); g.fill();
+  if (playing) drawSprite(g, GLOW_RED, lx, ly, 6, 0.45);
+}
 function drawArtLit(g, im, x, y, s, lt, keep) {
-  // the artwork, lit by the room but never too dark to read (it's the hero)
   g.drawImage(im, x, y, s, s);
   const m = lt.map((v) => clamp(lerp(v, 1, keep), 0, 1) * 255);
   g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(m); g.fillRect(x, y, s, s);
   g.globalCompositeOperation = 'source-over';
 }
-// the lit artwork is cached and only re-rendered when the art, its light or the
-// play state changes (or while a new cover crossfades in)
 const artCache = { frame: { cv: newCanvas(2, 2), key: '' }, sleeve: { cv: newCanvas(2, 2), key: '' } };
 let artGen = 0;
-function litArt(slot, s, lt, keep, paused, glass) {
+function litArt(slot, s, lt, keep, paused) {
   const C = artCache[slot], q = (v) => Math.round(v * 40);
   const sw = smooth(music.swap), cur = music.ever ? coverCv : IDLE_ART;
   const key = [artGen, lt.map(q).join(','), q(keep), paused ? 1 : 0, sw < 1 ? Math.round(sw * 20) : 'x', U].join('|');
@@ -1634,250 +1165,275 @@ function litArt(slot, s, lt, keep, paused, glass) {
   if (sw < 1 && prevCoverCv) { drawArtLit(g, prevCoverCv, 0, 0, s, lt, keep); g.globalAlpha = sw; }
   drawArtLit(g, cur || IDLE_ART, 0, 0, s, lt, keep);
   g.globalAlpha = 1;
-  if (paused) { g.fillStyle = 'rgba(20,10,6,0.18)'; g.fillRect(0, 0, s, s); }
-  if (glass) {
-    const rg = g.createLinearGradient(0, 0, s, s);
-    rg.addColorStop(0, 'rgba(255,255,255,0.08)'); rg.addColorStop(0.45, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(255,200,150,0.05)');
-    g.fillStyle = rg; g.fillRect(0, 0, s, s);
-  }
+  if (paused) { g.fillStyle = 'rgba(20,10,6,0.16)'; g.fillRect(0, 0, s, s); }
   return C.cv;
 }
+// the print above the mantel: a display that mirrors the record's artwork, on a cream mat behind glass
 function drawFrameArt(g, T) {
-  const Fr = L.frame, x = Fr.ax, y = Fr.ay, s = Fr.as;
-  const playing = !!(music.np && music.np.playing);
-  const lt = lightAt(x + s / 2, y + s * 0.7);
-  const keep = (playing ? 0.62 : music.np ? 0.5 : 0.55) * (1 - 0.4 * calm.lv);
-  g.drawImage(litArt('frame', s, lt, keep, music.np && !playing, true), x, y, s, s);
-  // the picture light pools warm light on it (breathes gently with the music)
-  const pl = (0.2 + 0.06 * music.pulse * music.lv) * (music.np ? (playing ? 1 : 0.7) : 0.8) * (1 - 0.6 * calm.lv) * (0.5 + 0.5 * (1 - E.day));
-  drawSpriteXY(g, GLOW_WARM, x + s / 2, y + 10, s * 0.62, s * 0.4, pl);
-  drawSpriteXY(g, GLOW_WHITE, L.lamp.x, L.lamp.y + 4, 70, 8, 0.25 * (1 - 0.6 * calm.lv) * (1 - 0.6 * E.day));
-  if (tintGlow && music.ever) drawSprite(g, tintGlow, x + s / 2, y + s / 2, s * 0.95, 0.12 * music.lv * (1 - calm.lv), 'screen');
+  const Fr = L.frame, playing = !!(music.np && music.np.playing);
+  const lt = lightAt(Fr.cx, Fr.cy + 30);
+  g.fillStyle = rgba(mul([226, 216, 196], lt.map((v) => Math.min(1, v * 1.05)))); g.fillRect(Fr.x0, Fr.y0, Fr.w, Fr.h);
+  // the frame's moulding throws a soft shadow onto the mat
+  const sh = g.createLinearGradient(0, Fr.y0, 0, Fr.y0 + 12); sh.addColorStop(0, 'rgba(20,10,4,0.45)'); sh.addColorStop(1, 'rgba(20,10,4,0)');
+  g.fillStyle = sh; g.fillRect(Fr.x0, Fr.y0, Fr.w, 12);
+  const s = Fr.h * 0.8, x = Fr.cx - s / 2, y = Fr.cy - s / 2 + 1;
+  const keep = (playing ? 0.45 : music.np ? 0.35 : 0.4) * (1 - 0.4 * calm.lv);
+  g.save(); unmirror(g, Fr.cx);
+  g.fillStyle = 'rgba(30,18,10,0.35)'; g.fillRect(x - 1, y - 1, s + 2, s + 2);
+  g.drawImage(litArt('frame', s, lt, keep, music.np && !playing), x, y, s, s);
+  g.restore();
+  // glass: a faint reflection of the fire, brighter as it flares
+  const gr = g.createLinearGradient(Fr.x0, Fr.y1, Fr.x1, Fr.y0);
+  gr.addColorStop(0, `rgba(255,170,100,${0.05 + 0.03 * fire.flick * (1 - E.day)})`); gr.addColorStop(0.4, 'rgba(255,255,255,0)'); gr.addColorStop(0.75, 'rgba(255,240,220,0.04)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(Fr.x0, Fr.y0, Fr.w, Fr.h);
+  if (tintGlow && music.ever) drawSprite(g, tintGlow, Fr.cx, Fr.cy, Fr.w * 0.8, 0.1 * music.lv * (1 - calm.lv), 'screen');
 }
 function drawSleeve(g, T) {
-  const S = L.sleeve, s = S.s, x = S.x, y = S.y;
-  const lt = lightAt(x + s / 2, y + s / 2);
-  g.save(); g.translate(x, y + s); g.transform(1, 0, -0.06, 1, 0, 0); g.translate(0, -s);
-  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(4, 4, s, s);
-  if (music.ever && coverCv) g.drawImage(litArt('sleeve', s, lt, 0.5, false, false), 0, 0, s, s);
-  else {   // a plain kraft inner sleeve, waiting
-    g.fillStyle = rgba(mul([200, 168, 120], lt)); g.fillRect(0, 0, s, s);
-    g.fillStyle = rgba(mul([150, 120, 80], lt)); g.beginPath(); g.arc(s / 2, s / 2, s * 0.16, 0, TAU); g.fill();
-    g.strokeStyle = rgba(mul([120, 90, 60], lt), 0.6); g.lineWidth = 1; g.strokeRect(6, 6, s - 12, s - 12);
+  const S = L.sleeve, s = S.s, x = S.x, y = S.bot - s * 0.985;
+  const lt = lightAt(x + s / 2, y + s / 2).map((v) => Math.max(v, 0.32));
+  // leaning back against the logs: a touch narrower at the top, shadow on the wall to its right
+  g.save();
+  g.fillStyle = 'rgba(14,7,3,0.38)';
+  g.beginPath(); g.moveTo(x + 6, y + 2); g.lineTo(x + s + 7, y + 4); g.lineTo(x + s + 2, S.bot); g.lineTo(x + 4, S.bot); g.fill();
+  g.translate(x, S.bot); g.transform(1, 0, -0.04, 0.985, 0, 0); g.translate(0, -s);
+  if (music.ever && coverCv) {
+    g.save(); unmirror(g, s / 2); g.drawImage(litArt('sleeve', s, lt, 0.32, false), 0, 0, s, s); g.restore();
+  } else {   // a plain kraft inner sleeve, waiting
+    g.fillStyle = rgba(mul([196, 162, 116], lt)); g.fillRect(0, 0, s, s);
+    g.fillStyle = rgba(mul([150, 118, 80], lt)); g.beginPath(); g.arc(s / 2, s / 2, s * 0.16, 0, TAU); g.fill();
   }
-  g.strokeStyle = 'rgba(255,240,220,0.18)'; g.lineWidth = 1.2; g.strokeRect(0.5, 0.5, s - 1, s - 1);
-  // record peeking out of the top
+  const ed = g.createLinearGradient(0, 0, s, 0); ed.addColorStop(0, 'rgba(255,190,130,0.12)'); ed.addColorStop(0.2, 'rgba(255,190,130,0)'); ed.addColorStop(1, 'rgba(0,0,0,0.18)');
+  g.fillStyle = ed; g.fillRect(0, 0, s, s);
+  g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = 0.8; g.strokeRect(0.4, 0.4, s - 0.8, s - 0.8);
   g.restore();
 }
+// a small hand-written card pinned to the logs above the player: what's on the turntable
 function drawCard(g, T) {
+  if (!music.ever) return;
   const C = L.card, playing = !!(music.np && music.np.playing);
-  const lt = lightAt(C.x + C.w / 2, C.y - C.h / 2).map((v) => Math.max(v, 0.55));
-  g.save(); g.translate(C.x, C.y); g.rotate(-0.04);
-  g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(3, -C.h + 3, C.w, C.h);
-  g.fillStyle = rgba(mul([246, 238, 220], lt)); g.fillRect(0, -C.h, C.w, C.h);
-  g.fillStyle = rgba(mul([190, 70, 50], lt), 0.7); g.fillRect(0, -C.h, C.w, 3);
+  const lt = lightAt(C.x, C.y).map((v) => Math.max(v, 0.42));
+  g.save(); g.translate(C.x, C.y); if (MIR) g.scale(-1, 1); g.rotate(-0.035);
+  const x0 = -C.w / 2, y0 = -C.h / 2;
+  g.fillStyle = 'rgba(10,5,2,0.4)'; g.fillRect(x0 + 2.5, y0 + 3, C.w, C.h);
+  g.fillStyle = rgba(mul([236, 224, 200], lt)); g.fillRect(x0, y0, C.w, C.h);
+  g.fillStyle = rgba(mul([200, 150, 70], lt)); g.beginPath(); g.arc(0, y0 + 3.5, 1.8, 0, TAU); g.fill();   // brass tack
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  const ink = rgba(mul([60, 40, 30], lt), 0.92), soft = rgba(mul([110, 80, 60], lt), 0.85);
-  let line1, line2, label;
-  if (stretchMsg && nowS() < stretchMsg.until) { label = 'stretch'; line1 = 'roll your shoulders'; line2 = 'unclench your jaw'; }
-  else if (music.np) { label = playing ? 'now spinning' : 'paused'; line1 = music.title; line2 = music.artist; }
-  else if (music.ever) { label = 'last played'; line1 = music.title; line2 = music.artist; }
-  else { label = 'tonight'; line1 = 'put a record on'; line2 = '♪ click the player'; }
-  g.font = `600 7px ${SANS}`; g.fillStyle = soft; g.fillText(label.toUpperCase(), 8, -C.h + 14);
-  g.font = `italic 13px ${SERIF}`; g.fillStyle = ink; g.fillText(fitText(g, line1, C.w - 14), 8, -C.h + 31);
-  g.font = `10px ${SERIF}`; g.fillStyle = soft; g.fillText(fitText(g, line2, C.w - 14), 8, -C.h + 45);
+  const ink = rgba(mul([58, 40, 30], lt), playing ? 0.92 : 0.7), soft = rgba(mul([112, 84, 64], lt), 0.85);
+  g.font = `600 4.6px ${SANS}`; g.fillStyle = soft; g.fillText((playing ? 'now spinning' : music.np ? 'paused' : 'last played').toUpperCase(), x0 + 5, y0 + 10);
+  g.font = `italic 9px ${SERIF}`; g.fillStyle = ink; g.fillText(fitText(g, music.title, C.w - 9), x0 + 5, y0 + 22);
+  g.font = `7px ${SERIF}`; g.fillStyle = soft; g.fillText(fitText(g, music.artist, C.w - 9), x0 + 5, y0 + 32);
   g.restore();
+}
+
+// =====================================================================
+//  small life: props, the mug's steam, sound words
+// =====================================================================
+function drawProp(g, name, x, bot, w, lt) {
+  const im = PROPS[name]; if (!im) return false;
+  const h = w * im.naturalHeight / im.naturalWidth;
+  drawSpriteXY(g, GLOW_SOFT, x, bot - 1, w * 0.55, Math.max(2, w * 0.07), 0.55, 'source-over');
+  const hold = propHold[name] || (propHold[name] = {});
+  litDraw(g, im, x - w / 2, bot - h, w, h, lt, name, hold);
+  return true;
+}
+function drawFloorProp(g, p) { drawProp(g, p.name, p.x, p.y, p.w, petLight(p.x, p.y - 20)); }
+function drawMug(g) {
+  drawProp(g, "mug", L.mug.x, L.mug.y, 30, petLight(L.mug.x, L.mug.y - 20));
 }
 function emitSteam(dt) {
-  steamAcc += dt * 2.2 * (1 - calm.lv * 0.4);
-  while (steamAcc > 1) { steamAcc -= 1; steam.push({ x: L.mug.x + rand(-5, 5), y: L.mug.y - 34, vx: rand(-3, 3), vy: rand(-18, -11), t: 0, life: rand(2.6, 4), r: rand(5, 8), ph: rand(0, 6), a: 0.12 }); }
+  if (!PROPS.mug) return;
+  steamAcc += dt * 1.8 * (1 - calm.lv * 0.4);
+  while (steamAcc > 1) { steamAcc -= 1; steam.push({ x: L.mug.x + rand(-3, 3), y: L.mug.y - 26, vx: rand(-2, 2), vy: rand(-14, -9), t: 0, life: rand(2.4, 3.6), r: rand(3, 5), ph: rand(0, 6), a: 0.1 }); }
 }
-function puff(x, y, w) { for (let i = 0; i < 14; i++) steam.push({ x: x + rand(-w, w), y: y - rand(0, 8), vx: rand(-12, 12), vy: rand(-40, -20), t: 0, life: rand(1.8, 3), r: rand(5, 10), ph: rand(0, 6), a: 0.14 }); }
 function updateParticles(dt, T) {
   emitSteam(dt);
-  for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 5) * dt; s.y += s.vy * dt; s.vx *= 1 - dt * 0.8; if (s.t > s.life) steam.splice(i, 1); }
-  if (music.np && music.np.playing && !calm.on) {
-    music.notesT -= dt;
-    if (music.notesT <= 0) { music.notesT = rand(1.6, 3); notes.push({ x: L.tt.cx + rand(-10, 10), y: L.tt.cy - 20, t: 0, life: 3.6, k: Math.random() < 0.5 ? 1 : 2, ph: rand(0, 6) }); }
-  }
-  for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t += dt; n.x += Math.sin(n.t * 2 + n.ph) * 10 * dt - 4 * dt; n.y -= 16 * dt; if (n.t > n.life) notes.splice(i, 1); }
-  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= 22 * dt; h.x += Math.sin(h.t * 3 + h.ph) * 8 * dt; if (h.t > h.life) hearts.splice(i, 1); }
-}
-function heartPath(g, x, y, s) { g.beginPath(); g.moveTo(x, y + 3 * s); g.bezierCurveTo(x - 7 * s, y - 2 * s, x - 4 * s, y - 8 * s, x, y - 4 * s); g.bezierCurveTo(x + 4 * s, y - 8 * s, x + 7 * s, y - 2 * s, x, y + 3 * s); g.fill(); }
-function noteGlyph(g, x, y, s, kind) {
-  g.save(); g.translate(x, y); g.scale(s, s);
-  g.beginPath(); g.ellipse(0, 0, 6, 4.4, -0.4, 0, TAU); g.fill();
-  g.lineWidth = 2; g.lineCap = 'round'; g.beginPath(); g.moveTo(5.2, -1.5); g.lineTo(5.2, -24); g.stroke();
-  if (kind === 2) { g.beginPath(); g.ellipse(18, -4, 6, 4.4, -0.4, 0, TAU); g.fill(); g.beginPath(); g.moveTo(23.2, -5.5); g.lineTo(23.2, -28); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(5.2, -23); g.lineTo(23.2, -27); g.stroke(); }
-  else { g.beginPath(); g.moveTo(5.2, -24); g.quadraticCurveTo(14, -18, 11, -9); g.stroke(); }
-  g.restore();
+  for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 0.9 + s.ph + s.t) * 4) * dt; s.y += s.vy * dt; s.vx *= 1 - dt * 0.8; if (s.t > s.life) steam.splice(i, 1); }
+  for (let i = words.length - 1; i >= 0; i--) { const w = words[i]; w.t += dt; w.y -= 9 * dt; if (w.t > w.life) words.splice(i, 1); }
 }
 function drawParticles(g) {
-  const lt = lightAt(L.mug.x, L.mug.y - 60), sk = clamp(lum(lt) * 1.1, 0.5, 1.1);
+  const lt = lightAt(L.mug.x, L.mug.y - 40), sk = clamp(lum(lt) * 1.1, 0.45, 1.1);
   g.globalCompositeOperation = 'screen';
   for (const s of steam) { const k = s.t / s.life, a = s.a * Math.sin(Math.min(1, k * 2.4) * Math.PI * 0.5) * (1 - k) * sk, r = s.r * (1 + k * 2.4); g.globalAlpha = a; g.drawImage(STEAM, s.x - r, s.y - r, r * 2, r * 2); }
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  const p = music.pal || DEFAULT_PAL;
-  for (const n of notes) { const k = n.t / n.life, a = Math.sin(Math.min(1, k * 3) * Math.PI * 0.5) * (1 - k) * 0.7; g.fillStyle = rgba(mix3(p.tint, [255, 240, 220], 0.5), a); g.strokeStyle = g.fillStyle; noteGlyph(g, n.x, n.y, 0.55, n.k); }
-  for (const h of hearts) { const k = h.t / h.life, a = Math.sin(Math.min(1, k * 4) * Math.PI * 0.5) * (1 - k); g.fillStyle = `rgba(255,130,150,${a * 0.9})`; heartPath(g, h.x, h.y, h.s); }
-}
-const FAIRY_COLS = [[255, 214, 150], [255, 190, 120], [255, 226, 180], [255, 170, 110], [255, 236, 200]];
-let fairyStrips = [];
-function bakeFairy() {
-  // each string is pre-rendered once (bulbs + soft glow) into its own small canvas
-  fairyStrips = [];
-  for (const str of L.fairyStrings) {
-    const pts = L.fairy.slice(str.i0, str.i1); if (!pts.length) continue;
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const f of pts) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); y0 = Math.min(y0, f.y); y1 = Math.max(y1, f.y); }
-    x0 -= 16; x1 += 16; y0 -= 14; y1 += 22;
-    const glow = newCanvas((x1 - x0) * U, (y1 - y0) * U), bulbs = newCanvas((x1 - x0) * U, (y1 - y0) * U);
-    const gg = glow.getContext('2d'), bg = bulbs.getContext('2d');
-    gg.setTransform(U, 0, 0, U, -x0 * U, -y0 * U); bg.setTransform(U, 0, 0, U, -x0 * U, -y0 * U);
-    bg.strokeStyle = 'rgba(40,28,20,0.5)'; bg.lineWidth = 1; bg.beginPath(); pts.forEach((f, i) => (i ? bg.lineTo(f.x, f.y) : bg.moveTo(f.x, f.y))); bg.stroke();
-    for (const f of pts) {
-      bg.fillStyle = rgba(FAIRY_COLS[f.hue], 0.95); bg.beginPath(); bg.arc(f.x, f.y + 4, 2.4, 0, TAU); bg.fill();
-      gg.globalCompositeOperation = 'lighter'; gg.globalAlpha = 0.32; gg.drawImage(GLOW_WARM, f.x - 13, f.y + 4 - 13, 26, 26);
-    }
-    fairyStrips.push({ x0, y0, w: x1 - x0, h: y1 - y0, glow, bulbs, pts });
+  // a pet's sound, as a small word that drifts up and fades (no bubbles)
+  for (const w of words) {
+    const k = w.t / w.life, a = Math.sin(Math.min(1, k * 4) * Math.PI * 0.5) * (1 - k) * 0.8;
+    g.save(); unmirror(g, w.x); g.font = `italic 13px ${SERIF}`; g.textAlign = 'center';
+    g.fillStyle = `rgba(20,10,6,${a * 0.5})`; g.fillText(w.text, w.x + 1, w.y + 1);
+    g.fillStyle = `rgba(255,236,206,${a})`; g.fillText(w.text, w.x, w.y); g.restore();
   }
 }
-function drawFairy(g, T) {
-  const night = 1 - E.day * 0.7, cl = 1 - calm.lv * 0.6, playing = !!(music.np && music.np.playing);
-  const tw = 0.85 + 0.15 * Math.sin(T * 0.9), wave = playing ? 0.35 * music.pulse * music.lv : 0;
-  for (const s of fairyStrips) {
-    g.drawImage(s.bulbs, s.x0, s.y0, s.w, s.h);
-    g.globalCompositeOperation = 'lighter'; g.globalAlpha = clamp((tw + wave) * cl * night, 0, 1);
-    g.drawImage(s.glow, s.x0, s.y0, s.w, s.h);
-    g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  }
-  // a few bulbs twinkle individually
-  for (let i = 0; i < 9; i++) {
-    const f = L.fairy[(Math.floor(T * 0.5 + i * 37.3) * 7919 + i * 131) % L.fairy.length];
-    const k = Math.sin(((T * 0.5 + i * 0.37) % 1) * Math.PI);
-    drawSprite(g, GLOW_WARM, f.x, f.y + 4, 16, 0.22 * k * cl * night);
-  }
-}
+function say(c) { words.push({ x: c.x + 26 * c.k * c.face, y: c.y - 105 * c.k, t: 0, life: 2.2, text: c.sound }); }
 
-// ---- the outside: snow / blizzard / sleet / rain / aurora / fireflies ------
-function inPanes(x, y) { const R = L.win; return x > R.x0 && x < R.x1 && y > R.y0 && y < R.y1; }
+// =====================================================================
+//  outside: three depths of snow with wind, snow building up on the
+//  outside of the panes, frost; sleet/rain, fireflies, lightning, moon
+// =====================================================================
+const FROST = (() => {
+  // frosted glass creeping in from a corner (bottom-left of the texture): a soft milky bloom broken up
+  // by fine crystalline grain, fading out — subtle, never a shape
+  const S = 128, c = newCanvas(S, S), g = c.getContext('2d'), r = mulberry(11);
+  const n = newCanvas(S, S), ng = n.getContext('2d');
+  for (let i = 0; i < 2600; i++) { const x = r() * S, y = r() * S, a = r() * 0.9; ng.fillStyle = `rgba(235,243,255,${a})`; ng.fillRect(x, y, r() < 0.15 ? 2 : 1, 1); }
+  for (let i = 0; i < 90; i++) { const x = r() * S * 0.7, y = S - r() * S * 0.7, l = 3 + r() * 9, a = r() * TAU; ng.strokeStyle = 'rgba(240,247,255,0.5)'; ng.lineWidth = 0.6; ng.beginPath(); ng.moveTo(x, y); ng.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ng.stroke(); }
+  g.filter = 'blur(0.6px)'; g.drawImage(n, 0, 0); g.filter = 'none';
+  const gr = g.createRadialGradient(0, S, 0, 0, S, S * 0.75);
+  gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.35, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  g.globalCompositeOperation = 'destination-over';
+  const mg = g.createRadialGradient(0, S, 0, 0, S, S * 0.6); mg.addColorStop(0, 'rgba(220,232,248,0.35)'); mg.addColorStop(1, 'rgba(220,232,248,0)');
+  g.fillStyle = mg; g.fillRect(0, 0, S, S);
+  return c;
+})();
+const SNOW_LAYERS = [
+  { n: 150, r: [0.45, 0.85], v: [14, 24], wind: 0.35, a: 0.55 },   // far, over the clearing
+  { n: 70, r: [0.9, 1.6], v: [30, 48], wind: 0.7, a: 0.8 },       // mid
+  { n: 12, r: [2.6, 5.2], v: [70, 110], wind: 1.2, a: 0.45 },     // near the glass, out of focus
+];
+function windNow(T) {
+  const w = clamp(+LW.env.wind || 0.3, 0, 1.5), gust = 0.6 + 0.4 * Math.sin(T * 0.21) * Math.sin(T * 0.073 + 1.3) + 0.2 * Math.sin(T * 0.9);
+  return (12 + 50 * w + 170 * E.storm) * Math.max(0.15, gust);
+}
 function updateWeather(dt, T) {
-  const R = L.win, ww = R.x1 - R.x0, wh = R.y1 - R.y0;
-  const wind = (LW.env.wind || 0.3) + E.storm * 1.4;
-  const snowN = Math.round((E.snow + E.flurry * 0.25) * (90 + 140 * E.storm) * (1 - E.summer * 0.9));
-  while (flakes.length < snowN) flakes.push({ x: R.x0 + rand(-60, ww), y: R.y0 + rand(-20, wh), z: rand(0.3, 1), ph: rand(0, 6), s: rand(0.7, 1.4) });
-  if (flakes.length > snowN) flakes.length = snowN;
-  const sdt = dt * (1 - calm.lv * (0.55 + 0.3 * breathHold()));   // calm: the snow slows, nearly hangs on the holds
-  for (const f of flakes) {
-    f.y += (22 + 40 * f.z) * (1 + E.storm * 0.6) * sdt;
-    f.x += (Math.sin(T * 0.8 + f.ph) * 10 + wind * (24 + 160 * E.storm)) * f.z * sdt;
-    if (f.y > R.y1 + 4 || f.x > R.x1 + 30) { f.y = R.y0 - rand(4, 30); f.x = R.x0 + rand(-ww * (0.2 + E.storm), ww); }
-  }
+  const R = L.win, m = 30;
+  const amt = clamp((E.snow + E.flurry * 0.3) * (1 - E.summer), 0, 1.4) * (1 + E.storm);
+  const wind = windNow(T), sdt = dt * (1 - calm.lv * (0.55 + 0.3 * breathHold()));   // calm: the snow slows, nearly hangs on the holds
+  SNOW_LAYERS.forEach((Ly, li) => {
+    const want = Math.round(Ly.n * Math.min(1.6, amt)), arr = flakes[li];
+    while (arr.length < want) arr.push({ x: R.x0 - m + Math.random() * (R.w + 2 * m), y: R.y0 + Math.random() * R.h, r: rand(Ly.r[0], Ly.r[1]), v: rand(Ly.v[0], Ly.v[1]), ph: rand(0, 6), sw: rand(0.6, 1.4) });
+    if (arr.length > want) arr.length = want;
+    for (const f of arr) {
+      f.y += f.v * (1 + E.storm * 0.5) * sdt;
+      f.x += (wind * Ly.wind + Math.sin(T * f.sw + f.ph) * (6 + 6 * li)) * sdt;
+      if (f.y > R.y1 + 6) { f.y = R.y0 - rand(4, 20); f.x = R.x0 - m - wind * 0.3 + Math.random() * (R.w + 2 * m); }
+      if (f.x > R.x1 + m) f.x -= R.w + 2 * m; else if (f.x < R.x0 - m) f.x += R.w + 2 * m;
+    }
+  });
+  // snow builds up on the outside ledges while it snows, persists, melts slowly in sun / warmth
+  const falling = (E.snow + E.flurry * 0.15) * (1 - E.summer);
+  if (falling > 0.05) snowAcc = Math.min(1, snowAcc + dt * falling * (1 + 2 * E.storm) / 420);
+  else snowAcc = Math.max(0, snowAcc - dt * ((1 - E.summer) * E.day * (1 - E.cloud * 0.7) / 3600 + E.summer / 40 + E.rain / 300));
   const rainN = Math.round(E.rain * 110);
-  while (drops.length < rainN) drops.push({ x: R.x0 + rand(-40, ww), y: R.y0 + rand(-wh, wh), z: rand(0.4, 1), v: rand(500, 800) });
+  while (drops.length < rainN) drops.push({ x: R.x0 + rand(-40, R.w), y: R.y0 + rand(-R.h, R.h), z: rand(0.4, 1), v: rand(500, 800) });
   if (drops.length > rainN) drops.length = rainN;
   const sleet = E.summer < 0.5;
-  for (const d of drops) { d.y += d.v * d.z * (sleet ? 0.55 : 1) * sdt; d.x += wind * 90 * d.z * sdt; if (d.y > R.y1) { d.y = R.y0 - rand(10, 60); d.x = R.x0 + rand(-40, ww); } }
-  // drops sliding down the glass
-  if (E.rain > 0.15 && Math.random() < E.rain * 1.5 * dt) glassDrops.push({ x: R.x0 + rand(10, ww - 10), y: R.y0 + rand(10, wh * 0.6), v: 0, t: 0, life: rand(3, 6), r: rand(1.4, 2.4) });
-  for (let i = glassDrops.length - 1; i >= 0; i--) { const d = glassDrops[i]; d.t += dt; d.v = Math.random() < 0.02 ? rand(20, 60) : d.v * (1 - dt * 2); d.y += d.v * dt; if (d.t > d.life || d.y > R.y1) glassDrops.splice(i, 1); }
-  // fireflies (summer nights)
-  const flyN = Math.round(E.fireflies * 14);
-  while (flies.length < flyN) flies.push({ x: R.x0 + rand(0, ww), y: R.y0 + wh * rand(0.55, 0.95), ph: rand(0, 6), sp: rand(0.3, 0.8) });
+  for (const d of drops) { d.y += d.v * d.z * (sleet ? 0.55 : 1) * sdt; d.x += wind * 0.9 * d.z * sdt; if (d.y > R.y1) { d.y = R.y0 - rand(10, 60); d.x = R.x0 + rand(-40, R.w); } }
+  if (E.rain > 0.15 && Math.random() < E.rain * 1.5 * dt) { const p = L.panes[(Math.random() * L.panes.length) | 0]; glassDrops.push({ x: rand(p.x0 + 4, p.x1 - 4), y: rand(p.y0 + 4, p.y0 + p.h * 0.6), v: 0, t: 0, life: rand(3, 6), r: rand(1, 1.8), y1: p.y1 }); }
+  for (let i = glassDrops.length - 1; i >= 0; i--) { const d = glassDrops[i]; d.t += dt; d.v = Math.random() < 0.02 ? rand(15, 45) : d.v * (1 - dt * 2); d.y += d.v * dt; if (d.t > d.life || d.y > d.y1) glassDrops.splice(i, 1); }
+  const flyN = Math.round(E.fireflies * 10);
+  while (flies.length < flyN) flies.push({ x: R.x0 + rand(0, R.w), y: R.y0 + R.h * rand(0.6, 0.95), ph: rand(0, 6), sp: rand(0.3, 0.8) });
   if (flies.length > flyN) flies.length = flyN;
-  for (const f of flies) { f.x += Math.sin(T * f.sp + f.ph) * 10 * dt; f.y += Math.cos(T * f.sp * 1.3 + f.ph) * 6 * dt; if (f.x < R.x0) f.x = R.x1 - 2; if (f.x > R.x1) f.x = R.x0 + 2; }
-  for (let i = taps.length - 1; i >= 0; i--) { taps[i].t += dt; if (taps[i].t > 0.7) taps.splice(i, 1); }
+  for (const f of flies) { f.x += Math.sin(T * f.sp + f.ph) * 8 * dt; f.y += Math.cos(T * f.sp * 1.3 + f.ph) * 5 * dt; if (f.x < R.x0) f.x = R.x1 - 2; if (f.x > R.x1) f.x = R.x0 + 2; }
   if (E.storm > 0.5) { flash.next -= dt; if (flash.next <= 0) { flash.t = 0; flash.next = rand(10, 24); if (E.summer > 0.5) later(rand(1.2, 3), sThunder); } }
   flash.t += dt;
 }
-function drawOutsideLive(g, T) {
-  const R = L.win, ww = R.x1 - R.x0, wh = R.y1 - R.y0;
-  g.save(); g.beginPath(); for (const p of winPanes()) g.rect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0); g.clip();
-  // aurora: slow green/teal curtains above the ridge
-  if (E.aurora > 0.02) {
-    g.globalCompositeOperation = 'screen';
-    for (let band = 0; band < 2; band++) {
-      const base = R.y0 + wh * (0.36 + band * 0.07), cols = band ? [120, 90, 220] : [80, 240, 170];
-      const N = 26, dx = ww / (N - 1);
-      for (let i = 0; i < N; i++) {
-        const x = R.x0 + i * dx, u = i / (N - 1);
-        const yb = base + Math.sin(u * 5 + T * 0.18 + band * 2) * 18 + Math.sin(u * 11 - T * 0.3) * 6;
-        const hh = (70 + 60 * noise1(u * 4 + T * 0.12 + band * 9)) * (0.7 + 0.3 * Math.sin(T * 0.4 + u * 3));
-        const a = E.aurora * (0.34 - band * 0.12) * (0.6 + 0.4 * noise1(u * 6 - T * 0.2 + band * 3)) * (1 - calm.lv * 0.5);
-        const gr = g.createLinearGradient(0, yb, 0, yb - hh);
-        gr.addColorStop(0, rgba(cols, a)); gr.addColorStop(0.3, rgba(cols, a * 0.6)); gr.addColorStop(1, rgba(cols, 0));
-        g.fillStyle = gr; g.fillRect(x - dx * 0.5, yb - hh, dx + 1, hh);
-      }
-    }
-    g.globalCompositeOperation = 'source-over';
+function panesClip(g) { g.beginPath(); for (const p of L.panes) g.rect(p.x0, p.y0, p.w, p.h); g.clip(); }
+function drawOutside(g, T) {
+  const R = L.win, m = OUT_M;
+  g.save(); panesClip(g);
+  // the painted view, with a little parallax against the window frame
+  const pw = ptrW(), inside = LW.pointer.inside;
+  const tx = inside ? clamp((pw.x - R.cx) / 900, -1, 1) : 0, ty = inside ? clamp((pw.y - R.cy) / 700, -1, 1) : 0;
+  view.px = approach(view.px, -tx * m * 0.7, 2, view.dt); view.py = approach(view.py, -ty * m * 0.5, 2, view.dt);
+  const ox = R.x0 - m + view.px, oy = R.y0 - m + view.py, ow = R.w + 2 * m, oh = R.h + 2 * m;
+  if (fade < 1 && prevOutCv) g.drawImage(prevOutCv, ox, oy, ow, oh);
+  g.globalAlpha = fade < 1 && prevOutCv ? fade : 1; g.drawImage(outCv, ox, oy, ow, oh); g.globalAlpha = 1;
+  // the moon (real phase), up in the sky part of the view
+  if (E.moon > 0.02 && LW.drawMoon) {
+    const mx = R.x0 + R.w * 0.74 + view.px * 0.3, my = R.y0 + R.h * 0.12 + view.py * 0.3;
+    g.save(); unmirror(g, mx);
+    LW.drawMoon(g, mx, my, 8.5, { glow: 0.3 + 0.3 * E.fog, haze: clamp(E.cloud * 0.5 + E.fog * 0.6 + E.snow * 0.4, 0, 1), alpha: E.moon });
+    g.restore();
   }
-  // snow
-  if (flakes.length) {
-    const sa = E.summer > 0.5 ? 0.5 : 0.9;
-    g.fillStyle = `rgba(248,250,255,${sa})`; g.beginPath();
-    for (const f of flakes) { const r = (0.7 + 1.9 * f.z) * f.s; if (E.storm > 0.3) { g.moveTo(f.x, f.y); g.ellipse(f.x, f.y, r * 2.2, r * 0.7, 0.25, 0, TAU); } else { g.moveTo(f.x + r, f.y); g.arc(f.x, f.y, r, 0, TAU); } }
-    g.fill();
+  // fireflies
+  for (const f of flies) { const b = 0.5 + 0.5 * Math.sin(T * 2.2 + f.ph * 3); drawSprite(g, GLOW_FLY, f.x, f.y, 6, (0.25 + 0.6 * b * b) * E.fireflies); }
+  // snow: far → near (near flakes are big, soft and fast — close to the glass)
+  const snowCol = mix3([170, 182, 210], [250, 252, 255], clamp(E.day * 1.2, 0, 1));
+  for (let li = 0; li < 3; li++) {
+    const arr = flakes[li]; if (!arr.length) continue;
+    const Ly = SNOW_LAYERS[li], a = Ly.a * (E.summer > 0.5 ? 0.5 : 1);
+    if (li < 2) {
+      g.fillStyle = rgba(snowCol, a); g.beginPath();
+      const streak = E.storm > 0.3 ? 1.8 : 1;
+      for (const f of arr) { if (streak > 1) { g.moveTo(f.x + f.r * streak, f.y); g.ellipse(f.x, f.y, f.r * streak, f.r * 0.8, 0.35, 0, TAU); } else { g.moveTo(f.x + f.r, f.y); g.arc(f.x, f.y, f.r, 0, TAU); } }
+      g.fill();
+    } else {
+      g.globalAlpha = a;
+      for (const f of arr) g.drawImage(FLAKE, f.x - f.r, f.y - f.r, f.r * 2, f.r * 2);
+      g.globalAlpha = 1;
+    }
   }
   // rain / sleet streaks
   if (drops.length) {
     const sleet = E.summer < 0.5;
-    g.strokeStyle = sleet ? 'rgba(225,232,245,0.5)' : 'rgba(200,212,232,0.35)'; g.lineWidth = sleet ? 1.3 : 1; g.beginPath();
-    for (const d of drops) { const len = (sleet ? 8 : 14) + 10 * d.z; g.moveTo(d.x, d.y); g.lineTo(d.x - 3, d.y - len); }
+    g.strokeStyle = sleet ? 'rgba(225,232,245,0.45)' : 'rgba(200,212,232,0.32)'; g.lineWidth = sleet ? 1.1 : 0.8; g.beginPath();
+    for (const d of drops) { const len = (sleet ? 7 : 13) + 9 * d.z; g.moveTo(d.x, d.y); g.lineTo(d.x - 3, d.y - len); }
     g.stroke();
-    if (sleet) { g.fillStyle = 'rgba(240,244,252,0.6)'; for (const d of drops) if (d.z > 0.8) { g.fillRect(d.x - 1, d.y - 1, 2, 2); } }
   }
-  // blizzard gusts
-  if (E.storm > 0.3 && E.summer < 0.5) { for (let i = 0; i < 3; i++) { const x = R.x0 + ((T * 160 + i * 230) % (ww + 400)) - 200, y = R.y0 + wh * (0.3 + i * 0.22); g.globalAlpha = 0.18 * E.storm; g.drawImage(BLOB, x - 180, y - 40, 360, 80); } g.globalAlpha = 1; }
-  // fireflies
-  for (const f of flies) { const b = 0.5 + 0.5 * Math.sin(T * 2.2 + f.ph * 3); drawSprite(g, GLOW_FLY, f.x, f.y, 8, (0.25 + 0.6 * b * b) * E.fireflies); }
   // lightning
   const fa = flash.t < 0.5 ? (flash.t < 0.08 ? 1 : flash.t < 0.16 ? 0.3 : flash.t < 0.24 ? 0.8 : Math.max(0, 1 - (flash.t - 0.24) / 0.26) * 0.5) : 0;
-  if (fa > 0) { g.fillStyle = `rgba(220,225,255,${fa * 0.5})`; g.fillRect(R.x0, R.y0, ww, wh); }
-  // glass: drops, the fire's reflection, paw taps
-  if (glassDrops.length) { g.fillStyle = 'rgba(220,230,245,0.55)'; for (const d of glassDrops) { g.beginPath(); g.ellipse(d.x, d.y, d.r, d.r * 1.3, 0, 0, TAU); g.fill(); g.fillRect(d.x - 0.5, d.y - 18, 1, 16); } }
-  drawSpriteXY(g, GLOW_FIRE, R.x0 + ww * 0.18, R.y0 + wh * 0.72, 90, 60, 0.12 * fireLv() * (1 - E.day * 0.8) * (1 + 0.1 * fire.flick));
-  for (const tp of taps) { const k = tp.t / 0.7; g.strokeStyle = `rgba(240,245,255,${0.5 * (1 - k)})`; g.lineWidth = 1; g.beginPath(); g.arc(tp.x, tp.y, 3 + k * 9, 0, TAU); g.stroke(); }
+  if (fa > 0) { g.fillStyle = `rgba(220,225,255,${fa * 0.45})`; g.fillRect(R.x0, R.y0, R.w, R.h); }
+  // snow banked against the bottom of each pane (outside), deeper in the corners
+  if (snowAcc > 0.01) {
+    const col = mix3([118, 132, 168], [238, 242, 250], clamp(E.day * 1.15, 0, 1)), colD = mul(col, [0.8, 0.84, 0.92]);
+    L.panes.forEach((p, i) => {
+      const r = mulberry(31 + i), hMax = 13 * snowAcc, N = 14, pts = [];
+      for (let k = 0; k <= N; k++) { const u = k / N, corner = Math.max(0, 1 - Math.min(u, 1 - u) * 5); pts.push([p.x0 + p.w * u, p.y1 - hMax * (0.55 + 0.25 * r() + 0.55 * corner)]); }
+      const gr = g.createLinearGradient(0, p.y1 - hMax * 1.4, 0, p.y1);
+      gr.addColorStop(0, rgba(col, 0.95)); gr.addColorStop(1, rgba(colD, 0.95));
+      g.fillStyle = gr; g.beginPath(); g.moveTo(p.x0, p.y1 + 1);
+      pts.forEach(([x, y], k) => { if (k === 0) g.lineTo(x, y); else { const [qx, qy] = pts[k - 1]; g.quadraticCurveTo(qx, qy, (qx + x) / 2, (qy + y) / 2); } });
+      g.lineTo(p.x1, p.y1 + 1); g.closePath(); g.fill();
+    });
+  }
+  // frost creeping in from the pane corners (winter; more on cold nights and after snow)
+  const frost = (1 - E.summer) * (0.3 + 0.3 * (1 - E.day) + 0.25 * snowAcc + 0.2 * E.storm);
+  if (frost > 0.03) {
+    g.globalAlpha = Math.min(0.8, frost);
+    for (const p of L.panes) {
+      const s = Math.min(p.w, p.h) * 0.62;
+      g.drawImage(FROST, p.x0, p.y1 - s, s, s);
+      g.save(); g.translate(p.x1, p.y1); g.scale(-1, 1); g.drawImage(FROST, 0, -s * 0.8, s * 0.8, s * 0.8); g.restore();
+    }
+    g.globalAlpha = 1;
+  }
+  // glass: drops running down, the fire reflected faintly at night, a cool sheen by day
+  if (glassDrops.length) { g.fillStyle = 'rgba(220,230,245,0.55)'; for (const d of glassDrops) { g.beginPath(); g.ellipse(d.x, d.y, d.r, d.r * 1.3, 0, 0, TAU); g.fill(); g.fillRect(d.x - 0.4, d.y - 14, 0.8, 12); } }
+  drawSpriteXY(g, GLOW_FIRE, R.x0 + R.w * 0.2, R.y0 + R.h * 0.78, 70, 50, 0.1 * fireLv() * (1 - E.day * 0.85) * (1 + 0.15 * fire.flick));
   const rg = g.createLinearGradient(R.x0, R.y0, R.x1, R.y1);
   rg.addColorStop(0, 'rgba(255,255,255,0.05)'); rg.addColorStop(0.5, 'rgba(255,255,255,0)'); rg.addColorStop(1, 'rgba(255,255,255,0.03)');
-  g.fillStyle = rg; g.fillRect(R.x0, R.y0, ww, wh);
+  g.fillStyle = rg; g.fillRect(R.x0, R.y0, R.w, R.h);
   g.restore();
 }
+const view = { px: 0, py: 0, dt: 0 };
 
 // ---- wellbeing: water, stretch, calm -----------------------------------------
-let water = null, stretchMsg = null;
-function startWater(text) { water = { t: 0, text: text || 'a sip of water?', out: -1, sip: 0 }; sDing(); }
-function updateWater(dt) { if (!water) return; water.t += dt; if (water.out < 0 && water.t > 12) water.out = 0; if (water.out >= 0) { water.out += dt; if (water.out > 1.4) water = null; } }
-function drawWater(g) {
+let water = null;
+function startWater() { water = { t: 0, out: -1 }; sDing(); }
+function updateWater(dt) { if (!water) return; water.t += dt; if (water.out < 0 && water.t > 14) water.out = 0; if (water.out >= 0) { water.out += dt; if (water.out > 1.4) water = null; } }
+function drawWater(g, T) {
   if (!water) return;
   const gx = L.glass.x, gy = L.glass.y;
   const inK = smooth(water.t / 1.2), outK = water.out >= 0 ? smooth(water.out / 1.4) : 0, a = inK * (1 - outK);
-  const lt = lightAt(gx, gy - 30).map((v) => Math.max(v, 0.45));
+  const lt = lightAt(gx, gy - 20).map((v) => Math.max(v, 0.45));
   g.save(); g.globalAlpha = a;
-  const top = gy - 40, wT = 11, wB = 9;
-  const gp = new Path2D(); gp.moveTo(gx - wT, top); gp.lineTo(gx + wT, top); gp.lineTo(gx + wB, gy - 2); gp.quadraticCurveTo(gx, gy, gx - wB, gy - 2); gp.closePath();
-  g.fillStyle = rgba(mul([200, 220, 235], lt), 0.2); g.fill(gp);
-  const wl = top + 9 + (water.sip || 0) * 12;
-  g.save(); g.clip(gp); g.fillStyle = rgba(mul([150, 200, 235], lt), 0.5); g.fillRect(gx - 14, wl, 28, gy - wl); g.restore();
-  g.strokeStyle = rgba(mul([235, 245, 255], lt), 0.6); g.lineWidth = 1.1; g.stroke(gp);
-  g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(gx - wT + 3, top + 4, 2, 28);
-  // the tag
-  g.font = `italic 13px ${SERIF}`;
-  const tw = g.measureText(water.text).width + 22, tagIn = smooth((water.t - 0.9) / 0.8);
-  g.globalAlpha = a * tagIn;
-  g.strokeStyle = rgba(mul([220, 210, 190], lt), 0.7); g.lineWidth = 0.9; g.beginPath(); g.moveTo(gx + wT - 2, top + 4); g.quadraticCurveTo(gx + 26, top - 10, gx + 30, top - 30); g.stroke();
-  g.save(); g.translate(gx + 22, top - 50); g.rotate(-0.03 + Math.sin(water.t * 1.3) * 0.02);
-  g.fillStyle = 'rgba(0,0,0,0.25)'; rr(g, 3, 3, tw, 24, 4); g.fill();
-  g.fillStyle = rgba(mul([246, 238, 222], lt.map((v) => Math.max(v, 0.7)))); rr(g, 0, 0, tw, 24, 4); g.fill();
-  g.fillStyle = 'rgba(60,40,30,0.9)'; g.fillText(water.text, 10, 16.5);
-  g.restore();
+  if (PROPS.glass) drawProp(g, 'glass', gx, gy, 23, lt);
+  else {
+    const top = gy - 26, wT = 7.5, wB = 6.5;
+    const gp = new Path2D(); gp.moveTo(gx - wT, top); gp.lineTo(gx + wT, top); gp.lineTo(gx + wB, gy - 1); gp.quadraticCurveTo(gx, gy + 0.5, gx - wB, gy - 1); gp.closePath();
+    g.fillStyle = rgba(mul([200, 220, 235], lt), 0.18); g.fill(gp);
+    g.save(); g.clip(gp); g.fillStyle = rgba(mul([150, 196, 230], lt), 0.42); g.fillRect(gx - 9, top + 7, 18, gy - top); g.restore();
+    g.strokeStyle = rgba(mul([235, 245, 255], lt), 0.6); g.lineWidth = 0.8; g.stroke(gp);
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(gx - wT + 2, top + 3, 1.3, 18);
+  }
+  // a soft glint that catches the eye now and then (diegetic: the host shows the words)
+  const tw = Math.max(0, Math.sin(T * 1.6)) ** 6;
+  drawSprite(g, GLOW_WARM, gx - 4, gy - 22, 8 + 6 * tw, (0.45 + 0.55 * tw) * a);
   g.restore();
 }
-function startStretch(text) {
-  animals.forEach((c, i) => later(i * 0.7, () => { if (c.act && (c.act.t === 'hop' || c.act.t === 'walk')) c.wantStretch = true; else c.stretchT = 0; c.lastStim = nowS(); }));
-  stretchMsg = { text: text || 'roll your shoulders', until: nowS() + 14 };
+function startStretch() {
+  animals.forEach((c, i) => later(i * 0.7, () => { if (c.gone) return; if (c.act && (c.act.t === 'hop' || c.act.t === 'walk')) c.wantStretch = true; else c.stretchT = 0; c.lastStim = nowS(); }));
 }
-// fromLW: echo of LW's own 'calm' event. Scene-started calm (reminder / menu action) flips LW.calm
-// so lw.js shows its breathing guide too.
 function setCalm(on, auto = 0, fromLW = false) {
   const was = calm.on; calm.on = on;
   if (on) { if (!was) calm.t = 0; if (!fromLW || !was) calm.auto = auto; } else calm.auto = 0;
@@ -1885,7 +1441,8 @@ function setCalm(on, auto = 0, fromLW = false) {
 }
 
 // =====================================================================
-//  audio (very soft; only when the shared context is running)
+//  audio (very soft; only when the shared context is running) + ambience
+// =====================================================================
 // =====================================================================
 let master = null, noiseBuf = null;
 function ac() { const a = LW.audio(); return a && a.state === 'running' ? a : null; }
@@ -2041,6 +1598,8 @@ function ambUpdate(a, t, dt, B, X) {
   }
 }
 
+
+
 // =====================================================================
 //  interaction
 // =====================================================================
@@ -2070,67 +1629,63 @@ function devMedia(cmd) {
   if (cmd === 'playpause') { if (np) window.__lw('nowplaying', { ...np, playing: !np.playing }); else window.__lw('nowplaying', demoTrack(demoI)); }
   else if (cmd === 'next' || cmd === 'previous') { demoI = (demoI + (cmd === 'next' ? 1 : DEMO.length - 1)) % DEMO.length; window.__lw('nowplaying', demoTrack(demoI)); }
 }
-function gust() { for (const f of flakes) { f.x += rand(-10, 40); f.y += rand(-30, 10); } for (let i = 0; i < 3; i++) taps.push({ x: L.win.x0 + rand(40, L.win.x1 - L.win.x0 - 40), y: L.win.y0 + rand(40, 300), t: 0 }); }
+function gust() { for (const arr of flakes) for (const f of arr) { f.x += rand(10, 40); f.y += rand(-20, 6); } }
 function onDown(px, py) {
   if (!L) return;
-  const x = toW(px), y = toW(py), T = nowS();
-  if (water && Math.abs(x - L.glass.x) < 30 && y > L.glass.y - 60 && y < L.glass.y + 6) { water.sip = 1; if (water.out < 0) water.out = 0; sDing(); return; }
+  let x = toW(px); const y = toW(py), T = nowS();
+  if (MIR) x = W - x;
+  if (water && Math.abs(x - L.glass.x) < 18 && y > L.glass.y - 34 && y < L.glass.y + 4) { if (water.out < 0) water.out = 0; sDing(); return; }
   for (const c of [cat, dog]) if (hitAnimal(c, x, y)) {
     c.happyT = c.kind === 'dog' ? 3.2 : 2.6; c.wakeUntil = T + 20; c.lastStim = T;
     if (c.kind === 'cat') sPurr(2.3);
-    for (let i = 0; i < 3; i++) later(i * 0.26, () => hearts.push({ x: c.x + 20 * c.k * c.face + rand(-12, 12), y: c.y - 120 * c.k, t: 0, life: 1.8, s: rand(0.9, 1.3), ph: rand(0, 6) }));
+    say(c);
     return;
   }
-  // record player (+ its sleeve) = play/pause
-  const TT = L.tt, S = L.sleeve;
-  if ((x > TT.x0 - 10 && x < TT.x1 + 6 && y > TT.top - 40 && y < TT.bot + 10) || (x > S.x - 6 && x < S.x + S.s + 6 && y > S.y - 6 && y < S.y + S.s + 4)) {
+  // the record player (+ its sleeve and card) = play/pause
+  const r = ttRect(), S = L.sleeve;
+  if ((x > r.x - 6 && x < r.x + r.w + 6 && y > r.y - 20 && y < r.y + r.h + 6) || (x > S.x - 4 && x < S.x + S.s + 4 && y > S.bot - S.s - 4 && y < S.bot + 6)) {
     const playing = music.intent ? music.intent.play : !!(music.np && music.np.playing);
     music.intent = { play: !playing, until: T + 3 };
     sClick(); media('playpause'); return;
   }
-  // window = next
+  // the window = next
   const R = L.win;
-  if (x > R.x0 - 8 && x < R.x1 + 8 && y > R.y0 - 8 && y < R.y1 + 4) { sWhoosh(); gust(); media('next'); return; }
-  // fire = a crackle + sparks
-  const B = L.fire.box;
+  if (x > R.x0 - 8 && x < R.x1 + 8 && y > R.y0 - 8 && y < R.y1 + 6) { sWhoosh(); gust(); media('next'); return; }
+  // the fire = a crackle + sparks
+  const B = L.fire;
   if (x > B.x0 && x < B.x1 && y > B.y0 && y < B.y1) { for (let i = 0; i < 10; i++) spawnEmber(true); fire.boost = 1; sCrackle(4, 0.06); return; }
-  if (Math.abs(x - L.mug.x) < 26 && y > L.mug.y - 50 && y < L.mug.y + 6) { puff(L.mug.x, L.mug.y - 34, 6); return; }
+  if (Math.abs(x - L.mug.x) < 18 && y > L.mug.y - 34 && y < L.mug.y + 4) { for (let i = 0; i < 8; i++) steam.push({ x: L.mug.x + rand(-4, 4), y: L.mug.y - 26, vx: rand(-8, 8), vy: rand(-30, -16), t: 0, life: rand(1.6, 2.6), r: rand(3, 6), ph: rand(0, 6), a: 0.14 }); }
 }
 LW.on('down', onDown);
-LW.on('move', (px, py) => {
-  if (!L) return;
-  const T = nowS(), p = { x: toW(px), y: toW(py), t: T };
-  if (ptrLast) { const dt = Math.max(1 / 60, T - ptrLast.t), d = Math.hypot(p.x - ptrLast.x, p.y - ptrLast.y); ptrSpeed = Math.max(ptrSpeed * 0.6, d / dt); }
-  ptrLast = p;
-});
 LW.on('beat', (k) => {
   music.pulse = Math.max(music.pulse, k);
   if (!(music.np && music.np.playing) || calm.on) return;
   music.beatN++;
-  // embers pop on the beat (bigger beats → a little burst + the faintest crackle)
-  const n = Math.round(1 + k * 3);
-  for (let i = 0; i < n; i++) spawnEmber(k > 0.6 && i === 0);
-  fire.boost = Math.max(fire.boost, 0.35 * k);
-  if (k > 0.75 && Math.random() < 0.25) sCrackle(2, 0.025);
-  cat.nodV += 9 * k; dog.nodV += 6 * k;
+  const n = Math.round(k * 2);
+  for (let i = 0; i < n; i++) spawnEmber(k > 0.7 && i === 0);
+  fire.boost = Math.max(fire.boost, 0.25 * k);
+  if (k > 0.8 && Math.random() < 0.2) sCrackle(2, 0.025);
+  cat.nodV += 7 * k; dog.nodV += 5 * k;
 });
 LW.on('env', () => { computeTarget(); });
-LW.on('settings', () => { computeTarget(); });
+LW.on('settings', () => { computeTarget(); syncPets(); });
+LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 60); });
 LW.on('nowplaying', onNowPlaying);
-LW.on('reminder', (r) => { if (!r) return; if (r.kind === 'water') startWater(r.text); else if (r.kind === 'stretch') startStretch(r.text); else if (r.kind === 'breathe') setCalm(true, 60); });
+LW.on('reminder', (r) => { if (!r) return; if (r.kind === 'water') startWater(); else if (r.kind === 'stretch') startStretch(); else if (r.kind === 'breathe') setCalm(true, 60); });
 LW.on('calm', (on) => setCalm(!!on, 0, true));
 LW.on('action', (a) => {
   if (a === 'water') startWater();
   else if (a === 'stretch') startStretch();
   else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
   else if (a === 'playpause' || a === 'next' || a === 'previous') media(a);
-  else if (a === 'pet' || a === 'feed') onDown((dog.x * cssH) / 1000, ((dog.y - 40 * dog.k) * cssH) / 1000);
+  else if ((a === 'pet' || a === 'feed') && !dog.gone) { const sx = MIR ? W - dog.x : dog.x; onDown((sx * cssH) / 1000, ((dog.y - 40 * dog.k) * cssH) / 1000); }
 });
 if (!LW.isHost) addEventListener('keydown', (e) => {
-  if (e.key === 's') startStretch('roll your shoulders, unclench your jaw');
+  if (e.key === 's') startStretch();
   if (e.key === '.') media('next');
   if (e.key === 'p') media('playpause');
   if (e.key === 'y') { LW.set('season', LW.settings.season === 'summer' ? 'winter' : LW.settings.season === 'winter' ? 'auto' : 'summer'); }
+  if (e.key === 'o') { LW.set('pets', LW.settings.pets === false); }
 });
 
 // =====================================================================
@@ -2146,10 +1701,10 @@ function frame() {
 }
 function step(dt, T) {
   runTimers();
-  ptrSpeed *= Math.exp(-dt * 6);
+  view.dt = dt;
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
-  stepGuide(dt);
+  stepGuide();
   updateEnv(dt);
   E.amb = ambient(); LIGHTS = lights();
   if (music.intent && nowS() > music.intent.until) music.intent = null;
@@ -2165,53 +1720,43 @@ function step(dt, T) {
   updateParticles(dt * calmPace(), T);
   updateWater(dt);
   for (const c of animals) updateAnimal(c, dt, T);
-  // the cat's paw taps leave a little ring on the glass
-  if (cat.pawK > 0.8 && Math.random() < dt * 2.2) taps.push({ x: cat.x + 104 * cat.k * cat.face, y: cat.y - 82 * cat.k, t: 0 });
-  if (stretchMsg && T > stretchMsg.until) stretchMsg = null;
 }
 function render(T) {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const R = L.win, ox = Math.round(R.x0 * U), oy = Math.round(R.y0 * U);
-  // 1) the outside view, then the room over it (panes are holes)
-  if (fade < 1 && prevOutCv) ctx.drawImage(prevOutCv, ox, oy);
-  ctx.globalAlpha = fade < 1 && prevOutCv ? fade : 1; ctx.drawImage(outCv, ox, oy); ctx.globalAlpha = 1;
-  ctx.setTransform(U, 0, 0, U, 0, 0);
-  drawOutsideLive(ctx, T);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (fade < 1 && prevRoomCv) ctx.drawImage(prevRoomCv, 0, 0);
-  ctx.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; ctx.drawImage(roomCv, 0, 0); ctx.globalAlpha = 1;
-  ctx.setTransform(U, 0, 0, U, 0, 0);
-  // 2) the music hero + fire
-  drawFrameArt(ctx, T);
-  drawCard(ctx, T);
-  drawSleeve(ctx, T);
-  drawTurntable(ctx, T);
-  drawFire(ctx, T);
-  // 3) animals behind the armchair, the armchair, everyone else
-  for (const c of animals) if (behindChair(c)) drawAnimal(ctx, c, T);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const cx0 = Math.round((L.sx + CH_X0) * U), cy0 = Math.round(CH_Y0 * U);
-  if (fade < 1 && prevChairCv) ctx.drawImage(prevChairCv, cx0, cy0);
-  ctx.globalAlpha = fade < 1 && prevChairCv ? fade : 1; ctx.drawImage(chairCv, cx0, cy0); ctx.globalAlpha = 1;
-  ctx.setTransform(U, 0, 0, U, 0, 0);
-  const front = animals.filter((c) => !behindChair(c)).sort((a, b) => a.y - b.y);
-  for (const c of front) drawAnimal(ctx, c, T);
-  drawParticles(ctx);
-  drawWater(ctx);
-  drawFairy(ctx, T);
+  const g = ctx;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#120c0a'; g.fillRect(0, 0, cv.width, cv.height);
+  setW(g);
+  // 1) the view out of the window, then the room over it (panes are holes)
+  drawOutside(g, T);
+  if (fade < 1 && prevRoomCv) g.drawImage(prevRoomCv, 0, 0, W, H);
+  g.globalAlpha = fade < 1 && prevRoomCv ? fade : 1; g.drawImage(roomCv, 0, 0, W, H); g.globalAlpha = 1;
+  // 2) the fire and its light on the room
+  drawFireLight(g);
+  drawFire(g, T);
+  drawSmallLights(g, T);
+  // 3) the music corner + the print
+  drawFrameArt(g, T);
+  drawSleeve(g, T);
+  drawCard(g, T);
+  drawTurntable(g, T);
+  // 4) props + animals, depth sorted (the chair's animals sit on it, after the mug on its arm)
+  drawMug(g);
+  const items = L.floorProps.map((p) => ({ y: p.y, draw: () => drawFloorProp(g, p) }));
+  for (const c of animals) items.push({ y: c.plat === 'floor' ? c.y : c.plat === 'seat' || c.plat === 'back' ? 846 : c.y, draw: () => drawAnimal(g, c, T) });
+  items.sort((a, b) => a.y - b.y).forEach((it) => it.draw());
+  drawWater(g, T);
+  drawParticles(g);
   // music tint: the room leans toward the album's colours (subtle)
   const tintLv = music.lv * (1 - calm.lv) * (0.5 + 0.5 * (1 - E.day));
-  if (tintLv > 0.01 && tintGlow) { drawSprite(ctx, tintGlow, L.frame.ax + L.frame.as / 2, 560, 520, 0.06 * tintLv, 'screen'); }
+  if (tintLv > 0.01 && tintGlow) drawSpriteXY(g, tintGlow, L.frame.cx, 560, 560, 420, 0.05 * tintLv, 'screen');
   // dimming: paused/stopped → a touch darker; calm → firelight only
-  const pausedDim = (1 - music.lv) * (music.ever ? 0.07 : 0.03) * (1 - E.day * 0.7);
-  const dim = clamp(pausedDim + calm.lv * (0.52 - 0.2 * breath()), 0, 0.8);   // the room breathes with the fire
-  if (dim > 0.002) { ctx.fillStyle = `rgba(10,5,4,${dim})`; ctx.fillRect(0, 0, W, H); }
+  const pausedDim = (1 - music.lv) * (music.ever ? 0.06 : 0.02) * (1 - E.day * 0.7);
+  const dim = clamp(pausedDim + calm.lv * (0.5 - 0.2 * breath()), 0, 0.8);
+  if (dim > 0.002) { g.fillStyle = `rgba(10,5,4,${dim})`; g.fillRect(0, 0, W, H); }
   if (calm.lv > 0.01) {
     const b = breath();
-    // firelight only: the hearth's light pool swells into the room with the breath (holds: frozen at its level)
-    drawSprite(ctx, GLOW_FIRE, L.fire.cx, L.fire.fy - 30, 240 + 230 * b, (0.08 + 0.26 * b) * calm.lv);
+    drawSpriteXY(g, GLOW_FIRE, L.fire.fx, L.hearth.y0, 260 + 240 * b, 150 + 120 * b, (0.08 + 0.24 * b) * calm.lv);
   }
-  ctx.globalAlpha = 0.8 - 0.35 * E.day; ctx.drawImage(VIGNETTE, 0, 0, W, H); ctx.globalAlpha = 1;
+  g.globalAlpha = 0.75 - 0.35 * E.day; g.drawImage(VIGNETTE, 0, 0, W, H); g.globalAlpha = 1;
 }
 
 // =====================================================================
@@ -2222,28 +1767,41 @@ function rebuild() {
   if (!E) computeTarget();
   E.amb = ambient(); LIGHTS = lights();
   bake(false);
-  animals.forEach((c) => placeAnimal(c, c.spot && L.spots[c.spot] ? c.spot : c.home));
+  for (const c of animals) {
+    if (c.gone) continue;
+    placeAnimal(c, c.spot && L.spots[c.spot] ? c.spot : c.home);
+  }
 }
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
 computeTarget();
-initFire();
 rebuildArt(false);
 rebuild();
-loadArtSlots();
+loadArtFiles();
 loadSpriteSet('dogs/golden', ['walk1', 'walk2', 'sit', 'lie', 'belly-up']);
 loadSpriteSet('cats/orange', ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch']);
+if (!petsWanted()) for (const c of animals) c.gone = true;
 if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
 
 function selfTest(secs = 30) {
   const ids = animals.map((p) => p.id + ':' + p.coat.base);
-  let err = 0;
-  for (let f = 0; f < secs * 30; f++) { LW.advance(1 / 30); animals.forEach((p, i) => { if (p.id + ':' + p.coat.base !== ids[i] || animals[i] !== p) err++; }); }
-  return { err, ids };
+  let err = 0, jumps = 0;
+  const last = animals.map((p) => [p.x, p.y]);
+  for (let f = 0; f < secs * 30; f++) {
+    LW.advance(1 / 30);
+    animals.forEach((p, i) => {
+      if (p.id + ':' + p.coat.base !== ids[i] || animals[i] !== p) err++;
+      if (!p.gone && Math.hypot(p.x - last[i][0], p.y - last[i][1]) > 40) jumps++;
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) err++;
+      last[i] = [p.x, p.y];
+    });
+  }
+  return { err, jumps, ids };
 }
-window.__cabin = { get E() { return E; }, breath, breathSt, get L() { return L; }, step, render, prof: { drawFire, drawOutsideLive, drawFairy, drawFrameArt, drawTurntable, drawSleeve, drawCard, drawParticles, drawAnimal, updateAnimal, updateFire, updateWeather }, get ctx() { return ctx; }, dog, cat, animals, music, calm, setCalm, startWater, startStretch, selfTest, planTrip, placeAnimal, onDown, get bakeMs() { return bakeMs; }, bake, SPR, ART };
+window.__cabin = { get E() { return E; }, breath, breathSt, get L() { return L; }, step, render, dog, cat, animals, music, calm, setCalm, startWater, startStretch, selfTest, planTrip, placeAnimal, onDown, syncPets, get bakeMs() { return bakeMs; }, bake, SPR, ART, PROPS, get snowAcc() { return snowAcc; }, set snowAcc(v) { snowAcc = v; }, fire,
+  prof: { drawFire, drawFireLight, drawOutside, drawSmallLights, drawFrameArt, drawTurntable, drawSleeve, drawCard, drawParticles, drawAnimal, updateAnimal, updateFire, updateWeather } };
 })();
 </script>
 </body>

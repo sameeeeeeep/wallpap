@@ -12,25 +12,37 @@ import CoreLocation
 import IOKit.ps
 import CoreServices
 
-struct Scene { let id: String; let title: String; let key: String; var pro = false; let category: String }
+/// `pro`: whole scene locked for free users (none today — every scene is free with its default skin;
+/// Pro unlocks the other skins + Pro features). `music`: has an in-scene player Music Mode drives.
+struct Scene {
+    let id: String; let title: String; let key: String; var pro = false; let category: String; var music = false
+    /// Credit shown in the panel ("by …"). Built-in scenes are by wallpap; add-ons carry scene.json's author.
+    var author = "wallpap"; var authorURL = ""
+    /// A folder the user added themselves (Custom tab; Pro only).
+    var custom = false
+}
 
 /// Menu categories, in order. Music Mode works in every scene; it isn't a category.
 /// "More" collects add-on scenes whose category isn't one of these (Catalog.swift).
-let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More"]
+let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More", "Custom"]
 /// Scenes shipped inside the app. `scenes` (Catalog.swift) adds the installed add-ons.
 let builtinScenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),
     Scene(id: "grass", title: "Touch Grass", key: "2", category: "Nature"),
     Scene(id: "cats", title: "Santorini Cats", key: "3", category: "Nature"),
-    Scene(id: "cafe", title: "Night Café", key: "4", pro: true, category: "Cozy Rooms"),
-    Scene(id: "cabin", title: "Snowy Cabin", key: "", pro: true, category: "Cozy Rooms"),
-    Scene(id: "records", title: "Record Store", key: "", pro: true, category: "Cozy Rooms"),
-    Scene(id: "speakeasy", title: "Speakeasy", key: "", pro: true, category: "City Nights"),
-    Scene(id: "rooftop", title: "Rooftop", key: "", pro: true, category: "City Nights"),
-    Scene(id: "ramen", title: "Ramen Alley", key: "", pro: true, category: "City Nights"),
-    Scene(id: "train", title: "Night Train", key: "", pro: true, category: "Journeys"),
-    Scene(id: "bowls", title: "Singing Bowls", key: "5", pro: true, category: "Mindful"),
-    Scene(id: "cymatics", title: "Cymatics", key: "", pro: true, category: "Music"),
+    Scene(id: "cafe", title: "Corner Café", key: "4", category: "Cozy Rooms", music: true),
+    Scene(id: "cabin", title: "Snowy Cabin", key: "", category: "Cozy Rooms", music: true),
+    Scene(id: "records", title: "Record Store", key: "", category: "Cozy Rooms", music: true),
+    Scene(id: "speakeasy", title: "Speakeasy", key: "", category: "City Nights", music: true),
+    Scene(id: "rooftop", title: "Rooftop", key: "", category: "City Nights", music: true),
+    Scene(id: "ramen", title: "Ramen Alley", key: "", category: "City Nights", music: true),
+    Scene(id: "train", title: "Train Journey", key: "", category: "Journeys", music: true),
+    Scene(id: "drive", title: "Night Drive", key: "", category: "Journeys", music: true),
+    Scene(id: "bowls", title: "Singing Bowls", key: "5", category: "Mindful"),
+    Scene(id: "cymatics", title: "Cymatics", key: "", category: "Music", music: true),
+    Scene(id: "kinetic", title: "Kinetic", key: "", category: "Music", music: true),
+    Scene(id: "fluids", title: "Fluids", key: "", category: "Music", music: true),
+    Scene(id: "skies", title: "Skies", key: "", category: "Music", music: true),
 ]
 
 final class WallWindow: NSWindow {
@@ -148,27 +160,52 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         set { defaults.set(newValue, forKey: "muted") }
     }
 
-    // Energy: render only while the desktop is actually in use.
-    var pauseWhenIdle: Bool {
-        get { defaults.object(forKey: "pauseWhenIdle") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "pauseWhenIdle") }
+    // Energy modes. "always" = never auto-pause · "away" = pause after `awaySeconds` away from the
+    // desktop · "battery" = like "away" (1 min) but only on battery; always on when plugged in.
+    // An auto-pause just stops drawing (the scene stays as it was, no blur); a desktop CLICK resumes.
+    var energyMode: String {
+        get {
+            if let m = defaults.string(forKey: "energyMode") { return m }
+            if defaults.bool(forKey: "pauseOnBattery") { return "battery" }               // migrate old toggles
+            return defaults.object(forKey: "pauseWhenIdle") as? Bool == false ? "always" : "away"
+        }
+        set { defaults.set(newValue, forKey: "energyMode") }
     }
+    static let awayChoices: [(String, Int)] = [("30 sec", 30), ("1 min", 60), ("2 min", 120), ("5 min", 300), ("10 min", 600), ("30 min", 1800)]
+    static let awayRecommended = 120
+    var awaySeconds: Int {
+        get { let v = defaults.integer(forKey: "awaySeconds"); return v == 0 ? App.awayRecommended : v }
+        set { defaults.set(newValue, forKey: "awaySeconds") }
+    }
+    var pauseWhenIdle: Bool { energyMode != "always" }
     var fps: Int {
         get { let v = defaults.integer(forKey: "fps"); return v == 0 ? 30 : v }
         set { defaults.set(newValue, forKey: "fps") }
     }
     var lastDesktopActivity = CACurrentMediaTime()
     var engaged = true
-    let idleSeconds = 20.0
 
     func checkEngagement() {
         let now = CACurrentMediaTime()
-        let want = !pauseWhenIdle || cursorOnDesktop || now - lastDesktopActivity < idleSeconds
-        if want != engaged { engaged = want; windows.forEach { $0.js("__lw('focus',\(want))") } }
+        let panelOpen = panelHostIfLoaded?.popover.isShown == true      // never pause under our own menu
+        var want: Bool
+        switch energyMode {
+        case "always": want = true
+        case "battery" where !onBattery: want = true
+        default:
+            let limit = Double(energyMode == "battery" ? 60 : awaySeconds)
+            // Once paused, only a desktop click (touchDesktop(click: true)) wakes it.
+            want = engaged && (cursorOnDesktop || now - lastDesktopActivity < limit)
+        }
+        if panelOpen { want = true; lastDesktopActivity = now }
+        setEngaged(want)
     }
-    func touchDesktop() {
+    func setEngaged(_ want: Bool) {
+        if want != engaged { engaged = want; windows.forEach { $0.js("__lw('focus',\(want))") }; panelHostIfLoaded?.push() }
+    }
+    func touchDesktop(click: Bool = false) {
         lastDesktopActivity = CACurrentMediaTime()
-        if !engaged { checkEngagement() }
+        if !engaged && click { setEngaged(true) }
     }
 
     // MARK: soundscape (global background noise, independent of scene sounds)
@@ -197,10 +234,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     lazy var beat: BeatSync = {
         let b = BeatSync()
-        b.onFrame = { [weak self] l, bs, m, h, k in
+        // Full music frame (levels + chroma, chord, key, tempo, sections) as JSON → LW.music / LW.mx.
+        b.onMusic = { [weak self] json in
             guard let self, self.engaged else { return }   // nobody looking → don't bother the scene
-            let js = String(format: "__lw('beat',{l:%.3f,b:%.3f,m:%.3f,h:%.3f,k:%.2f})", l, bs, m, h, k)
-            self.windows.forEach { $0.js(js) }
+            self.windows.forEach { $0.js("__lw('beat',\(json))") }
         }
         b.onError = { [weak self] err in
             NSLog("wallpap beat sync: \(err)")
@@ -412,13 +449,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         set { defaults.set(newValue, forKey: "pauseOnBattery") }
     }
     var onBattery = false
-    var paused: Bool { userPaused || (pauseOnBattery && onBattery) }
+    var paused: Bool { userPaused }   // explicit Pause only; battery/away pauses are soft (see energyMode)
 
     func checkPower() {
         let snap = IOPSCopyPowerSourcesInfo().takeRetainedValue()
         let src = IOPSGetProvidingPowerSourceType(snap)?.takeUnretainedValue() as String?
         let now = src == kIOPMBatteryPowerKey
-        if now != onBattery { onBattery = now; applyPause() }
+        if now != onBattery { onBattery = now; checkEngagement(); rebuildMenu() }
     }
 
     func applyPause() {
@@ -446,6 +483,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         rebuildWindows()
         installMonitors()
         revalidateLicense()
+        scheduleBreathReminders()
+        startCycleTimer(timeView)
+        startSceneCycle()
         refreshAddonRuntime()
         fetchCatalog()
         startAmbient()
@@ -455,6 +495,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         checkPower()
         Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.checkPower() }
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkEngagement() }
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.pushLayout() }   // widgets moved/added
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
         let ws = NSWorkspace.shared.notificationCenter
@@ -648,7 +689,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         if type == "down" {
             downOnDesktop = isDesktop(at: p)
             cursorOnDesktop = downOnDesktop
-            if downOnDesktop { touchDesktop() }
+            if downOnDesktop { touchDesktop(click: true) }
         }
         guard downOnDesktop, let w = target(for: p) else { return }
         let (x, y) = local(p, in: w)
@@ -664,9 +705,19 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         set { defaults.set(newValue, forKey: "weatherOverride") }
     }
     let viewHours: [String: Double] = ["sunrise": 6.3, "day": 12, "sunset": 18.3, "evening": 19.6, "night": 0]
+    /// Accelerated day cycles: scene-hours per real second. Slow = a whole day in an hour, Fast = in 8 minutes.
+    var cycleRates: [String: Double] { ["slow": 24.0 / 3600, "fast": 24.0 / 480] }
     var timeView: String {
-        get { let v = defaults.string(forKey: "timeView") ?? "auto"; return v == "auto" || viewHours[v] != nil ? v : "auto" }
+        get { let v = defaults.string(forKey: "timeView") ?? "auto"; return v == "auto" || viewHours[v] != nil || cycleRates[v] != nil ? v : "auto" }
         set { defaults.set(newValue, forKey: "timeView") }
+    }
+    var cycleStart: (Date, Double)?
+    var cycleTimer: Timer?
+    /// While a day cycle runs, push the advancing hour (fast: every 2 s, slow: every 10 s).
+    func startCycleTimer(_ view: String) {
+        cycleTimer?.invalidate(); cycleTimer = nil
+        guard cycleRates[view] != nil else { return }
+        cycleTimer = Timer.scheduledTimer(withTimeInterval: view == "fast" ? 2 : 10, repeats: true) { [weak self] _ in self?.pushEnv() }
     }
     var waterMinutes: Int {
         get { defaults.integer(forKey: "waterMinutes") }
@@ -790,7 +841,17 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         if let c = coord { e["location"] = ["latitude": c.latitude, "longitude": c.longitude, "approximate": weatherPlace != "your location"] as [String: Any] }
         else { e["location"] = NSNull() }
         let d = Calendar.current.dateComponents([.hour, .minute], from: Date())
-        e["hour"] = viewHours[timeView] ?? (Double(d.hour ?? 12) + Double(d.minute ?? 0) / 60)
+        let clock = Double(d.hour ?? 12) + Double(d.minute ?? 0) / 60
+        if let rate = cycleRates[timeView] {
+            // Starts from the real time when chosen and runs on from there.
+            if cycleStart == nil { cycleStart = (Date(), clock) }
+            let (t0, h0) = cycleStart!
+            e["hour"] = (h0 + Date().timeIntervalSince(t0) * rate).truncatingRemainder(dividingBy: 24)
+            e["view"] = "cycle"
+        } else {
+            cycleStart = nil
+            e["hour"] = viewHours[timeView] ?? clock
+        }
         if let o = weatherOverride { e["weather"] = o; e["intensity"] = 0.75 }
         else if !isPro { e["weather"] = "clear"; e["intensity"] = 0.0 }   // live weather is Pro
         guard let data = try? JSONSerialization.data(withJSONObject: e),
@@ -805,7 +866,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             guard let self else { return }
             self.reminderCount += 1
             // Mostly water; every third nudge is a stretch.
-            self.sendReminder(self.reminderCount % 3 == 0 ? "stretch" : "water")
+            self.fireReminder(self.reminderCount % 3 == 0 ? "stretch" : "water")
         }
     }
 
@@ -839,7 +900,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         rebuildMenu()
     }
     func pushSettings() {
-        guard let data = try? JSONSerialization.data(withJSONObject: sceneSettings),
+        guard let data = try? JSONSerialization.data(withJSONObject: effectiveSceneSettings()),
               let json = String(data: data, encoding: .utf8) else { return }
         windows.forEach { $0.js("__lw('settings',\(json))") }
     }
@@ -860,6 +921,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         pushSoundscape()
         pushAudioPrefs()
         if !lastAgentsJSON.isEmpty { webView.evaluateJavaScript("__lw('agents',\(lastAgentsJSON))", completionHandler: nil) }
+        pushLayout(force: true)
     }
 
     // MARK: menu
@@ -901,6 +963,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         let available = scenes.filter { sceneFile($0.id) != nil }
         func sceneItem(_ s: Scene) -> NSMenuItem {
             let item = NSMenuItem(title: s.title, action: #selector(pickScene(_:)), keyEquivalent: s.key)
+            if s.music { item.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "Plays your music") }
             item.representedObject = s.id
             item.state = s.id == sceneID ? .on : .off
             item.target = self
@@ -922,6 +985,28 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             menu.addItem(cItem)
         }
         addSceneItems(to: menu)
+        let cyItem = NSMenuItem(title: "Change Scene Automatically", action: nil, keyEquivalent: "")
+        let cyMenu = NSMenu()
+        for (label, m) in App.cycleChoices {
+            let it = NSMenuItem(title: m == 0 ? "Off" : "Every \(label)", action: #selector(pickSceneCycle(_:)), keyEquivalent: "")
+            it.tag = m; it.state = sceneCycleMinutes == m ? .on : .off; it.target = self
+            cyMenu.addItem(it)
+        }
+        cyMenu.addItem(.separator())
+        for (label, v) in [("From All Scenes", "all"), ("From This Category", "category")] {
+            let it = NSMenuItem(title: label, action: #selector(pickSceneCycleScope(_:)), keyEquivalent: "")
+            it.representedObject = v; it.state = sceneCycleScope == v ? .on : .off; it.target = self
+            cyMenu.addItem(it)
+        }
+        let sh = NSMenuItem(title: "Shuffle", action: #selector(toggleSceneCycleShuffle), keyEquivalent: "")
+        sh.state = sceneCycleShuffle ? .on : .off; sh.target = self
+        cyMenu.addItem(sh)
+        cyMenu.addItem(.separator())
+        let nx = NSMenuItem(title: "Next Scene Now", action: #selector(nextSceneNow), keyEquivalent: "n")
+        nx.target = self
+        cyMenu.addItem(nx)
+        cyItem.submenu = cyMenu
+        menu.addItem(cyItem)
         let compItem = NSMenuItem(title: "AI Companions", action: nil, keyEquivalent: "")
         let compMenu = NSMenu()
         for (label, v) in [("Off", "off"), ("In the Scene", "native"), ("As Characters (Clawd & Codex)", "characters")] {
@@ -937,7 +1022,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         section("Environment", in: menu)
         let viewItem = NSMenuItem(title: "Time of Day", action: nil, keyEquivalent: "")
         let viewMenu = NSMenu()
-        for (label, value) in [("Auto — Local Time", "auto"), ("Sunrise", "sunrise"), ("Day", "day"), ("Sunset", "sunset"), ("Evening", "evening"), ("Night", "night")] {
+        for (label, value) in [("Live — Local Time", "auto"), ("Day Cycle — Slow (a day per hour)", "slow"), ("Day Cycle — Fast (a day in 8 min)", "fast"), ("Sunrise", "sunrise"), ("Day", "day"), ("Sunset", "sunset"), ("Evening", "evening"), ("Night", "night")] {
             let item = NSMenuItem(title: label, action: #selector(pickTimeView(_:)), keyEquivalent: "")
             item.representedObject = value
             item.state = timeView == value ? .on : .off
@@ -973,6 +1058,21 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         wMenu.addItem(precise)
         wItem.submenu = wMenu
         menu.addItem(wItem)
+        let lItem = NSMenuItem(title: "Keep Clear for Widgets", action: nil, keyEquivalent: "")
+        let lMenu = NSMenu()
+        let det = NSMenuItem(title: "Detected: \(layoutSummary())", action: nil, keyEquivalent: ""); det.isEnabled = false
+        lMenu.addItem(det); lMenu.addItem(.separator())
+        for (label, v) in [("Auto (follow my widgets)", "auto"), ("Right Side", "right"), ("Left Side", "left"), ("Off — use the full screen", "off")] {
+            let it = NSMenuItem(title: label, action: #selector(pickLayoutMode(_:)), keyEquivalent: "")
+            it.representedObject = v; it.state = layoutMode == v ? .on : .off; it.target = self
+            lMenu.addItem(it)
+        }
+        lMenu.addItem(.separator())
+        let ic = NSMenuItem(title: "Also Avoid My Desktop Icons", action: #selector(toggleAvoidIcons), keyEquivalent: "")
+        ic.state = avoidIcons ? .on : .off; ic.target = self
+        lMenu.addItem(ic)
+        lItem.submenu = lMenu
+        menu.addItem(lItem)
         section("Sound & Music", in: menu)
         let mute = NSMenuItem(title: "Sound On", action: #selector(toggleMute), keyEquivalent: "s")
         mute.state = muted ? .off : .on
@@ -1020,14 +1120,22 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         ssItem.submenu = ssMenu
         lock(ssItem)
         menu.addItem(ssItem)
+        let curMusic = scenes.first { $0.id == sceneID }?.music ?? false
         let music = NSMenuItem(title: "Music Mode (Music / Spotify)", action: #selector(toggleMusicMode), keyEquivalent: "")
+
         music.state = musicMode ? .on : .off
         music.target = self
         lock(music)
         menu.addItem(music)
+        if musicMode && !curMusic {
+            let hint = NSMenuItem(title: "This scene has no music player — try one marked with a note", action: nil, keyEquivalent: "")
+            hint.isEnabled = false; hint.indentationLevel = 1
+            menu.addItem(hint)
+        }
         if isPro && musicMode && musicPermissionDenied {
-            let fix = NSMenuItem(title: "⚠︎ Allow wallpap to control Music/Spotify…", action: #selector(openAutomationSettings), keyEquivalent: "")
+            let fix = NSMenuItem(title: "Allow wallpap to control Music/Spotify…", action: #selector(openAutomationSettings), keyEquivalent: "")
             fix.indentationLevel = 1
+            fix.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)
             fix.target = self
             menu.addItem(fix)
         }
@@ -1075,20 +1183,47 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         rItem.submenu = rMenu
         lock(rItem)
         menu.addItem(rItem)
+        let brItem = NSMenuItem(title: "Breathe Reminder", action: nil, keyEquivalent: "")
+        let brMenu = NSMenu()
+        for m in [0, 60, 90, 120] {
+            let it = NSMenuItem(title: m == 0 ? "Off" : "Every \(m) min", action: #selector(pickBreathReminder(_:)), keyEquivalent: "")
+            it.tag = m; it.state = breathMinutes == m ? .on : .off; it.target = self
+            brMenu.addItem(it)
+        }
+        brItem.submenu = brMenu
+        lock(brItem)
+        menu.addItem(brItem)
+        let over = NSMenuItem(title: "Show Reminders Over My Apps", action: #selector(toggleRemindersOverApps), keyEquivalent: "")
+        over.state = remindersOverApps ? .on : .off; over.target = self
+        over.toolTip = "When the desktop is covered, reminders appear as a small card under the menu bar."
+        lock(over)
+        menu.addItem(over)
         section("Performance", in: menu)
-        let pause = NSMenuItem(title: paused && !userPaused ? "Paused (on battery)" : "Pause Animation", action: #selector(togglePause), keyEquivalent: "p")
+        let pause = NSMenuItem(title: "Pause Animation", action: #selector(togglePause), keyEquivalent: "p")
         pause.state = paused ? .on : .off
         pause.target = self
         menu.addItem(pause)
-        let pob = NSMenuItem(title: "Pause on Battery", action: #selector(togglePauseOnBattery), keyEquivalent: "")
-        pob.state = pauseOnBattery ? .on : .off
-        pob.target = self
-        menu.addItem(pob)
-        let idle = NSMenuItem(title: "Rest When Not in Use", action: #selector(togglePauseWhenIdle), keyEquivalent: "")
-        idle.state = pauseWhenIdle ? .on : .off
-        idle.toolTip = "Blur and stop drawing after 20s away from the desktop; wakes when your cursor returns."
-        idle.target = self
-        menu.addItem(idle)
+        let eItem = NSMenuItem(title: "Energy", action: nil, keyEquivalent: "")
+        let eMenu = NSMenu()
+        for (label, v) in [("Always On", "always"), ("Auto-Pause When Away", "away"), ("Pause on Battery", "battery")] {
+            let it = NSMenuItem(title: label, action: #selector(pickEnergy(_:)), keyEquivalent: "")
+            it.representedObject = v; it.state = energyMode == v ? .on : .off; it.target = self
+            eMenu.addItem(it)
+        }
+        eMenu.addItem(.separator())
+        let hdr = NSMenuItem(title: "Pause After", action: nil, keyEquivalent: ""); hdr.isEnabled = false
+        eMenu.addItem(hdr)
+        for (label, secs) in App.awayChoices {
+            let it = NSMenuItem(title: secs == App.awayRecommended ? "\(label) (recommended)" : label, action: #selector(pickAway(_:)), keyEquivalent: "")
+            it.tag = secs; it.state = energyMode == "away" && awaySeconds == secs ? .on : .off; it.target = self
+            it.indentationLevel = 1
+            eMenu.addItem(it)
+        }
+        eMenu.addItem(.separator())
+        let note = NSMenuItem(title: "Paused scenes stay as they are — click the desktop to resume", action: nil, keyEquivalent: ""); note.isEnabled = false
+        eMenu.addItem(note)
+        eItem.submenu = eMenu
+        menu.addItem(eItem)
         let fpsItem = NSMenuItem(title: "Frame Rate", action: nil, keyEquivalent: "")
         let fpsMenu = NSMenu()
         for (label, v) in [("20 fps · Battery Saver", 20), ("30 fps · Balanced", 30), ("60 fps · Smooth", 60)] {
@@ -1155,6 +1290,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             it.target = self
             menu.addItem(it)
         }
+        // Looks (skins) first: free users get the first; others are marked Pro and open the store.
+        let sk = skins(for: sceneID)
+        if sk.count > 1 {
+            let cur = currentSkin(sceneID) ?? sk[0].0
+            choice("Look", key: skinKeyFor(sceneID), options: sk.enumerated().map { (i, s) in (i > 0 && !isPro ? "\(s.1) · Pro" : s.1, s.0 as Any) }, defaultValue: cur)
+        }
+        if petScenes.contains(sceneID) { choice("Pets", key: "pets", options: [("On", true), ("Off", false)], defaultValue: true) }
         switch sceneID {
         case "bowls":
             choice("Auto Play", key: "auto", options: [("Off", "off"), ("Focus", "focus"), ("Meditate", "meditate"), ("Sleep", "sleep")], defaultValue: "off")
@@ -1173,7 +1315,6 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             choice("Songbirds", key: "birds", options: [("On", 1), ("Off", 0)], defaultValue: 1)
         case "cafe", "speakeasy":
             action("Pet the Cat", "pet")
-            choice("Music Player", key: "player", options: [("Record Player", "record"), ("Jukebox", "jukebox")], defaultValue: sceneID == "speakeasy" ? "jukebox" : "record")
         case "records", "ramen":
             action("Pet the Cat", "pet")
         case "rooftop":
@@ -1185,12 +1326,18 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         case "bowls":
             break
         case "cymatics":
-            choice("Plate", key: "plate", options: [("Auto", "auto"), ("Square", "square"), ("Round", "round")], defaultValue: "auto")
+            if (currentSkin("cymatics") ?? "sand") == "sand" { choice("Plate", key: "plate", options: [("Auto", "auto"), ("Square", "square"), ("Round", "round")], defaultValue: "auto") }
+        case "drive":
+            action("Flash High Beams", "beams")
+            action("Honk", "horn")
+            action("Faster", "faster")
+            action("Slower", "slower")
+            action("New Road", "newroad")
         default: break
         }
         if sceneID == "bowls" { action("Strike a Bowl", "strike") }
         // Scenes with a music player respond to transport actions while Music Mode is on.
-        if musicMode, ["cafe", "speakeasy", "records", "ramen", "rooftop", "cabin", "cymatics"].contains(sceneID) {
+        if musicMode, ["cafe", "speakeasy", "records", "ramen", "rooftop", "cabin", "cymatics", "drive", "kinetic", "fluids", "skies"].contains(sceneID) {
             action("Play / Pause", "playpause")
             action("Next Track", "next")
         }
@@ -1198,6 +1345,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     @objc func pickSetting(_ item: NSMenuItem) {
         guard let kv = item.representedObject as? [Any], let key = kv.first as? String else { return }
+        if key == skinKeyFor(sceneID), !isPro, let v = kv[1] as? String, v != skins(for: sceneID).first?.0 { openPro(); return }
         setSetting(key, kv[1])
     }
     @objc func runAction(_ item: NSMenuItem) {
@@ -1220,10 +1368,14 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     @objc func reloadScene() { loadScene() }
 
     @objc func togglePause() {
-        if paused && !userPaused { pauseOnBattery = false } else { userPaused.toggle() }
+        userPaused.toggle()
         applyPause()
     }
-    @objc func togglePauseOnBattery() { pauseOnBattery.toggle(); applyPause() }
+    @objc func pickEnergy(_ item: NSMenuItem) {
+        energyMode = item.representedObject as? String ?? "away"
+        setEngaged(true); lastDesktopActivity = CACurrentMediaTime(); rebuildMenu()
+    }
+    @objc func pickAway(_ item: NSMenuItem) { awaySeconds = item.tag; energyMode = "away"; rebuildMenu() }
     @objc func pickBreath(_ item: NSMenuItem) {
         breathPattern = item.representedObject as? String ?? "box"
         pushAudioPrefs(); rebuildMenu()
@@ -1252,7 +1404,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     @objc func toggleMusicMode() { musicMode.toggle(); startMusicMode(); updateBeatSync(); rebuildMenu() }
     @objc func toggleBeatSync() { beatSyncOn.toggle(); updateBeatSync(); rebuildMenu() }
-    @objc func togglePauseWhenIdle() { pauseWhenIdle.toggle(); checkEngagement(); rebuildMenu() }
+
     @objc func pickFps(_ item: NSMenuItem) {
         fps = item.tag
         windows.forEach { $0.js("__lw('perf',{fps:\(item.tag)})") }
@@ -1268,7 +1420,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     @objc func pickTimeView(_ item: NSMenuItem) {
         let value = item.representedObject as? String ?? "auto"
-        guard value == "auto" || viewHours[value] != nil else { return }
+        guard value == "auto" || viewHours[value] != nil || cycleRates[value] != nil else { return }
+        cycleStart = nil
+        startCycleTimer(value)
         timeView = value
         pushEnv()
         rebuildMenu()
@@ -1282,7 +1436,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     @objc func pickReminder(_ item: NSMenuItem) { waterMinutes = item.tag; rebuildMenu() }
-    @objc func remindNow() { sendReminder("water") }
+    @objc func remindNow() { fireReminder("water") }
 
     @objc func toggleLogin() {
         guard #available(macOS 13, *) else { return }

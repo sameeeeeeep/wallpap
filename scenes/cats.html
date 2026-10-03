@@ -19,6 +19,7 @@
 <div id="hud"></div>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script src="pet-motion.js"></script>
 <script>
 'use strict';
@@ -146,6 +147,7 @@ function computeEnv() {
 }
 // The live environment glides toward the target (~30 s), never pops; the
 // scenery is re-painted every few seconds while it changes and crossfaded.
+let farMoon = true, snowAcc = 0;
 let Et = null, wetness = 0, lastBake = -99, bakedSnap = null, fade = 1;
 const ENV_KEYS = ['lamp', 'stars', 'sunA', 'moon', 'warm', 'dl', 'clouds', 'rain', 'snow', 'storm', 'fog', 'sunXf', 'sunY', 'night', 'it'];
 function updateEnv(dt) {
@@ -157,8 +159,12 @@ function updateEnv(dt) {
   // the terrace gets wet in the rain and dries slowly afterwards
   wetness = clamp(wetness + (E.rain > 0.15 ? (dt * E.rain) / 45 : -dt / 480), 0, 1);
   E.wet = wetness;
+  // snow settles on exposed tops over a few minutes of snowfall, lingers, then melts (faster in sun)
+  snowAcc = clamp(snowAcc + (E.snow > 0.15 ? (dt * E.snow) / 150 : -dt * (E.sunny ? 1 / 240 : 1 / 600)), 0, 1);
+  E.snowAcc = snowAcc;
   fade = Math.min(1, fade + dt / 1.6);
-  const snap = [...ENV_KEYS.slice(0, 11).map((q) => E[q]), E.wet * 0.3, ...E.top.map((v) => v / 255), ...E.amb];
+  if (!farMoon && E.moon > 0.05 && LW.moonCanvas && LW.moonCanvas(32) && nowS() - lastBake > 0.5) bake(true);
+  const snap = [...ENV_KEYS.slice(0, 11).map((q) => E[q]), E.wet * 0.3, snowAcc * 0.5, ...E.top.map((v) => v / 255), ...E.amb];
   const diff = bakedSnap ? Math.max(...snap.map((v, i) => Math.abs(v - bakedSnap[i]))) : 1;
   if (diff > 0.025 && nowS() - lastBake > 2.5 && fade >= 1) bake(true);
 }
@@ -167,7 +173,7 @@ function updateEnv(dt) {
 //  layout
 // =====================================================================
 let dpr = 1, cssW = 1, cssH = 1, U = 1, W = 1600, H = 1000;
-let L = null;
+let L = null, L0 = null;
 let farCv = document.createElement('canvas'), fax = farCv.getContext('2d');
 let fgCv = document.createElement('canvas'), fgx = fgCv.getContext('2d');
 let spareFar = document.createElement('canvas'), spareFg = document.createElement('canvas');
@@ -180,11 +186,31 @@ function computeLayout() {
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
   H = 1000; W = (cssW / cssH) * 1000; U = cv.height / 1000;
+  MIR = (LW.layout && LW.layout.side) === 'left';
+  L = layoutFor(W, clearFrac());
+  L0 = layoutFor(PLATE_W, 0.72);   // where things sit in the painted plates (art/cats/, painted at 1500×1000)
+}
+// Desktop layout (LW.layout): the widget side stays calm. side:'left' mirrors the whole terrace (house
+// on the right, the calm open end on the left) — the world is laid out as for 'right' and drawn
+// mirrored; input is mirrored back. clearFrac = how far from the house the calm zone begins.
+let MIR = false;
+function clearFrac() {
+  const l = LW.layout || {}, c = Array.isArray(l.clear) ? l.clear : [0, 0.72];
+  return clamp(MIR ? 1 - c[0] : c[1], 0.55, 1);
+}
+// is a world point inside one of the host's avoid boxes (fractions of the display)?
+function avoidHit(x, y) {
+  const av = (LW.layout && LW.layout.avoid) || [];
+  const fx = (MIR ? W - x : x) / W, fy = y / H;
+  return av.some((b) => b && fx > b[0] && fx < b[0] + b[2] && fy > b[1] && fy < b[1] + b[3]);
+}
+const toWX = (x) => { const w = (x / cssH) * 1000; return MIR ? W - w : w; };
+function layoutFor(W, rFrac) {
   const Lr = {};
   Lr.horizon = 452;
   Lr.parTop = 584; Lr.parCap = 600; Lr.floorBack = 664;
   Lr.floorTop = 712; Lr.floorBot = 972;
-  const bx1 = clamp(W * 0.19, 230, 360);
+  const bx1 = 300;   // fixed: the painted house (art/cats/terrace.png) has one width
   Lr.bld = { x1: bx1, top: 300, front: 905 };
   Lr.dome = { x: bx1 * 0.5, y: 300, r: bx1 * 0.3 };
   Lr.win = { x0: bx1 * 0.22, x1: bx1 * 0.6, y0: 418, y1: 520 };
@@ -194,7 +220,7 @@ function computeLayout() {
   Lr.door = { x0: bx1 + 26 - sw * sn - 92, w: 78, base: 912 - sh * sn };
   // the right ~28% is reserved for macOS widgets: the bench (a favourite resting
   // spot) ends where that zone begins
-  Lr.R = W * 0.72;
+  Lr.R = W * rFrac;
   const benchX1 = Math.min(W - 30, Math.max(Lr.R - 10, bx1 + 640));
   Lr.bench = { x0: benchX1 - clamp(W * 0.18, 220, 300), x1: benchX1, seat: 668, base: 792 };
   Lr.hasBench = Lr.bench.x1 - Lr.bench.x0 > 180 && Lr.bench.x0 > bx1 + 120;
@@ -249,7 +275,7 @@ function computeLayout() {
   const rr = mulberry(99);
   Lr.stars = [];
   for (let i = 0; i < Math.round(W / 9); i++) Lr.stars.push({ x: rr() * W, y: rr() * 360, p: rr() * 6.28, s: 0.5 + rr() * 1.5, r: 0.8 + rr() * 1.3 });
-  L = Lr;
+  return Lr;
 }
 // walkable terrace floor (not inside the house/stairs or behind the bench)
 function floorClamp(x, y) {
@@ -298,12 +324,12 @@ function paintFar() {
     glow(g, sunX, E.sunY, 120, sc2, 0.5 * E.sunA * (E.clouds > 0.9 ? 0.3 : 1));
     if (E.clouds < 0.95) { g.fillStyle = rgba(mix3([255, 248, 225], [255, 205, 140], E.warm), E.sunA * (1 - E.fog * 0.5)); g.beginPath(); g.arc(sunX, E.sunY, 30, 0, TAU); g.fill(); }
   }
-  if (E.moon > 0.3) {
-    const mx = W * 0.27, my = 150;
-    glow(g, mx, my, 180, [200, 210, 255], 0.16 * E.moon);
-    g.fillStyle = rgba([246, 240, 222], E.moon); g.beginPath(); g.arc(mx, my, 24, 0, TAU); g.fill();
-    g.fillStyle = rgba([222, 214, 190], 0.6 * E.moon);
-    for (const [dx, dy, r] of [[-7, -5, 5], [6, 4, 4], [-2, 9, 3]]) { g.beginPath(); g.arc(mx + dx, my + dy, r, 0, TAU); g.fill(); }
+  // the shared photoreal moon (moon.js: real phase, earthshine, halo, warmer near the horizon)
+  farMoon = E.moon <= 0.05 || !LW.drawMoon;
+  if (E.moon > 0.05 && LW.drawMoon) {
+    const mx = W * 0.27, my = 150, ast = LW.env.astronomy && LW.env.astronomy.moon;
+    farMoon = !!LW.moonCanvas(32);
+    LW.drawMoon(g, mx, my, 22, { alt: ast ? ast.altitude : undefined, glow: 0.45 + 0.3 * E.fog, haze: clamp((E.clouds - 0.3) * 0.6 + E.fog * 0.7, 0, 1), alpha: clamp(E.moon * 1.1, 0, 1) });
   }
   // sea
   const seaTop = mix3(E.bot, E.sea, 0.45), seaBot = E.sea;
@@ -355,7 +381,7 @@ function paintFar() {
 // ----- foreground: house, dome, bougainvillea, parapet, terrace -----------
 function paintFG() {
   fgCv.width = cv.width; fgCv.height = cv.height;
-  const g = fgx; g.setTransform(U, 0, 0, U, 0, 0);
+  let g = fgx; g.setTransform(U, 0, 0, U, 0, 0);
   g.clearRect(0, 0, W, H);
   const b = L.bld, x1 = b.x1;
   const WHITE = '#f4f0ea', WSHADE = '#ddd6cf', BLUE = '#2f5f9c', DOOR = '#86abc9';
@@ -376,39 +402,6 @@ function paintFG() {
   gr.addColorStop(0, litS('#8a7a70', 1, 0.35)); gr.addColorStop(1, litS('#8a7a70', 1, 0));
   g.fillStyle = gr; g.fillRect(0, L.floorBack, W, 40);
 
-  // weather on the stone floor (before anything stands on it)
-  if (E.wet > 0.03) {
-    g.globalAlpha = clamp(E.wet, 0, 1);
-    gr = g.createLinearGradient(0, L.floorBack, 0, H);
-    gr.addColorStop(0, rgba([30, 40, 60], 0.3)); gr.addColorStop(1, rgba([30, 40, 60], 0.12));
-    g.fillStyle = gr; g.fillRect(0, L.floorBack, W, H);
-    L.lanterns.forEach((ln) => {
-      g.save(); g.translate(ln.x, L.floorBack + 70); g.scale(0.35, 1);
-      const rg = g.createRadialGradient(0, 0, 4, 0, 0, 90);
-      rg.addColorStop(0, rgba([255, 200, 140], 0.22 * (0.4 + E.lamp))); rg.addColorStop(1, rgba([255, 200, 140], 0));
-      g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 90, 0, TAU); g.fill(); g.restore();
-    });
-    g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 2;
-    const r5 = mulberry(4);
-    for (let i = 0; i < 40; i++) { const x = r5() * W, y = L.floorBack + 30 + r5() * (H - L.floorBack); g.beginPath(); g.ellipse(x, y, 20 + r5() * 40, 2 + r5() * 3, 0, 0, TAU); g.stroke(); }
-    // puddles once it has been raining a while
-    if (E.wet > 0.45) {
-      const r6 = mulberry(12); g.globalAlpha = clamp((E.wet - 0.45) * 2, 0, 1);
-      for (let i = 0; i < 7; i++) {
-        const x = 80 + r6() * (W - 160), y = L.floorBack + 60 + r6() * (H - L.floorBack - 90);
-        const pg = g.createLinearGradient(0, y - 8, 0, y + 8);
-        pg.addColorStop(0, rgba(mix3(E.top, [180, 190, 210], 0.4), 0.5)); pg.addColorStop(1, rgba(mix3(E.bot, [120, 130, 160], 0.4), 0.35));
-        g.fillStyle = pg; g.beginPath(); g.ellipse(x, y, 40 + r6() * 50, 6 + r6() * 5, 0, 0, TAU); g.fill();
-      }
-    }
-    g.globalAlpha = 1;
-  }
-  if (E.snow > 0.05) {
-    const r4 = mulberry(77);
-    g.fillStyle = 'rgba(250,252,255,0.85)';
-    for (let i = 0; i < 260 * E.snow; i++) { g.globalAlpha = 0.25 + r4() * 0.4; g.beginPath(); g.arc(r4() * W, L.floorBack + r4() * (H - L.floorBack), 1 + r4() * 2.5, 0, TAU); g.fill(); }
-    g.globalAlpha = 1;
-  }
   // parapet
   g.fillStyle = litS(WSHADE); g.fillRect(x1 - 10, L.parCap, W - x1 + 20, L.floorBack - L.parCap);
   gr = g.createLinearGradient(0, L.parCap, 0, L.floorBack);
@@ -418,21 +411,6 @@ function paintFG() {
   g.fillStyle = litS(WHITE); g.fill();
   g.fillStyle = litS('#ffffff', 1, 0.55); g.fillRect(x1, L.parTop + 2, W - x1, 3);
   g.fillStyle = litS('#9a8f86', 1, 0.25); g.fillRect(x1 - 10, L.parCap + 6, W - x1 + 20, 4);
-
-  // the mat (woven, terracotta + blue)
-  const m = L.mat;
-  g.save(); g.translate(m.cx, m.cy); g.scale(1, m.ry / m.rx);
-  const mr = m.rx;
-  const ring = (r, c) => { g.fillStyle = litS(c); g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill(); };
-  ring(mr, '#b8694f'); ring(mr * 0.9, '#e8d9bf'); ring(mr * 0.78, '#3f6c9a'); ring(mr * 0.62, '#e8d9bf'); ring(mr * 0.5, '#c97a5c'); ring(mr * 0.28, '#e8d9bf'); ring(mr * 0.16, '#3f6c9a');
-  g.strokeStyle = litS('#e8d9bf', 1, 0.8); g.lineWidth = 3; g.setLineDash([5, 9]);
-  g.beginPath(); g.arc(0, 0, mr * 0.7, 0, TAU); g.stroke(); g.setLineDash([]);
-  g.restore();
-  // fringe
-  g.strokeStyle = litS('#d9c6a6'); g.lineWidth = 1.6;
-  for (let i = -3; i <= 3; i++) for (const s of [-1, 1]) {
-    const yy = m.cy + i * m.ry * 0.18; g.beginPath(); g.moveTo(m.cx + s * m.rx * Math.sqrt(1 - Math.pow(i * 0.18, 2)), yy); g.lineTo(m.cx + s * (m.rx * Math.sqrt(1 - Math.pow(i * 0.18, 2)) + 9), yy); g.stroke();
-  }
 
   // house
   gr = g.createLinearGradient(0, b.top, 0, b.front);
@@ -473,16 +451,6 @@ function paintFG() {
   // bougainvillea spilling over the roof corner and down the wall
   paintBougainvillea(g, x1 - 12, b.top - 12);
 
-  // lanterns on the parapet (unlit body)
-  L.lanterns.forEach((ln) => {
-    const x = ln.x, y = ln.y;
-    g.fillStyle = litS('#3a3534'); rrect(g, x - 11, y - 44, 22, 40, 3); g.fill();
-    g.fillStyle = E.lamp > 0.15 ? rgba(mix3(lit('#f2d7a6'), [255, 196, 110], E.lamp), 1) : litS('#e8e2d2', 1, 0.8);
-    g.fillRect(x - 7, y - 39, 14, 30);
-    g.fillStyle = litS('#3a3534'); g.beginPath(); g.moveTo(x - 14, y - 44); g.lineTo(x, y - 58); g.lineTo(x + 14, y - 44); g.fill();
-    g.fillRect(x - 13, y - 6, 26, 5);
-    g.beginPath(); g.arc(x, y - 61, 4, 0, TAU); g.strokeStyle = litS('#3a3534'); g.lineWidth = 2; g.stroke();
-  });
   // string light anchor points (the lights themselves sway live in the wind)
   L.str = { s0: [x1 - 6, b.top + 34], s1: [W + 30, 404], sag: 74 };
   L.bulbs = [];
@@ -503,8 +471,84 @@ function paintFG() {
   };
   awning(L.door.x0 - 28, L.door.x0 + L.door.w + 28, L.door.base - 186, 30);
   awning(L.win.x0 - 38, L.win.x1 + 38, L.win.y0 - 34, 24);
+  // the painted terrace replaces the vector colours: the house block as painted, the parapet and
+  // floor stretched from the plate's 1500 units to this width
+  if (PLATES.terrace) {
+    const hx = x1 + 150, sx0 = x1 - 14;
+    g.save(); g.setTransform(U, 0, 0, U, 0, 0);
+    platePaint(g, fgCv, 'terrace', [
+      // the roofline, dome and bougainvillea: the painted cut-outs themselves (they replace the vector shapes)
+      { src: [-20, 0, hx + 20, H], dst: [-20, 0, hx + 20, H], clip: [-20, 0, hx + 20, L.parTop - 4], mode: 'replace' },
+      // parapet and floor (opaque in the plate: drawn straight over, no seams), stretched to this width
+      { src: [sx0, L.parTop - 8, PLATE_W - sx0, H - L.parTop + 8], dst: [sx0, L.parTop - 8, W - sx0, H - L.parTop + 8], clip: [x1 - 1, L.parTop - 8, W, H], mode: 'over' },
+      // the house wall below the parapet line, unstretched, overlapping the seam
+      { src: [-20, 0, hx + 20, H], dst: [-20, 0, hx + 20, H], clip: [-20, L.parTop - 12, x1 + 22, H], mode: 'over' },
+    ]);
+    g.restore();
+  }
+  // weather on the stone floor: only where the sky reaches it — not inside the house, not under the
+  // bench canopy (a dry patch stays there), with lamp reflections in the wet and gradual snow cover
+  const cz = L.hasBench ? [L.bench.x0 - 30, L.floorBack, L.bench.x1 - L.bench.x0 + 60, L.bench.base + 26 - L.floorBack] : null;
+  const fgMain = g;
+  if (E.wet > 0.03 || E.snowAcc > 0.02) {   // drawn on a scratch layer, then the sheltered patch is softly erased
+    const wc = paintFG.wc || (paintFG.wc = document.createElement('canvas'));
+    wc.width = fgCv.width; wc.height = fgCv.height;
+    g = wc.getContext('2d'); g.setTransform(U, 0, 0, U, 0, 0);
+  }
+  g.save(); g.beginPath(); g.rect(x1 - 2, L.floorBack, W, H); g.clip();
+  if (E.wet > 0.03) {
+    g.globalAlpha = clamp(E.wet, 0, 1);
+    gr = g.createLinearGradient(0, L.floorBack, 0, H);
+    gr.addColorStop(0, rgba([30, 40, 60], 0.3)); gr.addColorStop(1, rgba([30, 40, 60], 0.12));
+    g.fillStyle = gr; g.fillRect(0, L.floorBack, W, H);
+    // wet stone mirrors the lanterns and the lit doorway
+    const refl = (x, y0, rw, a) => {
+      g.save(); g.translate(x, y0); g.scale(0.32, 1);
+      const rg = g.createRadialGradient(0, 0, 4, 0, 0, rw);
+      rg.addColorStop(0, rgba([255, 200, 140], a)); rg.addColorStop(1, rgba([255, 200, 140], 0));
+      g.fillStyle = rg; g.beginPath(); g.arc(0, 0, rw, 0, TAU); g.fill(); g.restore();
+    };
+    L.lanterns.forEach((ln) => refl(ln.x, L.floorBack + 70, 90, 0.22 * (0.4 + E.lamp)));
+    g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 2;
+    const r5 = mulberry(4);
+    for (let i = 0; i < 40; i++) { const x = r5() * W, y = L.floorBack + 30 + r5() * (H - L.floorBack); g.beginPath(); g.ellipse(x, y, 20 + r5() * 40, 2 + r5() * 3, 0, 0, TAU); g.stroke(); }
+    // puddles once it has been raining a while (they reflect the sky)
+    if (E.wet > 0.45) {
+      const r6 = mulberry(12); g.globalAlpha = clamp((E.wet - 0.45) * 2, 0, 1);
+      L.puddles = [];
+      for (let i = 0; i < 9; i++) {
+        const x = x1 + 60 + r6() * (W - x1 - 160), y = L.floorBack + 60 + r6() * (H - L.floorBack - 90), rx = 40 + r6() * 50, ry = 6 + r6() * 5;
+        if (cz && x > cz[0] - rx && x < cz[0] + cz[2] + rx && y < cz[1] + cz[3] + ry) continue;
+        L.puddles.push([x, y, rx, ry]);
+        const pg = g.createLinearGradient(0, y - 8, 0, y + 8);
+        pg.addColorStop(0, rgba(mix3(E.top, [180, 190, 210], 0.4), 0.5)); pg.addColorStop(1, rgba(mix3(E.bot, [120, 130, 160], 0.4), 0.35));
+        g.fillStyle = pg; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+  if (E.snowAcc > 0.02) {
+    const sa = E.snowAcc;
+    g.fillStyle = rgba(lit([246, 248, 252]), 0.55 * smooth(sa / 0.8)); g.fillRect(0, L.floorBack, W, H);
+    const r4 = mulberry(77);
+    g.fillStyle = 'rgba(250,252,255,0.85)';
+    for (let i = 0; i < 300 * Math.min(1, sa * 2); i++) { g.globalAlpha = 0.25 + r4() * 0.4; g.beginPath(); g.ellipse(r4() * W, L.floorBack + r4() * (H - L.floorBack), 3 + r4() * 9, 1 + r4() * 2, 0, 0, TAU); g.fill(); }
+    g.globalAlpha = 1;
+  }
+  g.restore();
+  if (g !== fgMain) {
+    if (cz) {   // under the canopy the stone stays dry: a soft-edged patch, wider at the back
+      g.save(); g.globalCompositeOperation = 'destination-out';
+      g.translate(cz[0] + cz[2] / 2, cz[1] + cz[3] * 0.55); g.scale(1, (cz[3] * 0.62) / (cz[2] * 0.5));
+      const dg = g.createRadialGradient(0, 0, cz[2] * 0.22, 0, 0, cz[2] * 0.56);
+      dg.addColorStop(0, 'rgba(0,0,0,0.92)'); dg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = dg; g.beginPath(); g.arc(0, 0, cz[2] * 0.56, 0, TAU); g.fill(); g.restore();
+    }
+    const wc = g.canvas; g = fgMain;
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(wc, 0, 0); g.restore();
+  }
   // the bench canopy's soft shade on the wall behind the seat (the canopy itself is a depth-sorted prop)
-  if (L.hasBench) { const bn = L.bench; g.fillStyle = 'rgba(40,30,40,0.12)'; g.fillRect(bn.x0 - 10, bn.seat - 30, bn.x1 - bn.x0 + 20, 26); }
+  if (L.hasBench && !ARTREF) { const bn = L.bench; g.fillStyle = 'rgba(40,30,40,0.12)'; g.fillRect(bn.x0 - 10, bn.seat - 30, bn.x1 - bn.x0 + 20, 26); }
   // lighting overlays (only where something is painted)
   g.globalCompositeOperation = 'source-atop';
   if (E.warm > 0.05) {
@@ -518,13 +562,26 @@ function paintFG() {
     glow(g, L.door.x0 + L.door.w / 2, L.door.base - 120, 160, [255, 190, 120], 0.2 * E.lamp);
   }
   g.globalCompositeOperation = 'source-over';
-  if (E.snow > 0.05) {
-    g.globalAlpha = clamp(E.snow * 1.5, 0, 1);
-    g.fillStyle = 'rgba(250,252,255,0.9)';
-    rrect(g, x1 - 12, L.parTop - 5, W - x1 + 24, 9, 5); g.fill();
-    g.fillRect(-20, b.top - 20, x1 + 18, 6);
-    g.beginPath(); g.ellipse(L.dome.x, L.dome.y - 40 - L.dome.r * 0.78, L.dome.r * 0.55, 8, 0, Math.PI, TAU); g.fill();
-    g.globalAlpha = 1;
+  // someone is home: the window glows warm after dark
+  if (E.lamp > 0.25 && !ARTREF) {
+    const wn = L.win, a = clamp((E.lamp - 0.25) / 0.6, 0, 1);
+    g.save(); rrect(g, wn.x0 + 4, wn.y0 + 4, wn.x1 - wn.x0 - 8, wn.y1 - wn.y0 - 8, 6); g.clip();
+    const wg = g.createLinearGradient(0, wn.y0, 0, wn.y1);
+    wg.addColorStop(0, rgba([255, 196, 120], 0.55 * a)); wg.addColorStop(1, rgba([240, 150, 80], 0.75 * a));
+    g.fillStyle = wg; g.fillRect(wn.x0, wn.y0, wn.x1 - wn.x0, wn.y1 - wn.y0);
+    g.fillStyle = rgba([60, 40, 40], 0.35 * a); g.fillRect((wn.x0 + wn.x1) / 2 - 2, wn.y0, 4, wn.y1 - wn.y0);   // the mullion against the light
+    g.restore();
+    g.globalCompositeOperation = 'lighter'; glow(g, (wn.x0 + wn.x1) / 2, (wn.y0 + wn.y1) / 2, 120, [255, 170, 90], 0.12 * a); g.globalCompositeOperation = 'source-over';
+  }
+  // snow builds up on what faces the sky: parapet coping, roof, dome, window sill, awnings
+  if (E.snowAcc > 0.02) {
+    const sa = smooth(E.snowAcc), th = 2 + 7 * sa;
+    g.fillStyle = rgba(lit([250, 251, 255]), 0.95 * Math.min(1, E.snowAcc * 3));
+    rrect(g, x1 - 12, L.parTop - th + 2, W - x1 + 24, th + 2, Math.min(5, th)); g.fill();
+    g.fillRect(-20, b.top - 16 - th + 2, x1 + 18, th);
+    g.beginPath(); g.ellipse(L.dome.x, L.dome.y - 40 - L.dome.r * 0.8, L.dome.r * (0.35 + 0.3 * sa), 3 + 6 * sa, 0, Math.PI, TAU); g.fill();
+    const wn = L.win; rrect(g, wn.x0 - 12, wn.y1 + 4 - th * 0.7, wn.x1 - wn.x0 + 24, th * 0.7 + 2, 3); g.fill();
+    for (const [xa, xb, yt] of [[L.door.x0 - 28, L.door.x0 + L.door.w + 28, L.door.base - 186], [L.win.x0 - 38, L.win.x1 + 38, L.win.y0 - 34]]) { rrect(g, xa + 6, yt - th * 0.6, xb - xa - 12, th * 0.6 + 1, 2); g.fill(); }
   }
 }
 
@@ -542,14 +599,70 @@ function paintBougainvillea(g, x, y) {
   L.bougX = x; L.bougY = y;
 }
 
+// ----- painted plates (art/cats/) -----------------------------------------
+// The terrace is painted (Codex, from this file's own geometry — docs/scene-polish.md):
+//   terrace.png  1536×1024 — house, dome, window, door, awnings, stairs, parapet, floor (no props)
+//   props.png    1536×1024 — bench, canopy, bowls, pot, mat, lanterns where they stand at 1500 wide
+// both painted in flat neutral daylight over the world 1500×1000 units (PLATE_W). The vector shapes
+// below still define every silhouette (so ledges and depth sorting stay exact); the plates replace
+// their colours (source-atop), then the scene light multiplies them — night, dusk, rain and lamp
+// pools are laid on top exactly as before. ?procedural=1 or a missing plate keeps the vector look.
+const PLATE_W = 1500;
+const ARTREF = new URLSearchParams(location.search).get('artref');   // dev: render the reference for a repaint
+const PLATES = {};
+for (const n of ['terrace', 'props']) {
+  if (ARTREF || new URLSearchParams(location.search).get('procedural') === '1') break;
+  const im = new Image();
+  im.onload = () => { if (im.naturalWidth > 0) { PLATES[n] = im; if (L) bake(true); } };
+  im.src = 'art/cats/' + n + '.png';
+}
+// paint a plate over what is already drawn on g (world transform set), only inside the drawn alpha,
+// then light it: pieces = [{src:[x,y,w,h] in plate units, dst:[x,y,w,h] in world, clip?:[x,y,w,h]}]
+function platePaint(g, cvs, plate, pieces, k = 1) {
+  const im = PLATES[plate]; if (!im) return false;
+  const ps = im.naturalWidth / PLATE_W;
+  g.save();
+  for (const pc of pieces) {
+    g.save();
+    const [sx, sy, sw, sh] = pc.src, [dx, dy, dw, dh] = pc.dst, cl = pc.clip || pc.dst;
+    g.beginPath(); g.rect(...cl); g.clip();
+    // 'replace': the painted cut-out itself (organic edges: bougainvillea, the house, the pot);
+    // otherwise only inside the vector silhouette, which keeps ledges and depth sorting exact
+    if (pc.mode === 'replace') g.clearRect(...cl); else if (pc.mode !== 'over') g.globalCompositeOperation = 'source-atop';
+    g.drawImage(im, sx * ps, sy * ps, sw * ps, sh * ps, dx, dy, dw, dh);
+    g.restore();
+  }
+  // the scene light (as litS does for the vector colours)
+  const mask = platePaint.m || (platePaint.m = document.createElement('canvas'));
+  if (mask.width !== cvs.width || mask.height !== cvs.height) { mask.width = cvs.width; mask.height = cvs.height; }
+  const mg = mask.getContext('2d'); mg.setTransform(1, 0, 0, 1, 0, 0); mg.clearRect(0, 0, mask.width, mask.height); mg.drawImage(cvs, 0, 0);
+  const m = E.amb.map((v) => clamp(v * k, 0, 1) * 255);
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(m); g.fillRect(0, 0, cvs.width, cvs.height);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(mask, 0, 0);
+  g.restore();
+  return true;
+}
+// a prop's own spot in the props plate → where it stands now (its layout moved with the width)
+const propPiece = (x0, y0, w, h, dx, dy) => ({ src: [x0 - dx, y0 - dy, w, h], dst: [x0, y0, w, h] });
+
 // ----- props drawn in depth order with the cats ----------------------------
-function makeSprite(name, x0, y0, w, h, paint, key) {
+function makeSprite(name, x0, y0, w, h, paint, key, piece, after) {
   const c = sprites[name] || (sprites[name] = { cv: document.createElement('canvas') });
   c.cv.width = Math.ceil(w * U); c.cv.height = Math.ceil(h * U);
   const g = c.cv.getContext('2d');
   g.setTransform(U, 0, 0, U, -x0 * U, -y0 * U);
   paint(g);
+  if (piece) platePaint(g, c.cv, piece.plate || 'props', [piece]);
+  if (after) { g.setTransform(U, 0, 0, U, -x0 * U, -y0 * U); after(g); }
   c.x0 = x0; c.y0 = y0; c.w = w; c.h = h; c.key = key;
+}
+// warm lantern/door light on a prop (after its plate, on its own pixels only)
+function lampPools(g) {
+  if (E.lamp <= 0.1 || ARTREF) return;
+  g.globalCompositeOperation = 'source-atop';
+  L.lanterns.forEach((ln) => glow(g, ln.x, ln.y - 22, 260, [255, 178, 96], 0.42 * E.lamp));
+  g.globalCompositeOperation = 'source-over';
 }
 function paintSprites() {
   const WHITE = '#f4f0ea';
@@ -563,7 +676,45 @@ function paintSprites() {
       g.fillStyle = litS('#c9c0b6', 1, 0.6); g.fillRect(xa - 30, top + 12, st.w + 30, 3);
     }
     g.fillStyle = litS('#d6cec5'); g.fillRect(st.x1 - 4, st.base - st.h, 6, st.h);
-  }, st.base);
+  }, st.base, Object.assign(propPiece(st.x1 - st.w * st.n - 30, st.base - st.h * st.n - 12, st.w * st.n + 50, st.h * st.n + 30, 0, 0), { plate: 'terrace' }), (g) => {
+    if (!(E.snowAcc > 0.02)) return;
+    const th = 1.5 + 5 * smooth(E.snowAcc);
+    g.fillStyle = rgba(lit([250, 251, 255]), 0.95 * Math.min(1, E.snowAcc * 3));
+    for (let i = 0; i < st.n - 1; i++) { const xa = st.x1 - st.w * (i + 1), top = st.base - st.h * (i + 1); rrect(g, xa - 28, top - th + 1, st.w + 26, th + 1, 2); g.fill(); }
+  });
+  // the woven mat lies flat on the floor: under everything that stands on it
+  const m = L.mat;
+  makeSprite('mat', m.cx - m.rx - 14, m.cy - m.ry - 4, m.rx * 2 + 28, m.ry * 2 + 8, (g) => {
+    g.save(); g.translate(m.cx, m.cy); g.scale(1, m.ry / m.rx);
+    const mr = m.rx;
+    const ring = (r, c) => { g.fillStyle = litS(c); g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill(); };
+    ring(mr, '#b8694f'); ring(mr * 0.9, '#e8d9bf'); ring(mr * 0.78, '#3f6c9a'); ring(mr * 0.62, '#e8d9bf'); ring(mr * 0.5, '#c97a5c'); ring(mr * 0.28, '#e8d9bf'); ring(mr * 0.16, '#3f6c9a');
+    g.strokeStyle = litS('#e8d9bf', 1, 0.8); g.lineWidth = 3; g.setLineDash([5, 9]);
+    g.beginPath(); g.arc(0, 0, mr * 0.7, 0, TAU); g.stroke(); g.setLineDash([]);
+    g.restore();
+    g.strokeStyle = litS('#d9c6a6'); g.lineWidth = 1.6;
+    for (let i = -3; i <= 3; i++) for (const sd of [-1, 1]) {
+      const yy = m.cy + i * m.ry * 0.18; g.beginPath(); g.moveTo(m.cx + sd * m.rx * Math.sqrt(1 - Math.pow(i * 0.18, 2)), yy); g.lineTo(m.cx + sd * (m.rx * Math.sqrt(1 - Math.pow(i * 0.18, 2)) + 9), yy); g.stroke();
+    }
+  }, -1, L0.mat ? { src: [L0.mat.cx - L0.mat.rx - 14, L0.mat.cy - L0.mat.ry - 4, L0.mat.rx * 2 + 28, L0.mat.ry * 2 + 8], dst: [m.cx - m.rx - 14, m.cy - m.ry - 4, m.rx * 2 + 28, m.ry * 2 + 8] } : null, lampPools);
+  // lanterns standing on the parapet (glass glows at dusk and night)
+  L.lanterns.forEach((ln, i) => {
+    const x = ln.x, y = ln.y, l0 = L0.lanterns[Math.min(i, L0.lanterns.length - 1)];
+    makeSprite('lantern' + i, x - 18, y - 70, 36, 72, (g) => {
+      g.fillStyle = litS('#3a3534'); rrect(g, x - 11, y - 44, 22, 40, 3); g.fill();
+      g.fillStyle = litS('#e8e2d2', 1, 0.8); g.fillRect(x - 7, y - 39, 14, 30);
+      g.fillStyle = litS('#3a3534'); g.beginPath(); g.moveTo(x - 14, y - 44); g.lineTo(x, y - 58); g.lineTo(x + 14, y - 44); g.fill();
+      g.fillRect(x - 13, y - 6, 26, 5);
+      g.beginPath(); g.arc(x, y - 61, 4, 0, TAU); g.strokeStyle = litS('#3a3534'); g.lineWidth = 2; g.stroke();
+    }, L.floorBack - 1, l0 ? propPiece(x - 18, y - 70, 36, 72, x - l0.x, 0) : null, (g) => {
+      if (E.snowAcc > 0.05) { g.fillStyle = rgba(lit([250, 251, 255]), 0.9); g.beginPath(); g.moveTo(x - 9, y - 47); g.lineTo(x, y - 55 - 2 * E.snowAcc); g.lineTo(x + 9, y - 47); g.fill(); }
+      if (E.lamp <= 0.15) return;
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = rgba([255, 196, 110], Math.min(0.85, E.lamp)); g.fillRect(x - 7, y - 39, 14, 30);
+      glow(g, x, y - 24, 30, [255, 214, 150], 0.7 * E.lamp);
+      g.globalCompositeOperation = 'source-over';
+    });
+  });
   // built-in bench with a striped cushion; open underneath (a hiding place)
   if (L.hasBench) {
     const bn = L.bench;
@@ -580,7 +731,7 @@ function paintSprites() {
       for (let x = bn.x0 + 14; x < bn.x1; x += 26) g.fillRect(x, bn.seat - 22, 11, 30);
       g.restore();
       g.fillStyle = litS('#ffffff', 1, 0.35); rrect(g, bn.x0 + 14, bn.seat - 18, w - 28, 5, 3); g.fill();
-    }, bn.base);
+    }, bn.base, L0.hasBench ? propPiece(bn.x0 - 20, bn.seat - 30, bn.x1 - bn.x0 + 40, bn.base - bn.seat + 40, bn.x0 - L0.bench.x0, 0) : null, lampPools);
   }
   // a light canopy over the bench — depth-sorted so cats on the parapet stay behind it
   if (L.hasBench) {
@@ -595,8 +746,10 @@ function paintSprites() {
       const cg = g.createLinearGradient(0, ct, 0, ct + 22); cg.addColorStop(0, litS('#fbf8f2')); cg.addColorStop(1, litS('#e6dfd4'));
       g.fillStyle = cg; g.fill();
       g.strokeStyle = litS('#3d6a9c', 1, 0.8); g.lineWidth = 2; g.beginPath(); g.moveTo(bn.x0 - 30, ct + 4); g.lineTo(bn.x1 + 30, ct + 4); g.stroke();
-      if (E.lamp > 0.1) { g.globalCompositeOperation = 'source-atop'; L.lanterns.forEach((ln) => glow(g, ln.x, ln.y - 22, 260, [255, 178, 96], 0.42 * E.lamp)); g.globalCompositeOperation = 'source-over'; }
-    }, bn.base + 0.6);
+    }, bn.base + 0.6, L0.hasBench ? propPiece(bn.x0 - 40, ct - 10, bn.x1 - bn.x0 + 80, bn.base - ct + 14, bn.x0 - L0.bench.x0, 0) : null, (g) => {
+      lampPools(g);
+      if (E.snowAcc > 0.02) { const th = 1.5 + 5 * smooth(E.snowAcc); g.fillStyle = rgba(lit([250, 251, 255]), 0.95 * Math.min(1, E.snowAcc * 3)); rrect(g, bn.x0 - 28, ct - th, bn.x1 - bn.x0 + 56, th + 1, 2); g.fill(); }
+    });
   }
   // water bowl (blue glaze) and food bowl (terracotta); contents are drawn live
   const bowlSprite = (bw, body, bodyHi, rim, inner) => {
@@ -608,7 +761,7 @@ function paintSprites() {
       g.fillStyle = litS(rim); g.beginPath(); g.ellipse(bw.x, bw.y - 15, 28, 7.5, 0, 0, TAU); g.fill();
       g.fillStyle = litS(inner); g.beginPath(); g.ellipse(bw.x, bw.y - 14, 23, 5.6, 0, 0, TAU); g.fill();
       g.fillStyle = litS('#ffffff', 1, 0.45); g.beginPath(); g.ellipse(bw.x - 12, bw.y - 19, 6, 1.4, -0.1, 0, TAU); g.fill();
-    }, bw.y);
+    }, bw.y, propPiece(bw.x - 48, bw.y - 30, 96, 40, bw.x - L0[bw.kind].x, 0), lampPools);
     sprites[bw.kind + 'Bowl'].after = (g, T) => drawBowlContents(g, bw, T);
   };
   bowlSprite(L.water, '#2f5f9c', '#4f84c4', '#7fafe0', '#24405f');
@@ -626,7 +779,7 @@ function paintSprites() {
         const cx = p.x + (r() - 0.5) * 70, cy = p.y - 100 - r() * 44;
         for (let q = 0; q < 5; q++) { g.fillStyle = litS(q % 2 ? '#d84a5a' : '#e8707e'); g.beginPath(); g.arc(cx + Math.cos(q * 1.26) * 5, cy + Math.sin(q * 1.26) * 5, 4, 0, TAU); g.fill(); }
       }
-    }, p.y);
+    }, p.y, L0.pots[i] ? Object.assign(propPiece(p.x - 60, p.y - 150, 120, 160, p.x - L0.pots[i].x, 0), { mode: 'replace' }) : null, lampPools);
   });
 }
 
@@ -646,7 +799,7 @@ function bake(cross) {
   paintSprites();
   makeClouds();
   lastBake = nowS(); bakeMs = Date.now() - tb;
-  bakedSnap = [...ENV_KEYS.slice(0, 11).map((q) => E[q]), E.wet * 0.3, ...E.top.map((v) => v / 255), ...E.amb];
+  bakedSnap = [...ENV_KEYS.slice(0, 11).map((q) => E[q]), E.wet * 0.3, snowAcc * 0.5, ...E.top.map((v) => v / 255), ...E.amb];
 }
 
 // =====================================================================
@@ -1058,6 +1211,8 @@ const SPR = SPR_COAT.map((folder) => {
     s.img[p] = im;
   });
   if (folder === 'siamese') s.head.sleep = [0.68, 0.6];
+  // drawn gait cycles (cycle/walk-1..8, run-1..6): picked by distance walked (LW.petGait)
+  s.cyc = new URLSearchParams(location.search).get('procedural') === '1' ? null : LW.petCycleLoad('art/sprites/', 'cats/' + folder);
   // drawn in-between frames (t/<seq>-1..5.png); a sheet is used only once all five
   // frames load — until then (or without one) pose changes keep the crossfade
   s.fk = {}; s.fa = {}; s.fe = {}; s.seq = {}; s.seqRaw = {};
@@ -1100,7 +1255,16 @@ function sprSeqPrep(s) {
     s.seq[q] = true;
   }
 }
-const sprFam = (p) => (p === 'walk2' ? 'walk1' : p.startsWith('jump-') ? 'jump' : p);
+// lay the gait cycles out against walk1 (its anchor is w - s.d) and register them as poses
+function sprCycPrep(s) {
+  const C = s.cyc;
+  if (!C || C.synced || !s.ok.walk1) return;
+  const w1 = s.img.walk1, done = LW.petCyclePrep(C, { im: w1, k: 1, fa: 1 - s.d / w1.width }, defringe);
+  for (const n in C.img) if (!s.ok[n]) { const im = C.img[n]; s.img[n] = im; s.ok[n] = true; s.fk[n] = im.petK; s.fa[n] = im.petFa; s.fe[n] = 'walk1'; }
+  C.synced = done;
+}
+const isCyc = (p) => /^(walk|run)-\d/.test(p);
+const sprFam = (p) => (p === 'walk2' || isCyc(p) ? 'walk1' : p.startsWith('jump-') ? 'jump' : p);
 const sprK = (s, p) => (s.fk[p] != null ? s.fk[p] : POSE_K[p]);
 const SPR_OFF = new URLSearchParams(location.search).get('procedural') === '1';   // dev: compare with the vector cats
 // The cut-outs carry a ~6 px pale fringe that glows like a sticker edge at night:
@@ -1134,17 +1298,20 @@ function sprPick(s, p, d) {
   if (p === 'sit') return s.ok.loaf ? 'loaf' : 'walk1';
   return 'walk1';
 }
-const sprAnchor = (s, p, w) => (s.fa[p] != null ? w * s.fa[p] : p === 'walk1' || p === 'walk2' ? w - s.d : p === 'stretch' ? w * 0.6 : w * 0.5);
+// cycle frames read their live anchor: LW.petGait re-sets petFa per cat to plant the paws
+// (the sprite holds still while a frame shows and steps at each cut — see pet-motion.js)
+const sprAnchor = (s, p, w) => (s.img[p] && s.img[p].petCycle ? w * s.img[p].petFa : s.fa[p] != null ? w * s.fa[p] : p === 'walk1' || p === 'walk2' ? w - s.d : p === 'stretch' ? w * 0.6 : w * 0.5);
 // what the sprite shows for the cat's state: image + squash/rotation/offsets (local units)
 function spriteDesc(c, s, T) {
   const st = c.state;
   const d = { p: 'sit', sx: 1, sy: 1, rot: 0, piv: 0, ox: 0, oy: 0, nod: 0, bob: 0, br: 0 };
-  const walkP = () => (Math.floor(c.wf || 0) & 1 ? 'walk2' : 'walk1');
+  const walkP = () => c.gaitF || (Math.floor(c.wf || 0) & 1 ? 'walk2' : 'walk1');
   const sitP = () => { d.p = 'sit'; d.br = 1; };
   const crouch = (k) => { d.p = 'walk1'; d.sy = k; d.sx = 1 + (1 - k) * 0.45; };
   switch (st) {
     case 'move': case 'hunt': case 'follow': {
       d.p = walkP();
+      if (c.gaitF) break;   // a drawn cycle frame carries its own bob and stretch
       const f = (c.wf || 0) % 1;
       d.bob = -Math.sin(f * Math.PI) * (c.gait === 'run' ? 3.2 : 2.2);
       if (c.gait === 'run') { d.sx = 1.04; d.sy = 0.97; }
@@ -1169,7 +1336,7 @@ function spriteDesc(c, s, T) {
     case 'eat': d.p = 'walk1'; d.nod = 0.85 + 0.15 * Math.abs(Math.sin(c.t * 7)); break;
     case 'drink': d.p = 'walk1'; d.nod = 0.95; d.sy = 0.98; break;
     case 'startle': { d.p = 'walk1'; const p = clamp(c.t / 0.3, 0, 1); d.oy = -12 * Math.sin(p * Math.PI); d.sy = 1.08; d.sx = 0.97; break; }
-    case 'stand': d.p = 'walk1'; break;
+    case 'stand': d.p = c.gaitF || 'walk1'; break;   // settling onto a contact frame
     case 'shelter':
       if (c.shPose === 'sleep') { d.p = 'sleep'; d.br = 1; }
       else if (c.shPose === 'sit') sitP();
@@ -1215,8 +1382,12 @@ function sprStep(c, s, dt, T) {
   const walking = c.state === 'move' || c.state === 'hunt' || c.state === 'follow';
   if (walking) {
     const v = Math.hypot(c.vxS || 0, c.vyS || 0) / Math.max(0.5, c.k);   // local units / s
-    c.wf = (c.wf || 0) + (v > 5 ? dt * clamp(3.2 + v / 40, 4, 7) : 0);
+    c.wf = (c.wf || 0) + (v > 5 ? dt * clamp(3.2 + v / 40, 4, 7) : 0);   // (fallback 2-frame gait)
   }
+  // the drawn cycle frame for a cat on its feet: by distance, settling onto a contact when it stops
+  sprCycPrep(s);
+  c.gaitF = walking || c.state === 'stand' ? LW.petGait(c, s.cyc, c.gd || 0, SPR_H, walking ? c.gait : 'walk', { dt }) : null;
+  if (c.gaitF && !s.ok[c.gaitF]) c.gaitF = null;
   for (const q in s.seqRaw) { sprSeqPrep(s); break; }
   const d = spriteDesc(c, s, T);
   // crouch under the bench seat instead of poking through it
@@ -1356,6 +1527,7 @@ function turn(c, dx, thr = 8, hold = 0.35) {
   c.dir = sg; c.turnT = T;
 }
 function setState(c, st, dur, blendDur = 0.25) {
+  if (c.state === 'away' && st !== 'away' && !c.comeBack) return;   // pets off: nothing calls an absent cat back
   if (st !== 'move') c.quiver = false;
   if (!['move', 'eat', 'drink', 'jump', 'jumpPrep', 'land'].includes(st)) c.atBowl = null;
   c.snap = clonePose(c.dispPose || c.pose || P0());
@@ -1458,7 +1630,7 @@ function claimedPts(c) {
   return pts;
 }
 function spotClear(x, y, c, pts) {
-  if (x > L.R - 50) return false;
+  if (x > L.R - 50 || avoidHit(x, y - 40)) return false;
   pts = pts || claimedPts(c);
   for (const [px, py] of pts) if (Math.abs(py - y) < LANE && Math.abs(px - x) < 165) return false;
   for (const bw of [L.water, L.food]) if (Math.abs(y - bw.y) < 46 && Math.abs(x - bw.x) < 120) return false;
@@ -1628,10 +1800,12 @@ function goSleepAt(c, sp, st = 'sleep') {
 
 function think(c) {
   c.next = null;
+  if (c.state === 'away') return;
+  if (!petsOn()) { c.mission = null; return leaveScene(c); }
   if (calm.on) return calmThink(c);
   if (sheltering() && !c.mission) return seekShelter(c);
   // never settle in the widget zone on the right: stroll back out of it first
-  if (c.x > L.R - 40 && !c.mission) return c.surf >= 0 ? jumpDown(c, (c2) => wander(c2)) : wander(c, 'walk');
+  if ((c.x > L.R - 40 || avoidHit(c.x, surfY(c) - 40)) && !c.mission) return c.surf >= 0 ? jumpDown(c, (c2) => wander(c2)) : wander(c, 'walk');
   if (c.hunger > 0.6) {
     if (bowls.food > 0.05) return c.surf >= 0 ? jumpDown(c, (c2) => goBowl(c2, 'food')) : goBowl(c, 'food');
     if (c.surf === -1 && Math.random() < 0.7) return waitForFood(c);
@@ -1698,7 +1872,7 @@ function zoomies(a, b) {
 }
 
 // ----- prey (toys + cursor-as-laser) ------------------------------------
-function ptrW() { return { x: (LW.pointer.x / cssH) * 1000, y: (LW.pointer.y / cssH) * 1000 }; }
+function ptrW() { return { x: toWX(LW.pointer.x), y: (LW.pointer.y / cssH) * 1000 }; }
 function preyPos(c) {
   const p = c.prey; if (!p) return null;
   if (p.kind === 'toy') {
@@ -1734,14 +1908,16 @@ function spawnToy(ax, ay) {
 }
 
 // ----- missions: reminders + calm ------------------------------------------
-function bubble(c, text, life, icon) {
-  for (let i = parts.length - 1; i >= 0; i--) if (parts[i].type === 'bubble' && parts[i].cat === c) parts.splice(i, 1);
-  parts.push({ type: 'bubble', cat: c, text, icon, t: 0, life });
+// a cat's sound, shown at most as the small fading word ("meow", "mrrp", "purr") — never a sentence
+function sound(c, word, life = 1.6) {
+  if (c.state === 'away') return;
+  for (let i = parts.length - 1; i >= 0; i--) if (parts[i].type === 'sound' && parts[i].cat === c) parts.splice(i, 1);
+  parts.push({ type: 'sound', cat: c, text: word, t: 0, life });
 }
 function chooseCat(tx, ty, prefer) {
   let best = null, bs = 1e9;
   cats.forEach((c) => {
-    if (['jump', 'jumpPrep'].includes(c.state) || c.mission) return;
+    if (['jump', 'jumpPrep', 'away'].includes(c.state) || c.mission) return;
     let s = Math.hypot(c.x - tx, (surfY(c) - ty) * 2) + (c.state === 'sleep' ? 600 : 0) + (c.surf >= 0 ? 260 : 0) + rand(0, 120);
     if (prefer && prefer(c)) s -= 300;
     if (s < bs) { bs = s; best = c; }
@@ -1757,7 +1933,7 @@ function startWater(text) {
   c.prey = null; releaseClaim(c);
   c.mission = 'water';
   reminder = { kind: 'water', cat: c, t0: nowS(), text: text || 'a sip of water?' };
-  bubble(c, (text || 'a sip of water?') + '  (tap the bowl)', 90, 'drop');
+  sound(c, 'mrrp?');   // the empty bowl is the reminder (the host shows the text)
   sMeowSoft(c, 'mrrp');
   const go = (c2) => {
     const [tx, ty] = floorClamp(bw.x - 92 * c2.k, bw.y + 22);
@@ -1783,7 +1959,47 @@ function setLevel(kind, v, persist) {
   bowls[kind] = clamp(v, 0, 1);
   if (persist || Math.abs(bowls[kind] - savedLvl[kind]) >= 0.1) { savedLvl[kind] = bowls[kind]; LW.set(kind, +bowls[kind].toFixed(2)); }
 }
+// ---- Pets toggle (LW.settings.pets; the host shows "Pets: On/Off") --------------------------------
+// Off: each cat finishes what it is doing, hops down if perched, and strolls off the open end of the
+// terrace (behind the bench, in front of the pot), one after another; then it is simply away.
+// On: they wander back in from the same side, staggered, and carry on.
+const petsOn = () => LW.settings.pets !== false;
+const exitX = () => W + 140;
+function leaveScene(c) {
+  if (petsOn() || c.state === 'away' || c.mission === 'leave') return;
+  if (['jump', 'jumpPrep', 'land'].includes(c.state)) return later(0.6, () => leaveScene(c));
+  c.prey = null; releaseClaim(c); c.wakeAt = 0; c.atBowl = null;
+  const go = (c2) => {
+    c2.mission = 'leave';
+    const y = clamp(c2.y, L.hasBench ? L.bench.base + 42 : L.floorTop + 40, L.pots.length ? 872 : L.floorBot - 10);
+    goTo(c2, W - 60, y, 'walk', (c3) => { c3.mission = null; c3.surf = -1; c3.z = 0; setState(c3, 'away', 1e9); c3.x = exitX(); if (petsOn()) later(rand(1, 3), () => comeBack(c3)); });
+    c2.tx = exitX(); c2.path = planPath(c2, c2.tx, c2.ty);
+  };
+  if (c.surf >= 0) { c.mission = 'leave'; jumpDown(c, go); }
+  else if (c.state === 'sleep' || c.state === 'loaf') { c.mission = 'leave'; setState(c, 'stand', 0.8); later(0.9, () => go(c)); }
+  else go(c);
+}
+function comeBack(c) {
+  if (!petsOn() || c.state !== 'away') return;
+  c.comeBack = true;
+  c.x = exitX(); c.y = rand(L.hasBench ? L.bench.base + 44 : L.floorTop + 40, L.pots.length ? 870 : L.floorBot - 10); c.surf = -1; c.z = 0; c.dir = -1;
+  setState(c, 'stand', 0.2);
+  const [tx, ty] = floorClamp(rand(W * 0.3, L.R - 140), rand(L.floorTop + 30, L.floorBot - 20));
+  goTo(c, tx, ty, 'walk', (c2) => { c2.mission = null; think(c2); });
+  c.mission = 'return'; c.comeBack = false;
+}
+function syncPets(first) {
+  if (!petsOn()) {
+    if (first) cats.forEach((c) => { c.surf = -1; c.z = 0; c.x = exitX(); setState(c, 'away', 1e9); });
+    else cats.map((c) => c).sort((a, b) => b.x - a.x).forEach((c, i) => later(i * rand(1.6, 2.6) + rand(0, 0.8), () => leaveScene(c)));   // nearest the exit first
+  } else cats.forEach((c, i) => {
+    if (c.state === 'away') later(rand(0.3, 1.5) + i * rand(0.8, 2.2), () => comeBack(c));
+    else if (c.mission === 'leave') { c.mission = null; if (c.state === 'move') think(c); }   // changed its mind on the way out
+  });
+}
+let petsWas = petsOn();
 LW.on('settings', (st) => {
+  if (petsOn() !== petsWas) { petsWas = petsOn(); syncPets(false); }
   for (const k of ['food', 'water']) if (typeof st[k] === 'number' && Math.abs(st[k] - bowls[k]) > 0.02 && Math.abs(st[k] - savedLvl[k]) > 0.02) { bowls[k] = clamp(st[k], 0, 1); savedLvl[k] = bowls[k]; }
 });
 const KIBBLE = (() => { const r = mulberry(17), a = []; for (let i = 0; i < 28; i++) { const ang = r() * TAU, rr = Math.sqrt(r()) * (1 - i / 40); a.push([Math.cos(ang) * 18 * rr, Math.sin(ang) * 4 * rr, r()]); } return a; })();
@@ -1838,9 +2054,8 @@ function fillBowl(kind) {
     if (kind === 'food') LW.set('lastFed', Date.now());
     if (kind === 'water' && reminder && reminder.kind === 'water') {
       const c = reminder.cat; reminder = null;
-      for (let i = parts.length - 1; i >= 0; i--) if (parts[i].type === 'bubble' && parts[i].cat === c) parts.splice(i, 1);
       c.mission = null;
-      bubble(c, 'you too ✓', 5);
+      sound(c, 'prrt', 1.8);
       c.thirst = 1; goBowl(c, 'water');
     }
     // hungry / thirsty cats come over, one after another
@@ -1891,7 +2106,6 @@ function startStretch(text) {
   if (!c || c.surf === -2) return;
   c.prey = null;
   c.mission = 'stretch';
-  bubble(c, text || 'stretch with me', 12);
   setState(c, 'stretch', 2.6); c.stretchSeq = 1;
   const buddy = cats.find((o) => o !== c && interruptible(o) && o.surf !== -2 && Math.random() < 0.6);
   if (buddy) later(1.4, () => { if (interruptible(buddy)) { setState(buddy, 'stretch', 2.2); buddy.stretchSeq = 1; } });
@@ -1912,7 +2126,7 @@ function setCalm(on, auto = 0) {
       if (c.mission) return;
       c.calmDelay = rand(0.2, 3.5) + i * 0.6;
     });
-    for (let i = parts.length - 1; i >= 0; i--) if (parts[i].type === 'bubble' && !parts[i].cat.mission) parts.splice(i, 1);
+    for (let i = parts.length - 1; i >= 0; i--) if (parts[i].type === 'sound' && !parts[i].cat.mission) parts.splice(i, 1);
   } else {
     cats.forEach((c) => {
       c.calmDelay = 0;
@@ -1922,6 +2136,7 @@ function setCalm(on, auto = 0) {
   }
 }
 function calmThink(c) {
+  if (c.state === 'away') return;
   const sp = c.calmSpot;
   if (!sp) return setState(c, 'loaf', 999);
   if (c.surf >= 0) return jumpDown(c, (c2) => calmThink(c2));
@@ -1966,6 +2181,7 @@ function shelterSpot(sp) {
   return cats.find((o) => o.shelter === sp) || cats.find((o) => o.shelter !== sp && (sp.ledge >= 0 ? o.surf === sp.ledge && Math.abs(o.x - sp.x) < 95 : o.surf === -1 && Math.hypot(o.x - sp.x, o.y - sp.y) < 80));
 }
 function seekShelter(c) {
+  if (c.state === 'away') return;
   if (c.shelter && shelterSpot(c.shelter) === c && c.state === 'shelter') return setState(c, 'shelter', rand(8, 20));
   const snow = E.snow > 0.4 && E.rain < 0.3;
   const free = L.shelters.filter((sp) => (!shelterSpot(sp) || shelterSpot(sp) === c) && (!sp.warm || snow));
@@ -2005,6 +2221,7 @@ function _oldHideAfterStartle(c) {
 // ----- per-frame update ---------------------------------------------------------
 function update(c, dt, T) {
   c.t += dt;
+  if (c.state === 'away') return;
   c.blend = Math.min(1, c.blend + dt / c.blendDur);
   c.awake = c.state === 'sleep' ? Math.max(0, c.awake - dt * 4) : c.awake + dt;
   c.twitch = Math.max(0, c.twitch - dt);
@@ -2159,7 +2376,7 @@ function update(c, dt, T) {
     case 'waitTurn': if (c.t >= c.dur) think(c); break;
     case 'waitFood':
       if (bowls.food > 0.05) { goBowl(c, 'food'); break; }
-      if (T > hungerMeowT && Math.random() < dt * 0.06) { hungerMeowT = T + rand(70, 130); bubble(c, 'mrrp? 🍽', 2.4); sMeowSoft(c, 'mrrp'); }
+      if (T > hungerMeowT && Math.random() < dt * 0.06) { hungerMeowT = T + rand(70, 130); sound(c, 'mrrp?', 2); sMeowSoft(c, 'mrrp'); }
       if (c.t >= c.dur) setState(c, Math.random() < 0.5 ? 'loaf' : 'groom', rand(8, 16));
       break;
     case 'askWater':
@@ -2418,7 +2635,7 @@ function faceFor(c, T) {
 // =====================================================================
 LW.on('move', (x, y) => {
   const T = nowS();
-  const a = { x: (x / cssH) * 1000, y: (y / cssH) * 1000 };
+  const a = { x: toWX(x), y: (y / cssH) * 1000 };
   if (T - lastMove > 25) cats.forEach((c) => { if (c.state === 'sleep' && !calm.on && Math.random() < 0.5) c.wakeAt = T + rand(0.6, 6); });
   if (lastPtr) {
     const d = Math.hypot(a.x - lastPtr.x, a.y - lastPtr.y);
@@ -2434,12 +2651,13 @@ LW.on('move', (x, y) => {
 });
 LW.on('leave', () => { ptrSpeed = 0; });
 LW.on('down', (x, y) => {
-  const a = { x: (x / cssH) * 1000, y: (y / cssH) * 1000 };
+  const a = { x: toWX(x), y: (y / cssH) * 1000 };
   lastMove = nowS();
   activity = Math.min(1, activity + 0.1);
   for (const bw of [L.food, L.water]) if (Math.abs(a.x - bw.x) < 40 && a.y > bw.y - 40 && a.y < bw.y + 12) return fillBowl(bw.kind);
   let hit = null, best = 1e9;
   cats.forEach((c) => {
+    if (c.state === 'away') return;
     const [x0, x1] = extent(c), top = c.y - c.z - catHeight(c);
     if (a.x >= x0 - 10 && a.x <= x1 + 10 && a.y >= top - 10 && a.y <= c.y - c.z + 8) {
       const d = -zKey(c); if (d < best) { best = d; hit = c; }
@@ -2454,7 +2672,7 @@ function pet(c) {
   c.prey = null;
   const calmish = ['sit', 'loaf', 'sleep', 'groom', 'hide', 'watch', 'purrSit', 'drink', 'knead'].includes(c.state);
   if (calm.on || c.mission || (calmish && Math.random() < 0.6) || (c.state === 'sleep' && Math.random() < 0.5)) {
-    c.purrT = 3.0; c.heartT = 0.5; c.sbT = 1.4;
+    c.purrT = 3.0; c.heartT = 0.5; c.sbT = 1.4; sound(c, 'purr', 2.2);
     if (!['sit', 'loaf', 'sleep', 'hide', 'drink', 'stretch', 'stretch2', 'yawn', 'knead'].includes(c.state)) setState(c, 'purrSit', 3.0);
     else if (c.state === 'sleep' || c.state === 'loaf') c.dur = Math.max(c.dur, c.t + 4);
     sPurr(c, 2.6);
@@ -2463,7 +2681,7 @@ function pet(c) {
     if (c.state === 'sleep') { c.awake = 0; releaseClaim(c); }
     if (c.surf === -2) return;
     setState(c, 'meow', 1.4, 0.15);
-    bubble(c, word, 1.6);
+    sound(c, word, 1.6);
     sMeow(c, word.startsWith('mr') || word.startsWith('pr') ? 'mrrp' : 'meow');
   }
 }
@@ -2473,7 +2691,7 @@ LW.on('reminder', (r) => {
   if (!r) return;
   if (r.kind === 'water') startWater(r.text);
   else if (r.kind === 'stretch') startStretch(r.text);
-  else if (r.kind === 'breathe') { const c = chooseCat(L.mat.cx, L.mat.cy); if (c) bubble(c, r.text || 'breathe in… and out', 10); setCalm(true, 30); }
+  else if (r.kind === 'breathe') { const c = chooseCat(L.mat.cx, L.mat.cy); setCalm(true, 30); }
 });
 LW.on('mute', (m) => { if (m) stopPurrLoop(); updateHud(); });
 // back at the desk after a while: a sleepy cat or two stirs (rendering pauses while away; dt is clamped)
@@ -2771,7 +2989,26 @@ function makeClouds() {
   L.waves = [];
   for (let i = 0; i < 70; i++) { const t = Math.pow(r2(), 1.4); L.waves.push({ x: r2() * W, y: L.horizon + 4 + t * (L.parCap - L.horizon - 4), len: 6 + t * 40, p: r2() * TAU }); }
 }
-const drops = [], flakes = [], splashes = [];
+const drops = [], flakes = [], splashes = [], drips = [];
+// where rain/snow can't reach: under the awnings, the bench canopy, the house (L.dry boxes)
+const sheltered = (x, y) => L.dry.some((z) => x > z[0] && x < z[1] && y > z[2] && y < z[3]);
+// a raindrop's splash lands on exposed floor only (never under the canopy or inside the house);
+// in a puddle it makes a wider ring
+function splashAt(x) {
+  for (let k = 0; k < 3; k++) {
+    const y = rand(L.floorBack + 10, H);
+    if (x < L.bld.x1 && y < L.bld.front + 10) continue;
+    if (sheltered(x, y) || (L.hasBench && x > L.bench.x0 - 30 && x < L.bench.x1 + 30 && y < L.bench.base + 26)) continue;
+    const pd = (L.puddles || []).find((q) => ((x - q[0]) / q[2]) ** 2 + ((y - q[1]) / q[3]) ** 2 < 1);
+    splashes.push({ x, y, t: 0, s: pd ? 1.6 : 1 }); return;
+  }
+}
+// [x0, x1, y, drips per second, floor y below]
+function dripEdges() {
+  const e = [[L.door.x0 - 22, L.door.x0 + L.door.w + 22, L.door.base - 150, 0.8, L.door.base], [L.win.x0 - 32, L.win.x1 + 32, L.win.y0 - 4, 0.6, L.win.y1 + 8]];
+  if (L.hasBench) { e.push([L.bench.x0 - 30, L.bench.x0 - 18, L.canopyY + 18, 0.7, L.bench.base + 30], [L.bench.x1 + 18, L.bench.x1 + 30, L.canopyY + 18, 0.7, L.bench.base + 30]); }
+  return e;
+}
 let flash = { t: 99, next: 8, bolt: null }, thunderAt = -1;
 function updateSky(dt, T) {
   const wind = clamp(+(LW.env.wind || 0.3), 0, 2);
@@ -2781,8 +3018,13 @@ function updateSky(dt, T) {
   if (drops.length > wantRain) drops.length = wantRain;
   drops.forEach((d) => {
     d.y += d.v * dt; d.x += d.v * dt * 0.12 * (0.5 + wind);
-    if (d.y > H) { if (Math.random() < 0.35) splashes.push({ x: d.x, y: rand(L.floorBack + 10, H), t: 0 }); d.y = rand(-60, 0); d.x = rand(-100, W); }
+    if (d.y > H) { if (Math.random() < 0.35) splashAt(d.x); d.y = rand(-60, 0); d.x = rand(-100, W); }
   });
+  // drips off the awning and canopy edges once things are wet
+  if (E.rain > 0.1 || E.wet > 0.3) {
+    for (const ed of dripEdges()) if (Math.random() < dt * ed[3] * (0.4 + E.rain)) drips.push({ x: rand(ed[0], ed[1]), y: ed[2], y1: ed[4], v: 0 });
+  }
+  for (let i = drips.length - 1; i >= 0; i--) { const d = drips[i]; d.v += 1400 * dt; d.y += d.v * dt; if (d.y >= d.y1) { if (d.y1 > L.floorBack) splashes.push({ x: d.x, y: d.y1, t: 0, s: 0.5 }); drips.splice(i, 1); } }
   for (let i = splashes.length - 1; i >= 0; i--) { splashes[i].t += dt; if (splashes[i].t > 0.45) splashes.splice(i, 1); }
   const wantSnow = Math.round(E.snow * 150);
   while (flakes.length < wantSnow) flakes.push({ x: rand(0, W), y: rand(-H, H), v: rand(30, 70), p: rand(0, 6), r: rand(1.5, 3.6) });
@@ -2909,7 +3151,7 @@ function drawLights(g, T) {
     bulbs.forEach(([x, y, i]) => { g.globalAlpha = Math.min(1, 0.32 * E.lamp * (0.85 + 0.15 * Math.sin(T * 2 + i) * fk) * bk); g.drawImage(GLOW, x - 22, y - 22, 44, 44); });
     L.lanterns.forEach((ln, i) => {
       const fl = 1 - fk * 0.15 + 0.15 * fk * Math.sin(T * 9 + i * 3) * Math.sin(T * 3.7 + i);
-      const k = ln.x < L.R ? bk : 1, r = 70 * (1 + (ln.x < L.R ? 0.45 * cf * ce : 0));   // widget zone (right) stays put
+      const k = ln.x < L.R ? bk : 1, r = 70 * (1 + (ln.x < L.R ? 0.45 * cf * ce : 0)) * (1 + 0.7 * E.fog + 0.35 * E.rain);   // widget zone (right) stays put; wider halos in fog / rain
       g.globalAlpha = Math.min(1, 0.35 * E.lamp * fl * k); g.drawImage(GLOW, ln.x - r, ln.y - 24 - r, r * 2, r * 2);
     });
     g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
@@ -3014,37 +3256,16 @@ function heartPath(g, x, y, s) {
   g.bezierCurveTo(x - 11 * s, y - 2 * s, x - 6 * s, y - 11 * s, x, y - 5 * s);
   g.bezierCurveTo(x + 6 * s, y - 11 * s, x + 11 * s, y - 2 * s, x, y + 6 * s);
 }
-function wrapText(g, text, maxW) {
-  const words = text.split(/\s+/); const lines = []; let cur = '';
-  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (g.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
-  if (cur) lines.push(cur);
-  return lines;
-}
-function drawBubble(g, p) {
-  const c = p.cat;
-  const a = clamp(Math.min(p.t / 0.25, (p.life - p.t) / 0.6), 0, 1);
-  if (a <= 0) return;
-  g.font = `600 21px ${FONT}`;
-  const lines = wrapText(g, p.text, 300);
-  const iconW = p.icon ? 22 : 0;
-  const tw = Math.max(...lines.map((l) => g.measureText(l).width)) + iconW;
-  const w = tw + 30, lh = 26, h = lines.length * lh + 18;
-  const hx = c.head[0], top = c.y - c.z - catHeight(c);
-  let x0 = clamp(hx - w / 2, 12, Math.max(12, L.R - w - 12));
-  let y0 = Math.max(12, top - h - 18) + (1 - a) * 6;
-  g.globalAlpha = a;
-  g.fillStyle = 'rgba(30,24,40,0.16)'; rrect(g, x0 + 2, y0 + 4, w, h, 16); g.fill();
-  g.fillStyle = 'rgba(255,252,246,0.95)'; rrect(g, x0, y0, w, h, 16); g.fill();
-  const tx = clamp(hx, x0 + 22, x0 + w - 22);
-  g.beginPath(); g.moveTo(tx - 9, y0 + h - 1); g.lineTo(tx + 1, y0 + h + 11); g.lineTo(tx + 9, y0 + h - 1); g.fill();
-  if (p.icon === 'drop') {
-    const ix = x0 + 17, iy = y0 + h / 2;
-    g.fillStyle = '#5b9bd6'; g.beginPath(); g.moveTo(ix, iy - 10); g.quadraticCurveTo(ix + 8, iy, ix + 7, iy + 4); g.arc(ix, iy + 3, 7, 0.1, Math.PI - 0.1); g.quadraticCurveTo(ix - 8, iy, ix, iy - 10); g.fill();
-    g.fillStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.arc(ix - 2.5, iy + 2, 2, 0, TAU); g.fill();
-  }
-  g.fillStyle = '#3e3150'; g.textBaseline = 'middle';
-  lines.forEach((ln, i) => g.fillText(ln, x0 + 15 + iconW, y0 + 9 + lh / 2 + i * lh));
-  g.globalAlpha = 1;
+function drawSound(g, p) {
+  const c = p.cat, u = p.t / p.life, a = clamp(Math.min(p.t / 0.2, (1 - u) / 0.45), 0, 1);
+  if (a <= 0 || c.state === 'away') return;
+  const x = c.head[0] + c.dir * 14, y = c.head[1] - 26 - u * 18;
+  g.save(); g.translate(x, y); if (MIR) g.scale(-1, 1);
+  g.font = `italic 500 17px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  const lt = 0.55 + 0.45 * E.dl;
+  g.fillStyle = `rgba(30,24,40,${(0.18 * a).toFixed(3)})`; g.fillText(p.text, 1, 1.5);
+  g.fillStyle = `rgba(${Math.round(255 * lt)},${Math.round(246 * lt)},${Math.round(236 * lt)},${(0.8 * a).toFixed(3)})`; g.fillText(p.text, 0, 0);
+  g.restore();
 }
 
 // =====================================================================
@@ -3156,6 +3377,7 @@ function step(dt, T) {
     b.x = clamp(b.x - sxd * push * 0.5, 50, W - 50);
   }
   cats.forEach((c) => {
+    if (c.state === 'away') return;
     // perspective scale from depth
     let dk;
     if (c.surf >= 0) dk = L.ledges[c.surf].depth;
@@ -3167,6 +3389,8 @@ function step(dt, T) {
     if (c.px != null && dt > 0) {
       const vx = (c.x - c.px) / dt, vy = (c.y - c.py) / dt;
       c.vxS = lerp(c.vxS || 0, vx, Math.min(1, dt * 8)); c.vyS = lerp(c.vyS || 0, vy, Math.min(1, dt * 8));
+      // ground actually covered on its feet (local units) — drives the drawn gait cycle
+      if (c.state === 'move' || c.state === 'hunt' || c.state === 'follow') c.gd = (c.gd || 0) + Math.hypot(c.x - c.px, c.y - c.py) / Math.max(0.5, c.k);
     }
     c.px = c.x; c.py = c.y;
     const sp = Math.hypot(c.vxS || 0, c.vyS || 0);
@@ -3185,7 +3409,7 @@ function step(dt, T) {
   });
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i]; p.t += dt;
-    if (p.type !== 'bubble') { p.y -= dt * (p.type === 'z' ? 26 : 46); p.x += (p.vx || 0) * dt + Math.sin(p.t * 3) * dt * 10; }
+    if (p.type !== 'sound') { p.y -= dt * (p.type === 'z' ? 26 : 46); p.x += (p.vx || 0) * dt + Math.sin(p.t * 3) * dt * 10; }
     if (p.t >= p.life) parts.splice(i, 1);
   }
   audioTick -= dt;
@@ -3193,17 +3417,25 @@ function step(dt, T) {
 }
 
 const drawn = [];
+// every render transform goes through ST: the mirrored layout flips the world about the centre
+function ST(a, b, c, d, e, f) { if (MIR) ctx.setTransform(-a, b, -c, d, cv.width - e, f); else ctx.setTransform(a, b, c, d, e, f); }
 function render(T) {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ST(1, 0, 0, 1, 0, 0);
   ctx.imageSmoothingEnabled = true;
+  if (ARTREF) {   // dev: the geometry a plate is painted from, on flat green (art-src/cats/)
+    ctx.fillStyle = '#00ff00'; ctx.fillRect(0, 0, cv.width, cv.height);
+    if (ARTREF === 'surfaces') ctx.drawImage(fgCv, 0, 0);
+    for (const k in sprites) if ((k === 'stairs') === (ARTREF === 'surfaces')) ctx.drawImage(sprites[k].cv, Math.round(sprites[k].x0 * U), Math.round(sprites[k].y0 * U));
+    return;
+  }
   if (fade < 1 && prevFar) ctx.drawImage(prevFar, 0, 0, cv.width, cv.height);
   ctx.globalAlpha = fade < 1 && prevFar ? fade : 1; ctx.drawImage(farCv, 0, 0, cv.width, cv.height); ctx.globalAlpha = 1;
-  ctx.setTransform(U, 0, 0, U, 0, 0);
+  ST(U, 0, 0, U, 0, 0);
   drawSkyAndSea(ctx, T);
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ST(1, 0, 0, 1, 0, 0);
   if (fade < 1 && prevFg) ctx.drawImage(prevFg, 0, 0);
   ctx.globalAlpha = fade < 1 && prevFg ? fade : 1; ctx.drawImage(fgCv, 0, 0); ctx.globalAlpha = 1;
-  ctx.setTransform(U, 0, 0, U, 0, 0);
+  ST(U, 0, 0, U, 0, 0);
   drawLights(ctx, T);
   drawPetals(ctx);
   // depth-sorted: props, toys, cats (cats array itself is never reordered)
@@ -3215,12 +3447,13 @@ function render(T) {
   drawn.length = 0;
   for (const d of ds) {
     if (d.sp) {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ST(1, 0, 0, 1, 0, 0);
       if (d.old) ctx.drawImage(d.old.cv, Math.round(d.old.x0 * U), Math.round(d.old.y0 * U));
       ctx.globalAlpha = d.old ? fade : 1; ctx.drawImage(d.sp.cv, Math.round(d.sp.x0 * U), Math.round(d.sp.y0 * U)); ctx.globalAlpha = 1;
-      ctx.setTransform(U, 0, 0, U, 0, 0); if (d.sp.after) d.sp.after(ctx, T);
+      ST(U, 0, 0, U, 0, 0); if (d.sp.after) d.sp.after(ctx, T);
     }
     else if (d.toy) drawToy(ctx, d.toy);
+    else if (d.cat.state === 'away') drawn.push(d.cat.id + ':' + d.cat.coat.name);
     else {
       const c = d.cat;
       const gy = c.surf >= 0 ? L.ledges[c.surf].y : c.state === 'jump' && c.j ? lerp(c.j.y0, c.j.y1, clamp(c.t / c.j.dur, 0, 1)) : c.y;
@@ -3239,24 +3472,28 @@ function render(T) {
   drawPours(ctx, T);
   // particles
   parts.forEach((p) => {
-    if (p.type === 'bubble') return;
+    if (p.type === 'sound') return;
     const a = clamp(Math.min(p.t / 0.25, (p.life - p.t) / (p.life * 0.5)), 0, 1);
     if (p.type === 'heart') { ctx.fillStyle = `rgba(232,128,152,${a})`; heartPath(ctx, p.x, p.y, p.s); ctx.fill(); ctx.fillStyle = `rgba(255,220,228,${a * 0.8})`; ctx.beginPath(); ctx.arc(p.x - 4 * p.s, p.y - 4 * p.s, 1.8 * p.s, 0, TAU); ctx.fill(); }
-    else if (p.type === 'z') { ctx.font = `italic 600 ${Math.round(20 * p.s)}px ${FONT}`; ctx.fillStyle = `rgba(215,208,240,${a * 0.85})`; ctx.fillText('z', p.x, p.y); }
+    else if (p.type === 'z') { ctx.save(); ctx.translate(p.x, p.y); if (MIR) ctx.scale(-1, 1); ctx.font = `italic 600 ${Math.round(20 * p.s)}px ${FONT}`; ctx.fillStyle = `rgba(215,208,240,${a * 0.6})`; ctx.fillText('z', 0, 0); ctx.restore(); }
   });
-  parts.forEach((p) => { if (p.type === 'bubble') drawBubble(ctx, p); });
+  parts.forEach((p) => { if (p.type === 'sound') drawSound(ctx, p); });
   // weather in front
   if (drops.length) {
     ctx.strokeStyle = E.dl > 0.3 ? 'rgba(225,232,245,0.28)' : 'rgba(180,190,220,0.22)'; ctx.lineWidth = 1.3; ctx.beginPath();
     drops.forEach((d) => { if (L.dry.some((z) => d.x > z[0] && d.x < z[1] && d.y > z[2] && d.y < z[3])) return; ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.l * 0.12, d.y + d.l); });
     ctx.stroke();
     ctx.strokeStyle = 'rgba(230,236,248,0.35)'; ctx.lineWidth = 1;
-    splashes.forEach((s) => { const r = s.t / 0.45; ctx.globalAlpha = 1 - r; ctx.beginPath(); ctx.ellipse(s.x, s.y, 3 + r * 12, 1 + r * 3, 0, 0, TAU); ctx.stroke(); });
+    splashes.forEach((s) => { const r = s.t / 0.45, k = s.s || 1; ctx.globalAlpha = 1 - r; ctx.beginPath(); ctx.ellipse(s.x, s.y, (3 + r * 12) * k, (1 + r * 3) * k, 0, 0, TAU); ctx.stroke(); });
     ctx.globalAlpha = 1;
+  }
+  if (drips.length) {
+    ctx.strokeStyle = E.dl > 0.3 ? 'rgba(225,232,245,0.5)' : 'rgba(200,210,235,0.4)'; ctx.lineWidth = 1.2; ctx.beginPath();
+    drips.forEach((d) => { ctx.moveTo(d.x, d.y - 5); ctx.lineTo(d.x, d.y + 2); }); ctx.stroke();
   }
   if (flakes.length) {
     ctx.fillStyle = E.dl > 0.3 ? 'rgba(255,255,255,0.85)' : 'rgba(210,218,240,0.75)';
-    flakes.forEach((f) => { ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, TAU); ctx.fill(); });
+    flakes.forEach((f) => { if (sheltered(f.x, f.y)) return; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, TAU); ctx.fill(); });
   }
   // calm: a warm pool of lamplight on the mat where the cats pile up, filling with the breath
   if (calm.fade > 0) {
@@ -3316,7 +3553,9 @@ addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => reb
 computeEnv();
 initBowls();
 rebuild(true);
+syncPets(true);
 if (LW.calm) setCalm(true);
+LW.on('layout', () => rebuild(false));
 updateHud();
 requestAnimationFrame(frame);
 
@@ -3340,7 +3579,7 @@ function selfTest(secs = 60, act) {
   }
   return { frames, idErrors, teleports: teleports.length, tpEx: teleports.slice(0, 5), maxStep: +maxStep.toFixed(1) };
 }
-window.__cats = { prof, sprStats, goTo, seekShelter, SPR, cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
+window.__cats = { syncPets, leaveScene, get MIR() { return MIR; }, prof, sprStats, goTo, seekShelter, SPR, cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
 })();
 </script>
 </body>

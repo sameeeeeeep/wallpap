@@ -131,7 +131,8 @@
   LW.env.isDay = LW.env.hour > 6.5 && LW.env.hour < 19.5;
   LW.calm = qs.get('calm') === '1';
   LW.setEnv = function (patch) {
-    if(LW.isHost&&validView(patch.view)&&patch.view!==LW.view){LW.view=patch.view;viewTransitionUntil=performance.now()+6000;}
+    if(LW.isHost&&(validView(patch.view)||patch.view==='cycle')&&patch.view!==LW.view){   // 'cycle' = host's accelerated day: use its hour, not the real sky
+    LW.view=patch.view;viewTransitionUntil=performance.now()+6000;}
     const clockHour=Number.isFinite(patch.hour)?patch.hour:(LW.env.clockHour??localHour());
     Object.assign(LW.env, patch);
     LW.env.clockHour=clockHour;LW.env.hour=clockHour;
@@ -373,7 +374,9 @@
   function onBeatFrame(m) {
     const M = LW.music;
     M.level = m.l; M.bass = m.b; M.mid = m.m; M.high = m.h; M.live = true; M.lastLive = performance.now();
+    M.raw = m;   // whole frame: newer hosts add chroma/key/bpm/sections (see host/BeatSync.swift); read via music.js
     if (m.k) LW.emit('beat', Math.min(1, m.k));
+    LW.emit('beatframe', m);
   }
   // Fallback pulse when there's music but no live analysis.
   let fakeT = 0;
@@ -463,6 +466,10 @@
   LW.setSoundscape = function (s) { Object.assign(LW.soundscape, s || {}); if (!LW.muted) startSoundscape(); else stopSoundscape(); };
 
   // ─── Energy governor: frame cap + focus pause ────────────────────────────
+  // Desktop layout (host/Layout.swift): which side holds the user's widgets/icons and the free
+  // horizontal band for hero content, in 0..1 of the display. Scenes should keep `avoid` boxes calm
+  // and place their main objects inside `clear`. Browser preview: ?side=left to test mirroring.
+  LW.layout = { side: qs.get('side') || 'right', clear: qs.get('side') === 'left' ? [0.28, 1] : qs.get('side') === 'off' ? [0, 1] : [0, 0.72], avoid: [] };
   LW.fps = +(qs.get('fps') || 30);
   LW.focused = true;
   LW.keepAlive = false;
@@ -488,7 +495,9 @@
     LW._resumeFrames = () => { scheduled = false; clearTimeout(timer); schedule(); };
   } else LW._resumeFrames = () => {};
   const blurCSS = document.createElement('style');
-  blurCSS.textContent = 'html{background:#000}body{transition:filter 1.1s ease,transform 1.1s ease}html.lw-unfocused body{filter:blur(16px) saturate(.9) brightness(.86);transform:scale(1.05)}';
+  // An auto-paused scene simply stops drawing and keeps its last frame (no blur/zoom): it should
+  // still look like a wallpaper. A desktop click resumes it (host energy modes).
+  blurCSS.textContent = 'html{background:#000}';
   document.head.appendChild(blurCSS);
   function setFocused(on) {
     if (LW.focused === on) return;
@@ -565,7 +574,7 @@
     const dpr = Math.min(2, devicePixelRatio || 1), cv = CO.cv;
     if (cv.width !== Math.round(innerWidth * dpr)) { cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(110 * dpr); }
     cv.style.top = (innerHeight - 110) + 'px';
-    cv.style.filter = LW.focused ? '' : 'blur(10px) brightness(.86)';
+
     const c = CO.ctx;
     c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, innerWidth, 110);
     for (const [id, b] of CO.bots) {
@@ -652,6 +661,7 @@
     if (type === 'ambient') { LW.setSoundscape(x); return; }
     if (type === 'settings') { Object.assign(LW.settings, x || {}); LW.emit('settings', LW.settings); return; }
     if (type === 'action') { LW.emit('action', x); return; }
+    if (type === 'layout') { LW.layout = Object.assign({}, LW.layout, x || {}); LW.emit('layout', LW.layout); return; }
     if (type === 'env') { LW.setEnv(x); return; }
     if (type === 'reminder') { LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }
     if (type === 'calm') { LW.calm = !!x; LW.emit('calm', LW.calm); return; }

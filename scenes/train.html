@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Indian Train</title>
+<title>Train Journey</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0a0d; }
   canvas { position: fixed; left: 0; top: 0; display: block; }
@@ -13,20 +13,28 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script>
 /* =====================================================================
-   Night Train — a quiet carriage, window seat. The world slides by in
-   parallax (city lights → suburbs → countryside → bridge over water →
-   brief tunnels; fields and hills by day). A cup of chai rests on the table.
-   The compartment is unoccupied. Small flocks pass outside the window.
+   Train Journey — a quiet carriage, window seat. The world slides by in parallax (fields, hills,
+   towns, bridges over water, brief tunnels). A drink rests on the table beside a walkman.
+   Small flocks pass outside the window.
 
-   Click the window to skip to the next landscape.
-   Dev keys: s stretch, w weather, t time.
+   SKINS (LW.settings.skin, default 'indian'): a skin is one entry in the SKINS table below — its
+   plates, window/table geometry, panoramas + parallax bands, trackside sprites, bridge, tunnel
+   palette, route segments (jointed or welded rail) and the drink on the table.
+   Adding a skin = art in art/train/<skin>/ + one table entry. Switching skins crossfades live.
 
-   Art: art/train/bg-night.png and bg-day.png use a 1600×1000 stage.
-   Window opening: x480…950, y322…550. Table: x580…850, y590…626.
-   art/train/countryside-night.png and countryside-day.png supply matching moving fields.
-   art/birds/sparrow.png is a shared four-frame transparent flight atlas.
+   Click the window: the train surges ahead (motion blur, poles whipping past, a whoosh) and eases back
+   to cruise further down the line. Music Mode plays on a walkman on the table: reels turn, a tiny LED,
+   the cassette's J-card carries the track in biro; click the walkman = play/pause, its fast-forward key
+   (top right) or right flank = next. Headphone foam breathes faintly with the beat.
+   Dev keys: s stretch, k next skin. Browser (no host): clicking the walkman plays demo tracks.
+
+   Stage: 1600×1000; plates are drawn to it. Shared table props (transparent, painted, neutral light;
+   re-lit by the carriage light at bake): walkman.png 396×344 (hubs at 176,197 / 289.5,197 r21.5;
+   LED 353,60; FF key 268–318 × 6–40), headphones.png 263×213, cassette-case.png 400×259 (blank J-card
+   17–388 × 39–248). art/birds/sparrow.png is a shared four-frame flight atlas.
    ===================================================================== */
 'use strict';
 (() => {
@@ -117,20 +125,122 @@ function vnoise(x, seed) {
 const fbm = (x, seed) => vnoise(x, seed) * 0.6 + vnoise(x * 2.3, seed + 7) * 0.28 + vnoise(x * 5.1, seed + 13) * 0.12;
 
 // =====================================================================
-//  art slots
+//  SKINS — one table entry per look. Geometry is in stage units (1600×1000).
+//   files      logical name → PNG under dir (plates, panoramas, mask, drink, trackside, bridge)
+//   win        window glass: rect [x0,y0,x1,y1] + corner r; `mask` = the glass is the mask PNG's alpha
+//              (any shape, mullions, a second window); `view` = the mask's bounding box when wider
+//   pano       bands: [top as a fraction of the panorama height, speed] — far → near; above the first
+//              band the sky stays put
+//   props      where the table things stand (x = left edge, base = foot line, w = width)
+//   lamps      the lights that swell with the breath; light: colour of the carriage light at night
+//   track      trackside sprite layers (name, scale, weight); poles.ins = insulator x's in pole px
+//   bridge     a horizontally tiling bridge bay sprite shown on 'water' route segments
+//   tunnel     bore/portal palette;  route: [biome, length] segments ('tunnel', 'water' = bridge)
+//   rail       'jointed' = 13 m rails, the da-dum of each bogie over every gap; 'welded' = smooth
 // =====================================================================
-const ART = { dir: 'art/train/', img: {} };
-function loadArtSlots() {
-  for (const name of ['bg-night', 'bg-day', 'countryside-night', 'countryside-night-sky', 'countryside-day']) {
-    try {
-      const im = new Image();
-      im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); };
-      im.onerror = () => {};
-      im.src = ART.dir + name + '.png';
-    } catch (e) { /* missing art never matters */ }
-  }
+const SKIN_ORDER = ['indian', 'shinkansen', 'swiss', 'orient'];
+const SKIN_FILES = { night: 'bg-night', day: 'bg-day', mask: 'win-mask', panoNight: 'pano-night', panoDay: 'pano-day', drink: 'drink',
+  pole: 'pole', tree1: 'tree1', tree2: 'tree2', scrub: 'scrub', marker: 'marker', bridge: 'bridge' };
+const SKINS = {
+  indian: {
+    title: 'Indian Sleeper', dir: 'art/train/', rail: 'jointed',
+    files: { night: 'bg-night', day: 'bg-day', panoNight: 'countryside-night-sky', panoDay: 'countryside-day', drink: 'kulhad',
+      pole: 'pole', tree1: 'palm', tree2: 'neem', scrub: 'scrub', marker: 'kmstone', bridge: 'bridge' },
+    win: { rect: [480, 322, 950, 550], r: 46 },
+    table: { x0: 580, x1: 850, back: 590, front: 626 },
+    pano: { bands: [[0.46, 0.045], [0.625, 0.22], [0.79, 0.68]], moonY: [0.49, 0.34] },
+    props: { headphones: { x: 583, base: 625, w: 60 }, walkman: { x: 624, base: 619, w: 94 }, case: { x: 722, base: 607, w: 56 },
+      drink: { x: 778, base: 616, w: 44, tea: [73.5, 34, 52, 15] }, glass: { x: 834, y: 617 } },
+    lamps: [[374, 398], [1048, 398]], light: [0.92, 0.76, 0.58],
+    track: {
+      trees: { speed: 0.42, ground: 0.7, gap: 320, chance: 0.55, kinds: [['tree1', 0.2, 0.55], ['tree2', 0.17, 0.45]] },
+      poles: { speed: 0.95, ground: 1.12, gap: 560, chance: 1, kinds: [['pole', 0.43, 1]], ins: [12.6, 49, 87.5, 127.4], insY: 21 },
+      scrub: { speed: 1.25, ground: 1.05, gap: 190, chance: 0.7, kinds: [['scrub', 0.34, 0.9], ['marker', 0.34, 0.1]] },
+    },
+    bridge: { h: 1.1, top: -0.05 },   // a through-truss: the bays fill the glass
+    tunnel: { rock: [126, 96, 76], wall: ['#0e0b0a', '#16110e', '#0a0908'], lamp: [255, 196, 120], gap: 160 },
+    route: [['city', 7200], ['sub', 6000], ['country', 9000], ['tunnel', 900], ['country', 5200], ['water', 3400], ['country', 5000], ['tunnel', 700], ['sub', 5600]],
+  },
+  shinkansen: {
+    title: 'Shinkansen', dir: 'art/train/shinkansen/', rail: 'welded', files: { ...SKIN_FILES, extra: 'bento' },
+    win: { rect: [467, 237, 970, 516], view: [103, 237, 970, 516], r: 44, mask: true },
+    table: { x0: 560, x1: 908, back: 562, front: 618 },
+    pano: { bands: [[0.555, 0.045], [0.66, 0.22], [0.8, 0.68]], moonY: [0.42, 0.3] },
+    props: { headphones: { x: 574, base: 606, w: 60 }, walkman: { x: 640, base: 598, w: 94 }, case: { x: 742, base: 586, w: 56 },
+      drink: { x: 806, base: 600, w: 30, sx: 0.5, sy: 0.06 }, extra: { x: 842, base: 604, w: 62 }, glass: { x: 872, y: 608 } },
+    lamps: [[520, 180], [960, 180]], light: [0.95, 0.9, 0.8],
+    track: {
+      trees: { speed: 0.42, ground: 0.7, gap: 300, chance: 0.6, kinds: [['tree1', 0.18, 0.6], ['tree2', 0.16, 0.4]] },
+      poles: { speed: 0.95, ground: 1.12, gap: 420, chance: 1, kinds: [['pole', 0.37, 1]], wire: [[40, 0]] },
+      scrub: { speed: 1.25, ground: 1.05, gap: 200, chance: 0.6, kinds: [['scrub', 0.4, 0.85], ['marker', 0.3, 0.15]] },
+    },
+    bridge: { h: 0.26, top: 0.79 },   // viaduct: a concrete sound wall slides along the bottom of the glass
+    tunnel: { rock: [150, 150, 146], wall: ['#101112', '#18191a', '#0b0c0d'], lamp: [220, 236, 255], gap: 120 },
+    route: [['country', 7000], ['tunnel', 1400], ['country', 5200], ['water', 2600], ['sub', 5200], ['country', 6000], ['tunnel', 900], ['country', 4000], ['water', 1800]],
+  },
+  swiss: {
+    title: 'Swiss Alpine', dir: 'art/train/swiss/', rail: 'welded', files: { ...SKIN_FILES, extra: 'chocolate' },
+    win: { rect: [348, 79, 1161, 469], r: 40, mask: true },
+    table: { x0: 533, x1: 975, back: 527, front: 595 },
+    pano: { bands: [[0.66, 0.045], [0.74, 0.22], [0.84, 0.68]], moonY: [0.3, 0.2] },
+    props: { headphones: { x: 556, base: 584, w: 74 }, walkman: { x: 638, base: 576, w: 116 }, case: { x: 768, base: 560, w: 69 },
+      drink: { x: 846, base: 577, w: 90, sx: 0.36, sy: 0.05 }, extra: { x: 902, base: 589, w: 60 }, glass: { x: 940, y: 590 } },
+    lamps: [[217, 232], [1286, 232]], light: [0.96, 0.78, 0.55],
+    track: {
+      trees: { speed: 0.42, ground: 0.72, gap: 260, chance: 0.7, kinds: [['tree1', 0.2, 0.65], ['tree2', 0.2, 0.35]] },
+      poles: { speed: 0.95, ground: 1.12, gap: 480, chance: 1, kinds: [['pole', 0.36, 1]], wire: [[38, 0]] },
+      scrub: { speed: 1.25, ground: 1.05, gap: 210, chance: 0.6, kinds: [['scrub', 0.3, 0.85], ['marker', 0.25, 0.15]] },
+    },
+    bridge: { h: 0.3, top: 0.74 },    // stone viaduct: the granite parapet runs past low in the glass
+    tunnel: { rock: [132, 130, 126], wall: ['#0c0c0d', '#141415', '#09090a'], lamp: [255, 214, 160], gap: 220 },
+    route: [['country', 5200], ['tunnel', 1200], ['country', 4200], ['water', 2400], ['country', 4800], ['tunnel', 2000], ['country', 5200], ['tunnel', 700], ['country', 3600]],
+  },
+  orient: {
+    title: 'Orient Express', dir: 'art/train/orient/', rail: 'welded', files: { ...SKIN_FILES, extra: 'teapot' },
+    win: { rect: [497, 232, 981, 492], r: 30, mask: true },
+    table: { x0: 560, x1: 945, back: 562, front: 615 },
+    pano: { bands: [[0.6, 0.045], [0.7, 0.22], [0.82, 0.68]], moonY: [0.45, 0.32] },
+    props: { headphones: { x: 582, base: 604, w: 66 }, walkman: { x: 645, base: 597, w: 103 }, case: { x: 757, base: 584, w: 62 },
+      drink: { x: 822, base: 600, w: 72, sx: 0.4, sy: 0.08 }, extra: { x: 884, base: 588, w: 56 }, glass: { x: 905, y: 600 } },
+    lamps: [[368, 257], [1145, 257]], light: [1.0, 0.76, 0.5],
+    track: {
+      trees: { speed: 0.42, ground: 0.7, gap: 300, chance: 0.65, kinds: [['tree1', 0.18, 0.6], ['tree2', 0.17, 0.4]] },
+      poles: { speed: 0.95, ground: 1.12, gap: 560, chance: 1, kinds: [['pole', 0.37, 1]], ins: [12, 56, 112, 156], insY: 22 },
+      scrub: { speed: 1.25, ground: 1.05, gap: 200, chance: 0.6, kinds: [['scrub', 0.2, 0.85], ['marker', 0.22, 0.15]] },
+    },
+    bridge: { h: 1.1, top: -0.05 },   // iron lattice truss over the lagoon
+    tunnel: { rock: [120, 98, 82], wall: ['#0d0a09', '#14100e', '#090707'], lamp: null, gap: 0 },
+    route: [['water', 5200], ['country', 7000], ['tunnel', 900], ['country', 6400], ['water', 2600], ['country', 5800], ['tunnel', 700], ['sub', 4200]],
+  },
+};
+let skinId = 'indian', S = SKINS.indian;
+const SHARED = ['walkman', 'headphones', 'cassette-case'];
+const ART = { dir: 'art/train/', img: {}, want: new Set() };
+const A = (name) => ART.img[S.dir + (S.files[name] || name)];     // the active skin's art
+const AS = (name) => ART.img[ART.dir + name];                      // shared art
+function loadImg(path, cb) {
+  if (ART.img[path]) { cb && cb(ART.img[path]); return; }
+  if (ART.want.has(path)) { if (cb) (ART.cbs[path] = ART.cbs[path] || []).push(cb); return; }
+  ART.want.add(path); ART.cbs = ART.cbs || {}; if (cb) (ART.cbs[path] = ART.cbs[path] || []).push(cb);
+  const im = new Image();
+  const done = (ok) => { if (ok && im.naturalWidth) ART.img[path] = im; for (const f of ART.cbs[path] || []) try { f(ok ? im : null); } catch (e) { console.error(e); } delete ART.cbs[path]; };
+  im.onload = () => done(true); im.onerror = () => done(false);
+  im.src = path + '.png';
 }
-const artMode = () => !!(ART.img['bg-night'] || ART.img['bg-day']);
+// load a skin's art; cb once its plates and panoramas are in (or failed)
+function loadSkinArt(sk, cb) {
+  const names = Object.values(sk.files), key = ['night', 'day', 'panoDay', 'panoNight', 'mask'].filter((k) => sk.files[k]).map((k) => sk.dir + sk.files[k]);
+  let left = key.length;
+  for (const n of names) loadImg(sk.dir + n, (im) => {
+    if (sk === S && im) { clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); }
+    if (key.includes(sk.dir + n) && --left === 0 && cb) cb();
+  });
+}
+function loadArtSlots() {
+  for (const n of SHARED) loadImg(ART.dir + n, (im) => { if (im) { clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); } });
+  loadSkinArt(S);
+}
+const artMode = () => !!(A('night') || A('day'));
 
 // =====================================================================
 //  environment: time of day + weather (glides; never pops)
@@ -223,19 +333,21 @@ function computeLayout() {
   if (cssW * cssH * dpr * dpr > 9.5e6) dpr = Math.sqrt(9.5e6 / (cssW * cssH));
   cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
   cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px';
-  if (artMode()) { W = 1600; K = cssH / 1000; OX = (cssW - 1600 * K) * (cssW / cssH > 1.6 ? .25 : .5); OY = 0; }
+  // wide screens: slide the painted stage away from the side the desktop widgets live on (LW.layout)
+  const side = (LW.layout && LW.layout.side) || 'right', wideF = side === 'left' ? 0.75 : side === 'off' ? 0.5 : 0.25;
+  if (artMode()) { W = 1600; K = cssH / 1000; OX = (cssW - 1600 * K) * (cssW / cssH > 1.6 ? wideF : .5); OY = 0; }
   else { K = cssH / 1000; W = cssW / K; OX = 0; OY = 0; }
   U = K * dpr;
   const o = {};
   // Keep the right side of the carriage quiet for desktop widgets.
   const RZ = W * 0.7; o.RZ = RZ;
   o.ceil = 62; o.floor = 880;
-  const wx0 = artMode() ? 480 : clamp(W * 0.11, 120, 300), wx1 = artMode() ? 950 : Math.min(RZ - 70, wx0 + clamp(W * 0.55, 700, 1300));
-  o.win = { x0: wx0, x1: wx1, y0: artMode() ? 322 : 150, y1: artMode() ? 550 : 612, r: 46 };
+  const sw = S.win.rect, wx0 = artMode() ? sw[0] : clamp(W * 0.11, 120, 300), wx1 = artMode() ? sw[2] : Math.min(RZ - 70, wx0 + clamp(W * 0.55, 700, 1300));
+  o.win = { x0: wx0, x1: wx1, y0: artMode() ? sw[1] : 150, y1: artMode() ? sw[3] : 612, r: artMode() ? S.win.r : 46 };
   o.win.w = wx1 - wx0; o.win.h = o.win.y1 - o.win.y0;
   o.hz = o.win.y0 + o.win.h * 0.56;      // horizon (eye level)
   const tcx = (wx0 + wx1) / 2, tw = clamp(o.win.w * 0.64, 440, 780);
-  o.table = artMode() ? { cx:713,x0:580,x1:850,w:270,back:590,front:626,th:12 } : { cx: tcx, x0: tcx - tw / 2, x1: tcx + tw / 2, w: tw, back: 640, front: 704, th: 14 };
+  o.table = artMode() ? { ...S.table, cx: (S.table.x0 + S.table.x1) / 2, w: S.table.x1 - S.table.x0, th: 12 } : { cx: tcx, x0: tcx - tw / 2, x1: tcx + tw / 2, w: tw, back: 640, front: 704, th: 14 };
   o.seatL = { b0: o.table.x0 - 250, b1: o.table.x0 - 128, c0: o.table.x0 - 250, c1: o.table.x0 + 6, top: 744, head: 330, dir: 1 };
   o.seatR = { b0: o.table.x1 + 128, b1: o.table.x1 + 250, c0: o.table.x1 - 6, c1: o.table.x1 + 250, top: 744, head: 330, dir: -1 };
   if (artMode()) {
@@ -247,11 +359,11 @@ function computeLayout() {
   o.cup = { x: T.x0 + tw * 0.63, y: 694 };
   o.glass = { x: T.x0 + tw * 0.735, y: 698 };
   o.book = { x: T.x0 + tw * 0.86, y: 676 };
-  if(artMode()){o.cup={x:794,y:614};o.glass={x:825,y:616};o.book={x:830,y:612};}
+  if(artMode()){const d=S.props.drink;o.cup={x:d.x+d.w*(d.sx||.5),y:d.base};o.glass={...S.props.glass};o.book={x:830,y:612};}
   // lamps on the window pillars
   o.lampL = { x: wx0 - 58, y: 236 };
   o.lampR = { x: wx1 + 58, y: 236 };
-  if(artMode()){o.lampL={x:374,y:398};o.lampR={x:1048,y:398};}
+  if(artMode()){o.lampL={x:S.lamps[0][0],y:S.lamps[0][1]};o.lampR={x:S.lamps[1][0],y:S.lamps[1][1]};}
   // the quiet right: the next bay's seat (back-to-back with ours), a framed route map, a coat hook
   o.nextSeat = { b0: o.seatR.b1 + 14, b1: o.seatR.b1 + 136, c1: o.seatR.b1 + 400 };
   o.map = { x: Math.max(o.nextSeat.b1 + 70, W * 0.8), y: 210, w: 150, h: 104 };
@@ -265,7 +377,8 @@ function computeLayout() {
     { x: tcx, y: 690, rx: tw * 0.8, ry: 240, k: 0.38, c: [1.0, 0.8, 0.58], kind: 'lamp' },
   ];
   // the outside view box (a hair bigger than the glass)
-  o.V = { x0: wx0 - 10, x1: wx1 + 10, y0: o.win.y0 - 10, y1: o.win.y1 + 10 };
+  const vw = artMode() && S.win.view ? S.win.view : [wx0, o.win.y0, wx1, o.win.y1];
+  o.V = { x0: vw[0] - 10, x1: vw[2] + 10, y0: vw[1] - 10, y1: vw[3] + 10 };
   o.V.ww = o.V.x1 - o.V.x0; o.V.wh = o.V.y1 - o.V.y0; o.V.cx = (o.V.x0 + o.V.x1) / 2;
   L = o;
   elCache.clear();
@@ -319,12 +432,12 @@ function bakeRoom() {
   const g = roomCv.getContext('2d');
   if (artMode()) {
     setW(g); g.translate(RM, RM);
-    const n = ART.img['bg-night'], d = ART.img['bg-day'];
-    LW.roomImage(g,n || d);
-    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; LW.roomImage(g,d); g.globalAlpha = 1; }
+    const n = A('night'), d = A('day');
+    roomPlate(g, n || d);
+    if (n && d && E.day > 0.01) { g.globalAlpha = E.day; roomPlate(g, d); g.globalAlpha = 1; }
     LW.roomGrade(g, 0, 0, 1600, 1000, E.day);
     winHole(g);
-    paintCupBody(g);
+    paintTableProps(g);
     paintVignette(g);
     return;
   }
@@ -344,8 +457,31 @@ function bakeRoom() {
   paintEmissive(g);
   albCv.width = albCv.height = 1; lmCv.width = lmCv.height = 1;
 }
+// a plate on the 1600×1000 stage; wide desktops continue its own outer columns (stretched, shaded) so the
+// side panels carry the carriage's colours instead of a flat wash
+const edgeCols = new WeakMap();
+function roomPlate(g, im) {
+  const iw = im.naturalWidth, ih = im.naturalHeight, sw = Math.max(2, Math.round(iw * 0.03));
+  // each edge column averaged down to a soft vertical gradient (no hard stripes from rungs/trim)
+  const e = edgeCols.get(im) || (() => { const c = newCanvas(2, 40), x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
+    x.drawImage(im, 0, 0, sw, ih, 0, 0, 1, 40); x.drawImage(im, iw - sw, 0, sw, ih, 1, 0, 1, 40); edgeCols.set(im, c); return c; })();
+  g.drawImage(e, 0, 0, 1, 40, -1800, 0, 1800, 1000);
+  g.drawImage(e, 1, 0, 1, 40, 1600, 0, 1800, 1000);
+  for (const [x, dir] of [[1600, 1], [0, -1]]) {
+    const sh = g.createLinearGradient(x, 0, x + dir * 700, 0); sh.addColorStop(0, 'rgba(6,5,6,.25)'); sh.addColorStop(1, 'rgba(6,5,6,.62)');
+    g.fillStyle = sh; g.fillRect(dir > 0 ? x : x - 1800, 0, 1800, 1000);
+  }
+  g.drawImage(im, 0, 0, 1600, 1000);
+}
 function winPath(g, inset = 0) { const w = L.win; rr(g, w.x0 + inset, w.y0 + inset, w.w - 2 * inset, w.h - 2 * inset, w.r - inset); }
-function winHole(g) { g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000'; winPath(g); g.fill(); g.globalCompositeOperation = 'source-over'; }
+function winHole(g) {
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
+  const m = S.win.mask && artMode() && A('mask');
+  if (m) g.drawImage(m, 0, 0, 1600, 1000); else { winPath(g); g.fill(); }
+  g.globalCompositeOperation = 'source-over';
+}
+// clip to the glass: the mask's bounding box is enough for things drawn under the room plate
+function winClip(g) { if (S.win.mask && artMode() && A('mask')) { const v = L.win; g.beginPath(); g.rect(v.x0, v.y0, v.w, v.h); } else winPath(g); g.clip(); }
 
 // ----- albedo -------------------------------------------------------------------
 function woodGrain(g, x, y, w, h, seed, a = 0.08) {
@@ -594,6 +730,155 @@ function paintCupBody(g) {
   g.fillStyle='#bb8057';g.beginPath();g.ellipse(x,y-63,22,5,0,0,TAU);g.fill();
   g.fillStyle='#654330';g.beginPath();g.ellipse(x,y-63,17,3.6,0,0,TAU);g.fill();
 }
+// =====================================================================
+//  the fold-out table: a walkman with a cassette, its foam headphones, the cassette's case with a
+//  handwritten J-card, and the chai. Painted sprites (art/train/*.png), lit by the carriage light at
+//  bake time; reels, LED, J-card ink and the headphones' beat are live.
+//  Sprite feature coordinates are in each PNG's own pixels.
+// =====================================================================
+// sprite features (in each PNG's own pixels); where they stand comes from the skin (S.props)
+const TP_FEAT = {
+  walkman: { hubs: [[176, 197], [289.5, 197]], hubR: 21.5, led: [353.3, 59.8], body: [83.5, 27.5, 387.5, 343.5], ff: [268, 6, 318, 40] },
+  headphones: {}, case: { card: [17, 39, 388, 248] }, drink: {}, extra: {},
+};
+let TP = {};
+function applySkinProps() { TP = {}; for (const k in TP_FEAT) if (S.props[k]) TP[k] = { ...TP_FEAT[k], ...S.props[k] }; }
+applySkinProps();
+const tpImg = (k) => k === 'case' ? AS('cassette-case') : k === 'walkman' || k === 'headphones' ? AS(k) : A(k);
+function tpGeom(k) {   // stage rect of a prop sprite
+  const p = TP[k], im = p && tpImg(k); if (!im) return null;
+  const s = p.w / im.naturalWidth, h = im.naturalHeight * s;
+  return { im, s, x: p.x, y: p.base - h, w: p.w, h };
+}
+// the carriage light falling on the tabletop (sprites are painted under neutral light): warm lamplight at
+// night, soft window daylight by day, a little sunset warmth at dusk
+function tableTint() {
+  const night = mix3(mul([0.54, 0.55, 0.64], S.light), S.light, E.lamp);
+  const day = mix3([0.97, 0.96, 0.95], [0.86, 0.88, 0.92], E.cloud * 0.6 + E.rain * 0.3);
+  let t = mix3(night, day, E.day);
+  t = mix3(t, mul(t, [1.06, 0.92, 0.78]), E.warm * E.day);
+  return t.map((v) => clamp(v, 0, 1));
+}
+function tintSprite(im, w, h, tint) {
+  const c = newCanvas(w, h), g = c.getContext('2d');
+  g.drawImage(im, 0, 0, w, h);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(tint.map((v) => v * 255)); g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = 'destination-in'; g.drawImage(im, 0, 0, w, h);
+  return c;
+}
+const tpCache = { hp: null, tint: [1, 1, 1] };
+function paintTableProps(g) {
+  const tint = tableTint(); tpCache.tint = tint;
+  const res = U * 1.0;   // device px per stage unit
+  const shadow = (x, y, rx, ry, a) => { g.fillStyle = `rgba(20,12,8,${a})`; g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, TAU); g.fill(); };
+  // back to front: the case (leaning on the window ledge), the chai, the walkman
+  for (const k of ['case', 'extra', 'drink', 'walkman'].filter((k) => TP[k]).sort((a, b) => TP[a].base - TP[b].base)) {
+    const r = tpGeom(k); if (!r) { if (k === 'drink' && skinId === 'indian') paintCupBody(g); continue; }
+    shadow(r.x + r.w * 0.5 + 2, TP[k].base - 1, r.w * 0.5, k === 'drink' || k === 'extra' ? 4.5 : 3.6, k === 'case' ? 0.22 : 0.3);
+    const c = tintSprite(r.im, Math.ceil(r.w * res), Math.ceil(r.h * res), tint);
+    g.drawImage(c, r.x, r.y, r.w, r.h);
+  }
+  const hp = tpGeom('headphones');
+  tpCache.hp = hp ? { ...hp, c: tintSprite(hp.im, Math.ceil(hp.w * res), Math.ceil(hp.h * res), tint) } : null;
+  if (hp) shadow(hp.x + hp.w * 0.5, TP.headphones.base - 2, hp.w * 0.46, 4, 0.22);
+}
+
+// ---- music: Music Mode drives the walkman (LW.nowPlaying), clicks drive the player ----
+const deck = { rot: [0, 0.7], spin: 0, ff: 0, led: 0, pulse: 0, np: LW.nowPlaying };
+LW.on('nowplaying', (np) => { deck.np = np; });
+LW.on('beat', (k) => { deck.pulse = Math.max(deck.pulse, clamp(k, 0, 1)); });
+function stepDeck(dt) {
+  const np = deck.np, playing = !!(np && np.playing);
+  deck.spin = approach(deck.spin, playing ? 1 : 0, playing ? 4 : 6, dt);   // a motor: spins up, stops quickly
+  deck.ff = Math.max(0, deck.ff - dt);
+  const sp = deck.spin * 1.9 + (deck.ff > 0 ? 14 * smooth(deck.ff / 0.9) : 0);   // rad/s at the hubs
+  deck.rot[0] += sp * dt; deck.rot[1] += sp * dt * 0.82;   // take-up and supply turn at different rates
+  deck.led = approach(deck.led, playing ? 1 : 0, 8, dt);
+  deck.pulse *= Math.exp(-dt / 0.18);
+}
+function drawDeck(g, T) {
+  const r = tpGeom('walkman'); if (!r) return;
+  setWR(g);
+  const P = TP.walkman, s = r.s, tint = tpCache.tint;
+  // reels: the painted hubs are re-drawn so their teeth can turn
+  const hubCol = rgba(mul([226, 218, 200], tint)), holeCol = rgba(mul([34, 28, 24], tint)), toothCol = rgba(mul([236, 228, 212], tint));
+  for (let i = 0; i < 2; i++) {
+    const [hx, hy] = P.hubs[i], cx = r.x + hx * s, cy = r.y + hy * s, R = P.hubR * s;
+    g.fillStyle = hubCol; g.beginPath(); g.arc(cx, cy, R * 0.86, 0, TAU); g.fill();
+    g.fillStyle = holeCol; g.beginPath(); g.arc(cx, cy, R * 0.56, 0, TAU); g.fill();
+    g.fillStyle = toothCol;
+    for (let k = 0; k < 6; k++) {
+      const a = deck.rot[i] + (k * TAU) / 6, ca = Math.cos(a), sa = Math.sin(a), w2 = R * 0.09;
+      g.beginPath();
+      g.moveTo(cx + ca * R * 0.58 - sa * w2, cy + sa * R * 0.58 + ca * w2);
+      g.lineTo(cx + ca * R * 0.3 - sa * w2 * 0.7, cy + sa * R * 0.3 + ca * w2 * 0.7);
+      g.lineTo(cx + ca * R * 0.3 + sa * w2 * 0.7, cy + sa * R * 0.3 - ca * w2 * 0.7);
+      g.lineTo(cx + ca * R * 0.58 + sa * w2, cy + sa * R * 0.58 - ca * w2);
+      g.closePath(); g.fill();
+    }
+    g.strokeStyle = rgba(mul([120, 110, 96], tint), 0.6); g.lineWidth = R * 0.07; g.beginPath(); g.arc(cx, cy, R * 0.86, 0, TAU); g.stroke();
+  }
+  // play LED
+  if (deck.led > 0.01) {
+    const lx = r.x + P.led[0] * s, ly = r.y + P.led[1] * s, a = deck.led * (0.85 + 0.15 * deck.pulse);
+    drawSprite(g, GLOW_WARM, lx, ly, 9, 0.55 * a);
+    g.fillStyle = `rgba(255,${90 + 60 * deck.pulse | 0},50,${0.95 * a})`; g.beginPath(); g.arc(lx, ly, 1.25, 0, TAU); g.fill();
+  }
+  // headphones on the table: the foam breathes with the beat (a hair, never a bounce)
+  const hp = tpCache.hp;
+  if (hp) {
+    const k = 1 + 0.022 * deck.pulse * deck.spin, bx = hp.x + hp.w / 2, by = TP.headphones.base;
+    g.save(); g.translate(bx, by); g.scale(1 + (k - 1) * 0.6, k); g.drawImage(hp.c, -hp.w / 2, -hp.h, hp.w, hp.h); g.restore();
+  }
+  // the J-card: written by hand when a track is loaded; blank otherwise (rendered once per track/light)
+  const cr = tpGeom('case'), np = deck.np;
+  if (cr && np && np.title) {
+    const [c0, c1, c2, c3] = TP.case.card, cs = cr.s, x0 = cr.x + c0 * cs, cw = (c2 - c0) * cs, y1 = cr.y + c1 * cs, ch = (c3 - c1) * cs;
+    const key = np.title + '|' + (np.artist || '') + '|' + tint.map((v) => v.toFixed(2)).join() + '|' + U.toFixed(2);
+    if (deck.cardKey !== key) { deck.cardKey = key; deck.card = inkCard(np, cw, ch, tint); }
+    g.drawImage(deck.card, x0, y1, cw, ch);
+  }
+}
+function inkCard(np, cw, ch, tint) {
+  const c = newCanvas(cw * U, ch * U), g = c.getContext('2d');
+  g.scale(U, U);
+  g.translate(cw * 0.06, 0); g.rotate(-0.035);
+  g.fillStyle = rgba(mul([34, 46, 104], tint), 0.88); g.textBaseline = 'alphabetic';
+  // title in a biro hand: one line if it fits at a readable size, else wrapped onto two
+  const maxW = cw * 0.9;
+  let fs = 9.4, lines = [np.title]; g.font = `${fs}px ${HAND}`;
+  while (fs > 7.6 && g.measureText(np.title).width > maxW) { fs -= 0.3; g.font = `${fs}px ${HAND}`; }
+  if (g.measureText(np.title).width > maxW) {
+    const words = np.title.split(/\s+/); let a = '';
+    for (let i = 0; i < words.length; i++) { const t = a ? a + ' ' + words[i] : words[i]; if (a && g.measureText(t).width > maxW) { lines = [a, words.slice(i).join(' ')]; break; } a = t; }
+  }
+  let y = 10.6;
+  for (const ln of lines.slice(0, 2)) { g.fillText(fitText(g, ln, maxW), 0, y); y += fs * 0.98; }
+  if (np.artist) { g.font = `${Math.max(5.6, fs * 0.72)}px ${HAND}`; g.globalAlpha = 0.85; g.fillText(fitText(g, np.artist, cw * 0.86), 1.5, y + (lines.length > 1 ? -0.6 : 1.2)); }
+  return c;
+}
+// clicks: the walkman's body plays/pauses; its fast-forward key (top right) or right flank skips
+function deckHit(x, y) {
+  const r = tpGeom('walkman'); if (!r) return null;
+  const P = TP.walkman, s = r.s, bx0 = r.x + P.body[0] * s, bx1 = r.x + P.body[2] * s, by0 = r.y + P.ff[1] * s, by1 = r.y + P.body[3] * s;
+  if (x < bx0 - 6 || x > bx1 + 8 || y < by0 - 8 || y > by1 + 4) return null;
+  const ffx = r.x + P.ff[0] * s, ffy = r.y + P.ff[3] * s;
+  if ((x > ffx - 3 && y < ffy + 4) || x > bx1 - (bx1 - bx0) * 0.12) return 'next';
+  return 'playpause';
+}
+let demoI = 0;
+const DEMO = [{ title: 'Night Mail', artist: 'Window Seat Trio' }, { title: 'Monsoon Platform', artist: 'The Sleeper Coach' }, { title: 'Chai at Itarsi', artist: 'Lo-fi Junction' }];
+function media(cmd) {
+  if (cmd === 'next') deck.ff = 0.9;
+  sClick();
+  LW.post({ type: 'media', cmd });
+  if (LW.isHost) return;
+  // browser dev mode: a few demo tracks so the deck can be tried without the host
+  const np = LW.nowPlaying;
+  if (cmd === 'playpause') window.__lw('nowplaying', np ? { ...np, playing: !np.playing } : { ...DEMO[demoI], playing: true, app: 'Music' });
+  else { demoI = (demoI + 1) % DEMO.length; window.__lw('nowplaying', { ...DEMO[demoI], playing: true, app: 'Music' }); }
+}
+
 function paintBook(g) {
   // a paperback lying face-down, open (a little tent)
   const { x, y } = L.book;
@@ -603,7 +888,7 @@ function paintBook(g) {
   g.fillStyle = '#3a5a7c'; g.beginPath(); g.moveTo(x + 60, y + 6); g.lineTo(x + 2, y - 22); g.lineTo(x + 2, y - 16); g.lineTo(x + 58, y + 11); g.closePath(); g.fill();
   g.fillStyle = '#c8a050'; g.fillRect(x - 3, y - 23, 6, 8);
   g.strokeStyle = '#a8303a'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 1, y - 16); g.quadraticCurveTo(x + 8, y + 4, x + 3, y + 22); g.stroke();
-  g.fillStyle = 'rgba(240,226,190,0.6)'; g.font = `italic 7px ${SERIF}`; g.save(); g.translate(x + 34, y - 3); g.rotate(0.44); g.fillText('night trains', -20, 0); g.restore();
+  g.fillStyle = 'rgba(240,226,190,0.6)'; g.font = `italic 7px ${SERIF}`; g.save(); g.translate(x + 34, y - 3); g.rotate(0.44); g.restore();
 }
 // ----- emissive extras after lighting -----------------------------------------
 function paintEmissive(g) {
@@ -651,11 +936,7 @@ function bakeSky() {
   if (starA > 0.02) for (let i = 0; i < 160; i++) { const x = v.x0 + r() * v.ww, y = v.y0 + r() * (L.hz - v.y0 - 30), s = r() < 0.1 ? 1.6 : 0.9; g.fillStyle = `rgba(230,236,255,${starA * (0.25 + r() * 0.6)})`; g.fillRect(x, y, s, s); }
   // moon (night) / sun (day): fixed — they don't parallax
   const mx = v.x0 + v.ww * 0.78, my = v.y0 + 74;
-  if (E.moon > 0.02) {
-    ellGrad(g, mx, my, 160, 140, [190, 210, 255], 0.2 * E.moon, 8);
-    g.fillStyle = rgba([238, 236, 222], E.moon); g.beginPath(); g.arc(mx, my, 15, 0, TAU); g.fill();
-    g.fillStyle = rgba(mix3(E.top, [30, 36, 60], 0.3), E.moon * 0.9); g.beginPath(); g.arc(mx + 7, my - 4, 13, 0, TAU); g.fill();
-  }
+  if (E.moon > 0.02 && LW.drawMoon) LW.drawMoon(g, mx, my, 15, { glow: 0.5, alpha: E.moon });
   const sunny = E.day * (1 - E.cloud * 0.8) * (1 - E.fog * 0.8);
   if (sunny > 0.05) {
     const hr = E.hour, t = clamp((hr - 6) / 13, 0, 1), sx = v.x0 + v.ww * (0.2 + 0.6 * t), sy = L.hz - Math.sin(t * Math.PI) * (L.hz - v.y0 - 40);
@@ -696,9 +977,9 @@ function bakeRefl() {
 // =====================================================================
 //  the route: biomes along the line, parallax layers generated per chunk
 // =====================================================================
-const ROUTE = [['city', 7200], ['sub', 6000], ['country', 9000], ['tunnel', 900], ['country', 5200], ['water', 3400], ['country', 5000], ['tunnel', 700], ['sub', 5600]];
+// the line itself comes from the skin (S.route); 'water' = a bridge, 'tunnel' = a bore
 const SEG = []; let RT = 0;
-for (const [t, len] of ROUTE) { SEG.push({ t, a: RT, b: RT + len }); RT += len; }
+function buildRoute() { SEG.length = 0; RT = 0; for (const [t, len] of S.route) { SEG.push({ t, a: RT, b: RT + len }); RT += len; } elCache.clear(); }
 const BKEYS = ['city', 'sub', 'country', 'water'];
 const segAt = (d) => { d = ((d % RT) + RT) % RT; for (let i = 0; i < SEG.length; i++) if (d < SEG[i].b) return [i, d]; return [SEG.length - 1, d]; };
 const bType = (t) => (t === 'tunnel' ? 'country' : t);
@@ -808,43 +1089,79 @@ function outsidePalette() {
 //  the train: speed, distance, track joints, rocking, skips
 // =====================================================================
 const train = { v: 150, d: 15000, joint: 0, lampX: [], skip: null, beatLamps: [], tunnel: 0 };
+// Jointed track (Indian skin): 13 m rails. Each gap is crossed first by one bogie's two axles (dha-dha),
+// then, after a short gap, by the next bogie's pair (dhaa-dhaa, a touch lower and duller), then a longer
+// gap until the next joint: da-dum . da-dum ... timed by speed. The two audible bogies are the near ones
+// across the coupler; spacings are tuned a little so the rhythm reads (pair 1.8 m, between pairs 3.4 m,
+// to the next joint 6 m). Rail lengths vary a hair per joint.
+const RAIL = {
+  dPerM: 5.6,   // route units per metre (cruise 140 u/s ≈ 25 m/s ≈ 90 km/h → a joint every 0.52 s)
+  axles: [{ o: 7.0, front: true, k: 1 }, { o: 5.2, front: true, k: 0.84 }, { o: 1.8, front: false, k: 0.78 }, { o: 0, front: false, k: 0.66 }],
+};
+const RAIL_LEN = 13;
+function jointPos(j) { return j * RAIL_LEN + (((hash('j' + j) % 1000) / 1000) - 0.5) * 0.24; }   // ±12 cm
+function jointIndex(m) { let j = Math.floor(m / RAIL_LEN); if (m < jointPos(j)) j--; else if (m >= jointPos(j + 1)) j++; return j; }
+// Window click = fast-forward: the train surges (speed ×14 over ~0.9 s, the landscape smearing into motion
+// blur, poles whipping past, a whoosh), skips on to the next stretch of line at the blur's peak where the cut
+// can't be seen, then eases back to cruise over ~1.6 s. The glass never goes dark.
+const SURGE = { up: 0.9, hold: 0.3, down: 1.7, gain: 13 };
+function surgeEnv(t) { return t < SURGE.up ? smooth(t / SURGE.up) : t < SURGE.up + SURGE.hold ? 1 : 1 - smooth((t - SURGE.up - SURGE.hold) / SURGE.down); }
 function updateTrain(dt, T) {
   let vT = 140;
   if (calm.on) vT *= 0.5;
-  if (train.skip) vT *= 3;
-  train.v = approach(train.v, vT, train.skip ? 3 : 0.35, dt);
-  train.d += train.v * dt;
-  // skip ahead (window click): dip into darkness, jump to the next landscape, come out
   const sk = train.skip;
   if (sk) {
     sk.t += dt;
-    if (!sk.jumped && sk.t > 0.45) {
+    const e = surgeEnv(sk.t);
+    sk.env = e;
+    train.v = lerp(sk.t < SURGE.up ? sk.v0 : vT, vT * (1 + SURGE.gain), e * e);
+    if (!sk.jumped && sk.t > SURGE.up + SURGE.hold * 0.5) {
       sk.jumped = true;
       const [i] = segAt(train.d); let j = (i + 1) % SEG.length; if (SEG[j].t === 'tunnel') j = (j + 1) % SEG.length;
-      const base = Math.floor(train.d / RT) * RT; let nd = base + SEG[j].a + 900; if (nd < train.d) nd += RT;
+      const base = Math.floor(train.d / RT) * RT; let nd = base + SEG[j].a + 700; if (nd < train.d) nd += RT;
       train.d = nd; train.beatLamps = []; sweeps.length = 0;
     }
-    if (sk.t > 1.25) train.skip = null;
+    if (sk.t > SURGE.up + SURGE.hold + SURGE.down) train.skip = null;
+  } else train.v = approach(train.v, vT, 0.35, dt);
+  train.d += train.v * dt;
+  // rail joints: each axle of our car crossing a gap jolts the floor a hair — the same physics the
+  // ambience bed schedules the clacks from, so the jolt lands on the "dha"
+  const vr = Math.min(train.v, 320);
+  const jolt = (k) => { rock.jv += k * (vr / 200) * (train.skip ? 0.35 : 1) * (1 - 0.6 * calm.lv * breathHold()); };
+  if (S.rail === 'jointed') {
+    const sm = train.d / RAIL.dPerM;
+    for (const ax of RAIL.axles) {
+      const n = jointIndex(sm + ax.o);
+      if (ax.n == null) ax.n = n;
+      else if (n !== ax.n) { ax.n = n; jolt(ax.front ? 5.5 : 3.2); }
+    }
+  } else {   // welded rail: only the odd soft settle of the bogies
+    const jn = Math.floor(train.d / 4200);
+    if (jn !== train.joint) { train.joint = jn; jolt(4); }
   }
-  // track joints → a tiny jolt (the da-dum clacks are scheduled by the ambience bed, from train.v)
-  const jn = Math.floor(train.d / 520);
-  if (jn !== train.joint) { train.joint = jn; rock.jv += 14 * (train.v / 200) * (1 - 0.6 * calm.lv * breathHold()); }
   rock.jv += (-rock.jy * 90 - rock.jv * 9) * dt; rock.jy += rock.jv * dt;
-  const amp = (0.45 + 0.55 * train.v / 220) * (1 - calm.lv * (0.4 + 0.35 * breathHold()));   // the holds: very still
+  const amp = (0.45 + 0.55 * vr / 220) * (1 - calm.lv * (0.4 + 0.35 * breathHold()));   // the holds: very still
   rock.y = (Math.sin(T * 1.7) * 2.0 + Math.sin(T * 2.9 + 1) * 0.8) * amp + rock.jy * 0.35;
   rock.x = Math.sin(T * 1.1 + 0.4) * 1.3 * amp;
 }
+function segSpans(kind, pad = 3000) {   // [a, b] view-x spans of the route segments of one kind (near-layer speed)
+  const v = L.V, out = [];
+  const loop0 = Math.floor((train.d - pad) / RT), loop1 = Math.floor((train.d + pad) / RT);
+  for (let n = loop0; n <= loop1; n++) for (const s of SEG) if (s.t === kind) {
+    const a = v.x0 + v.ww / 2 + (s.a + n * RT - train.d), b = v.x0 + v.ww / 2 + (s.b + n * RT - train.d);
+    if (b < v.x0 - 400 || a > v.x1 + 400) continue;
+    out.push([a, b]);
+  }
+  return out;
+}
 function tunnelCover() {
   // fraction of the glass covered by tunnel wall right now
-  const v = L.V, nearOff = train.d, out = [];
+  const v = L.V, out = segSpans('tunnel').filter(([a, b]) => b >= v.x0 && a <= v.x1);
   let cov = 0;
-  const loop0 = Math.floor((train.d - 3000) / RT), loop1 = Math.floor((train.d + 3000) / RT);
-  for (let n = loop0; n <= loop1; n++) for (const s of SEG) if (s.t === 'tunnel') {
-    const a = v.x0 + v.ww / 2 + (s.a + n * RT - nearOff), b = v.x0 + v.ww / 2 + (s.b + n * RT - nearOff);
-    if (b < v.x0 || a > v.x1) continue;
-    out.push([a, b]); cov += (Math.min(b, v.x1) - Math.max(a, v.x0)) / v.ww;
-  }
+  for (const [a, b] of out) cov += (Math.min(b, v.x1) - Math.max(a, v.x0)) / v.ww;
+  if (train.skip) { out.length = 0; cov = 0; }   // the surge never flashes through a tunnel (it lands clear of them)
   train.tunnels = out; train.tunnel = clamp(cov, 0, 1);
+  train.bridges = segSpans('water');
 }
 
 // =====================================================================
@@ -948,7 +1265,7 @@ function drawOutside(g, T) {
   if (!artMode()) drawNear(g, T);
   drawPaintedCountryside(g,T);
   if (train.tunnel > 0.001) drawTunnel(g, T);
-  if (E.snow > 0.02) drawSnow(g, T);
+  if (E.snow > 0.02 && train.tunnel < 0.995) drawSnow(g, T);
 }
 // Cache mirrored, feathered panorama bands once. Their speeds follow distance,
 // so calm mode, acceleration and landscape skips affect every layer together.
@@ -956,7 +1273,7 @@ const countrysideLayers = new WeakMap();
 function prepareCountryside(im) {
   if(countrysideLayers.has(im))return countrysideLayers.get(im);
   const iw=Math.min(1200,im.naturalWidth),ih=Math.round(iw*im.naturalHeight/im.naturalWidth);
-  const bands=[{start:.46,speed:.045},{start:.625,speed:.22},{start:.79,speed:.68}].map(spec=>{
+  const bands=S.pano.bands.map(([start,speed])=>({start,speed})).map(spec=>{
     const sy=Math.floor(ih*spec.start),bh=ih-sy,cv=newCanvas(iw*2,bh),c=cv.getContext('2d');
     c.drawImage(im,0,im.naturalHeight*sy/ih,im.naturalWidth,im.naturalHeight*(1-sy/ih),0,0,iw,bh);
     c.save();c.translate(iw*2,0);c.scale(-1,1);
@@ -969,10 +1286,11 @@ function prepareCountryside(im) {
   const land={image:im,bands};countrysideLayers.set(im,land);return land;
 }
 function drawPaintedCountryside(g,T) {
-  const moonless=ART.img['countryside-night-sky'];
-  const night=moonless||ART.img['countryside-night'],day=ART.img['countryside-day'];
+  const moonless=A('panoNight');
+  const night=moonless,day=A('panoDay');
   if(!(night||day) || !artMode())return;
   const v=L.V,w=v.ww,h=v.wh;
+  const blur=Math.max(0,train.v-170)*0.042;   // stage px the nearest poles travel while the "shutter" is open
   g.save();g.beginPath();g.rect(v.x0,v.y0,w,h);g.clip();
   const paint=(im,alpha)=>{
     if(!im || alpha<.001)return;
@@ -985,8 +1303,14 @@ function drawPaintedCountryside(g,T) {
     f.drawImage(im,0,0,cropW,im.naturalHeight,0,0,w,h);
     const tileW=2*h*im.naturalWidth/im.naturalHeight;
     for(const layer of land.bands){
-      const offset=((train.d*layer.speed)%tileW+tileW)%tileW;
-      for(let x=-offset;x<w;x+=tileW)f.drawImage(layer.cv,x,h*layer.start,tileW,h*(1-layer.start));
+      // motion blur: average copies spread along the travel (running average → exact mean)
+      const len=blur*layer.speed/0.95,taps=len>2.5?Math.min(7,Math.ceil(len/7)):1;
+      for(let k=0;k<taps;k++){
+        const offset=((train.d*layer.speed-(taps>1?k/(taps-1)*len:0))%tileW+tileW)%tileW;
+        f.globalAlpha=1/(k+1);
+        for(let x=-offset;x<w;x+=tileW)f.drawImage(layer.cv,x,h*layer.start,tileW,h*(1-layer.start));
+      }
+      f.globalAlpha=1;
     }
     g.globalAlpha=alpha;g.drawImage(c,v.x0,v.y0,w,h);g.globalAlpha=1;
   };
@@ -995,24 +1319,29 @@ function drawPaintedCountryside(g,T) {
   if(moonless && E.moon>.01 && LW.moonVisibility()>.01){
     const sky=LW.env.astronomy,moon=sky&&sky.moon;
     const x=v.x0+w*(moon ? .18+.64*(moon.azimuth+Math.PI)/(2*Math.PI):.26);
-    const y=v.y0+h*(moon ? .49-.34*Math.max(0,Math.sin(moon.altitude)):.19),radius=h*.037;
-    g.save();g.globalAlpha=E.moon*(moon?Math.min(1,moon.fraction*4):1);
-    const glow=g.createRadialGradient(x,y,radius*.5,x,y,radius*3.2);
-    glow.addColorStop(0,'rgba(237,235,205,.25)');glow.addColorStop(1,'rgba(237,235,205,0)');
-    g.fillStyle=glow;g.fillRect(x-radius*3.2,y-radius*3.2,radius*6.4,radius*6.4);
-    g.fillStyle='#eeecdb';g.beginPath();
-    if(moon){
-      const side=moon.phase<.5?1:-1;
-      g.save();g.translate(x,y);g.scale(side,1);g.moveTo(0,-radius);g.arc(0,0,radius,-Math.PI/2,Math.PI/2);
-      for(let i=0;i<=32;i++){const yy=radius*(1-i/16);g.lineTo((1-2*moon.fraction)*Math.sqrt(Math.max(0,radius*radius-yy*yy)),yy);}
-      g.closePath();g.fill();g.restore();
-    }else{g.arc(x,y,radius,0,TAU);g.fill();}
-    g.restore();
+    const my=S.pano.moonY,y=v.y0+h*(moon ? my[0]-my[1]*Math.max(0,Math.sin(moon.altitude)):.19),radius=Math.min(h,330)*.037;
+    // the shared photoreal moon (real phase, earthshine, warmer when low); the hills drawn after it don't
+    // cover it here, so it simply sits in the sky band
+    if(LW.drawMoon)LW.drawMoon(g,x,y,radius,{alt:moon?moon.altitude:0.6,glow:.5,haze:Math.min(1,E.cloud*.4+E.fog),alpha:E.moon*(moon?Math.min(1,.3+moon.fraction*3):1)});
+  }
+  drawTrackside(g,['trees'],blur);
+  // the painted plates are a fair day/night: overcast skies grey them over, snow whitens the fields as it settles
+  const over=clamp((E.cloud-.15)/.85,0,1);
+  if(over>.01){
+    const sg=g.createLinearGradient(0,v.y0,0,v.y0+h*.55);sg.addColorStop(0,rgba(E.top,.62*over));sg.addColorStop(1,rgba(E.bot,.5*over));
+    g.fillStyle=sg;g.fillRect(v.x0,v.y0,w,h*.55);
+    g.fillStyle=rgba(mix3(E.bot,[60,66,74],.5),.16*over);g.fillRect(v.x0,v.y0+h*.45,w,h*.55);
+  }
+  if(snowAcc>.01){
+    const sn=g.createLinearGradient(0,v.y0+h*.46,0,v.y1);const sc=mix3([110,124,160],[236,240,246],E.day);
+    sn.addColorStop(0,rgba(sc,.25*snowAcc));sn.addColorStop(.4,rgba(sc,.5*snowAcc));sn.addColorStop(1,rgba(sc,.62*snowAcc));
+    g.fillStyle=sn;g.fillRect(v.x0,v.y0+h*.46,w,h*.54);
   }
   if(E.warm>.01){g.fillStyle=rgba([241,159,91],E.warm*.17);g.fillRect(v.x0,v.y0,w,h);}
   const haze=Math.min(.65,E.fog*.5+E.rain*.18);
   if(haze>.01){g.fillStyle=rgba(E.bot,haze);g.fillRect(v.x0,v.y0,w,h);}
-  // The nearby fence and telegraph poles establish speed; hills barely drift.
+  // Near poles, wires and trackside scrub establish speed; hills barely drift.
+  if(drawTrackside(g,['poles','scrub'],blur)){drawBridge(g,blur);g.restore();return;}
   const px=v.x0+w+20-((train.d*.95)%(w*3.5));
   g.strokeStyle=rgba(mix3([12,24,29],[63,66,49],E.day),.8);g.lineWidth=3;
   g.beginPath();g.moveTo(px,v.y1);g.lineTo(px,v.y0+h*.3);g.moveTo(px-13,v.y0+h*.34);g.lineTo(px+13,v.y0+h*.34);g.stroke();
@@ -1021,6 +1350,111 @@ function drawPaintedCountryside(g,T) {
   for(let x=v.x0-off;x<v.x1+gap;x+=gap){g.beginPath();g.moveTo(x,v.y1);g.lineTo(x,v.y1-22);g.stroke();}
   g.beginPath();g.moveTo(v.x0,v.y1-14);g.lineTo(v.x1,v.y1-14);g.stroke();
   g.restore();
+}
+// ---- painted trackside (art/train/pole|palm|neem|scrub|kmstone.png): sprites slide past at their own
+// depth, re-lit for day/night/dusk only when the light changes; wires sag between the poles; everything
+// smears with speed (blurLen = how far the nearest layer moves while the "shutter" is open) ----
+let TS = S.track;   // the active skin's trackside layers
+const TS_NAMES = ['pole', 'tree1', 'tree2', 'scrub', 'marker', 'bridge'];
+const tsLit = new Map();
+let tsKey = '';
+function tsPrepare() {
+  const key = (E.day * 24 | 0) + ':' + (E.warm * 12 | 0);
+  if (key === tsKey && tsLit.size) return;
+  tsKey = key; tsBlur.clear();
+  let tint = mix3([0.16, 0.22, 0.32], [1, 1, 1], smooth(E.day));
+  tint = mix3(tint, mul(tint, [1.0, 0.86, 0.7]), E.warm * 0.8);
+  tsLit.clear();
+  for (const n of TS_NAMES) {
+    const im = A(n); if (!im) continue;
+    tsLit.set(n, { w: im.naturalWidth, h: im.naturalHeight, c: tintSprite(im, im.naturalWidth, im.naturalHeight, tint.map((x) => clamp(x, 0, 1))) });
+  }
+}
+const TS_LV = [6, 16, 34, 64, 100];   // cached smear lengths (stage px)
+const tsBlur = new Map();
+function tsBlurred(name, len, sc) {
+  let li = 0; while (li < TS_LV.length - 1 && TS_LV[li] < len * 0.85) li++;
+  const key = name + li; let b = tsBlur.get(key);
+  if (!b) {
+    const lit = tsLit.get(name), L0 = TS_LV[li], px = Math.round(L0 / sc), n = Math.min(16, Math.max(5, Math.ceil(px / 6)));
+    const c = newCanvas(lit.w + px, lit.h), g = c.getContext('2d');
+    g.globalCompositeOperation = 'lighter'; g.globalAlpha = 1 / n;   // additive premultiplied mean = box filter
+    for (let k = 0; k < n; k++) g.drawImage(lit.c, (k / (n - 1)) * px, 0);
+    b = { c, len: L0 }; tsBlur.set(key, b);
+  }
+  return b;
+}
+// build the smeared copies ahead of time, one per frame while cruising, so a surge never hitches
+function tsWarm() {
+  if (!tsLit.size || (train.skip && train.v > 300)) return;
+  for (const [layer, L0] of Object.entries(TS)) for (const [name, sc] of L0.kinds) {
+    if (!tsLit.get(name)) continue;
+    for (let li = 0; li < TS_LV.length; li++) if (!tsBlur.has(name + li)) { tsBlurred(name, TS_LV[li] / 0.85 - 0.01, sc); return; }
+  }
+}
+function tsItem(layer, i) {   // deterministic per slot: what stands there (if anything)
+  const L0 = TS[layer], r = mulberry(hash(layer + i) ^ 0x5bd1e995);
+  if (r() > L0.chance) return null;
+  let x = r() * L0.kinds.reduce((t, k) => t + k[2], 0), pick = L0.kinds[0];
+  for (const k of L0.kinds) { x -= k[2]; if (x <= 0) { pick = k; break; } }
+  const [name, sc] = pick;
+  return { name, sc: sc * (name === 'pole' ? 1 : 0.85 + r() * 0.3), dx: layer === 'poles' ? 0 : (r() - 0.5) * L0.gap * 0.7, flip: name !== 'pole' && name !== 'marker' && r() < 0.5 };
+}
+function drawTrackside(g, layers, blurLen) {
+  if (!A('pole')) return false;
+  tsPrepare();
+  const v = L.V, h = v.wh;
+  for (const layer of layers) {
+    const L0 = TS[layer], off = train.d * L0.speed, gy = v.y0 + h * L0.ground, hs = h / 248;
+    const len = blurLen * L0.speed;
+    const i0 = Math.floor((off - 420) / (L0.gap * hs)), i1 = Math.floor((off + v.ww + 420) / (L0.gap * hs));
+    for (let i = i0; i <= i1; i++) {
+      const it = tsItem(layer, i); if (!it) continue;
+      const lit = tsLit.get(it.name); if (!lit) continue;
+      const dw = lit.w * it.sc * hs, dh = lit.h * it.sc * hs, x = v.x0 + i * L0.gap * hs + it.dx * hs - off, y = gy - dh;
+      if (x > v.x1 + 10 || x + dw + len < v.x0 - 10) continue;
+      if (layer === 'scrub' && onBridge(x + dw / 2)) continue;   // nothing grows beside the track on a bridge
+      // motion blur: a pre-smeared copy (true horizontal box blur, cached per blur level), trailing the motion
+      const bl = len > 3 ? tsBlurred(it.name, len, it.sc * hs) : null, im = bl ? bl.c : lit.c, sw = bl ? dw + bl.len : dw;
+      if (it.flip) { g.save(); g.translate(x + sw, y); g.scale(-1, 1); g.drawImage(im, 0, 0, sw, dh); g.restore(); }
+      else g.drawImage(im, x, y, sw, dh);
+    }
+    if (layer === 'poles' && (L0.ins || L0.wire)) {
+      // telegraph wires sag from insulator to insulator (or the catenary's contact wire runs level);
+      // at speed they're a blur you barely see
+      const lit = tsLit.get('pole'); if (!lit) continue;
+      const sc = TS.poles.kinds[0][1] * hs, top = gy - lit.h * sc, gap = L0.gap * hs;
+      if (!L0.ins) {
+        g.strokeStyle = rgba(mix3([12, 16, 24], [58, 60, 62], E.day), 0.75); g.lineWidth = 1.1; g.beginPath();
+        for (const [wy, sag] of L0.wire) { const y = top + wy * sc; g.moveTo(v.x0, y); g.lineTo(v.x1, y); if (sag) { g.moveTo(v.x0, y + sag); g.lineTo(v.x1, y + sag); } }
+        g.stroke(); continue;
+      }
+      g.strokeStyle = rgba(mix3([12, 16, 24], [64, 66, 66], E.day), 0.7 / Math.max(1, len / 18)); g.lineWidth = 0.9;
+      g.beginPath();
+      for (let i = i0; i < i1; i++) {
+        const xa = v.x0 + i * gap - off, xb = xa + gap;
+        if (xb < v.x0 - 30 || xa > v.x1 + 30) continue;
+        for (const ix of L0.ins) { const ya = top + L0.insY * sc; g.moveTo(xa + ix * sc, ya); g.quadraticCurveTo((xa + xb) / 2 + ix * sc, ya + 22 * hs, xb + ix * sc, ya); }
+      }
+      g.stroke();
+    }
+  }
+  return true;
+}
+
+const onBridge = (x) => (train.bridges || []).some(([a, b]) => x > a - 60 && x < b + 60);
+// a bridge (route 'water' segments): the skin's painted bridge bay, tiled along the line at the near
+// layer's speed, smeared like the poles
+function drawBridge(g, blurLen) {
+  const lit = tsLit.get('bridge'); if (!lit || !train.bridges || !train.bridges.length) return;
+  const v = L.V, h = v.wh, bh = h * S.bridge.h, sc = bh / lit.h, tw = lit.w * sc, top = v.y0 + h * S.bridge.top;
+  const bl = blurLen > 3 ? tsBlurred('bridge', blurLen, sc) : null, im = bl ? bl.c : lit.c, sw = bl ? tw + bl.len : tw;
+  for (const [a, b] of train.bridges) {
+    const x0 = Math.max(v.x0 - 10, a), x1 = Math.min(v.x1 + 10, b); if (x1 <= x0) continue;
+    g.save(); g.beginPath(); g.rect(x0, v.y0, x1 - x0, h); g.clip();
+    for (let x = a + Math.floor((x0 - a) / tw) * tw; x < x1; x += tw) g.drawImage(im, x, top, sw + 0.5, bh);
+    g.restore();
+  }
 }
 function drawHouse(g, x, base, e, s) {
   const top = base - e.h;
@@ -1098,41 +1532,51 @@ function drawNear(g, T) {
   if (seen.size > 200) seen.clear();
 }
 function drawTunnel(g, T) {
-  const v = L.V, off = train.d;
+  // Inside the bore the wall is an arm's length away and racing past: it reads as dark, horizontally smeared
+  // stone with the odd service lamp streaking by; the portal is a blurred edge of lit rock, not a hard line.
+  const v = L.V, off = train.d, h = v.wh;
   for (const [a, b] of train.tunnels || []) {
     const x0 = Math.max(v.x0, a), x1 = Math.min(v.x1, b);
     if (x1 <= x0) continue;
-    g.fillStyle = '#0c0b0d'; g.fillRect(x0, v.y0, x1 - x0, v.wh);
-    // cable runs + ribs streaking by
-    g.fillStyle = 'rgba(60,56,52,0.6)'; g.fillRect(x0, v.y0 + 300, x1 - x0, 3); g.fillRect(x0, v.y0 + 316, x1 - x0, 2);
-    g.fillStyle = 'rgba(40,38,40,0.8)';
-    for (let dk = Math.ceil((off - v.ww) / 90) * 90; dk < off + v.ww; dk += 90) { const x = v.x0 + v.ww / 2 + dk - off; if (x > x0 && x < x1) g.fillRect(x, v.y0, 3, v.wh); }
-    // tunnel lamps every 160
-    for (let d = Math.ceil((off - v.ww) / 160) * 160; d < off + v.ww; d += 160) {
+    const gr = g.createLinearGradient(0, v.y0, 0, v.y1), tp = S.tunnel;
+    gr.addColorStop(0, tp.wall[0]); gr.addColorStop(0.5, tp.wall[1]); gr.addColorStop(1, tp.wall[2]);
+    g.fillStyle = gr; g.fillRect(x0, v.y0, x1 - x0, h);
+    // smeared rock strata
+    for (let k = 0; k < 9; k++) { const y = v.y0 + h * ((k * 0.137 + 0.05) % 1); g.fillStyle = `rgba(${60 + k * 7},${50 + k * 5},${44 + k * 4},${0.06 + (k % 3) * 0.025})`; g.fillRect(x0, y, x1 - x0, 2 + (k % 4) * 3); }
+    // service lamps every 160 — streaked by the speed
+    const sm = 28 + Math.min(220, train.v * 0.12), lgap = tp.gap || 1e9, lc = tp.lamp || [0, 0, 0];
+    if (tp.lamp) for (let d = Math.ceil((off - v.ww - 400) / lgap) * lgap; d < off + v.ww + 400; d += lgap) {
       const x = v.x0 + v.ww / 2 + d - off;
-      if (x < x0 + 4 || x > x1 - 4) continue;
-      g.fillStyle = 'rgba(255,190,110,0.95)'; g.fillRect(x - 6, v.y0 + 120, 12, 6);
-      drawSprite(g, GLOW_WARM, x, v.y0 + 123, 60, 0.6);
+      if (x < x0 - sm || x > x1 + sm) continue;
+      g.save(); g.beginPath(); g.rect(x0, v.y0, x1 - x0, h); g.clip();
+      const lg = g.createLinearGradient(x - sm, 0, x + sm * 0.4, 0);
+      lg.addColorStop(0, rgba(lc, 0)); lg.addColorStop(0.7, rgba(lc, 0.75)); lg.addColorStop(1, rgba(lc, 0));
+      g.fillStyle = lg; g.fillRect(x - sm, v.y0 + h * 0.36, sm * 1.4, 5);
+      drawSprite(g, lc[2] > lc[0] ? GLOW_COOL : GLOW_WARM, x, v.y0 + h * 0.37, 70, 0.35);
+      g.restore();
       const k = 'T' + d, px = (train.lampSeen || new Map()).get(k);
-      if (train.lampSeen) { if (px != null && px > L.win.x1 && x <= L.win.x1) spawnSweep([255, 190, 110], 0.06); train.lampSeen.set(k, x); }
+      if (train.lampSeen) { if (px != null && px > L.win.x1 && x <= L.win.x1) spawnSweep(lc, 0.06); train.lampSeen.set(k, x); }
     }
-    // portal faces (stone) where the tunnel begins/ends
-    for (const [px, s] of [[a, 1], [b, -1]]) if (px > v.x0 - 60 && px < v.x1 + 60) {
-      g.fillStyle = rgba(mix3([30, 28, 30], [110, 104, 96], E.day)); g.fillRect(px - (s > 0 ? 0 : 46), v.y0, 46, v.wh);
-      g.fillStyle = 'rgba(0,0,0,0.35)'; for (let y = v.y0; y < v.y1; y += 26) g.fillRect(px - (s > 0 ? 0 : 46), y, 46, 2);
+    // portal: a soft band of daylit rock fading into the dark, blurred by speed
+    for (const [px, s] of [[a, 1], [b, -1]]) if (px > v.x0 - 120 && px < v.x1 + 120) {
+      const rock = mix3(mul(tp.rock, [0.27, 0.26, 0.28]), tp.rock, E.day), wdt = 70 + Math.min(80, train.v * 0.2);
+      const pg = g.createLinearGradient(px - s * 30, 0, px + s * wdt, 0);
+      pg.addColorStop(0, rgba(rock, 0)); pg.addColorStop(0.3, rgba(rock, 0.9)); pg.addColorStop(1, 'rgba(12,10,10,0)');
+      g.fillStyle = pg; g.fillRect(Math.min(px - s * 30, px + s * wdt), v.y0, wdt + 30, h);
     }
   }
 }
 const snow = [];
 function drawSnow(g, T) {
   const v = L.V, n = Math.round(90 * E.snow);
-  while (snow.length < n) snow.push({ x: v.x0 + Math.random() * v.ww, y: v.y0 + Math.random() * v.wh, s: 0.6 + Math.random() * 1.6, z: Math.random() });
+  while (snow.length < n) snow.push({ x: v.x0 + Math.random() * v.ww, y: v.y0 + Math.random() * v.wh, s: 0.45 + Math.random() * 0.9, z: Math.random() });
   if (snow.length > n) snow.length = n;
-  g.fillStyle = 'rgba(240,244,255,0.8)';
+  g.fillStyle = rgba(mix3([150, 160, 190], [244, 246, 252], E.day), 0.72);
   g.beginPath();
   for (const f of snow) {
     f.x -= (train.v * (0.4 + f.z * 1.2)) / 30; f.y += (20 + f.z * 40) / 30;
     if (f.x < v.x0) { f.x += v.ww; f.y = v.y0 + Math.random() * v.wh; } if (f.y > v.y1) f.y = v.y0;
+    if ((train.tunnels || []).some(([a, b]) => f.x > a && f.x < b)) continue;   // no flakes inside the bore
     g.moveTo(f.x + f.s * (1 + f.z), f.y); g.ellipse(f.x, f.y, f.s * (1 + f.z * 2), f.s, 0, 0, TAU);
   }
   g.fill();
@@ -1142,6 +1586,7 @@ function flashA() { const t = flash.t; if (t < 0.07) return 1; if (t < 0.13) ret
 
 // ---- glass effects: reflection, streaking rain, beads, condensation, skip dark ----
 const streaks = [];
+let snowAcc = 0;   // snow built up on the window frame outside (0..1)
 function drawGlass(g, T, dt) {
   const v = L.V, w = L.win;
   setWR(g);
@@ -1153,24 +1598,42 @@ function drawGlass(g, T, dt) {
     g.restore();
 
   }
-  // skip transition: a quick dip into darkness
-  if (train.skip) { const t = train.skip.t, a = t < 0.45 ? smooth(t / 0.45) : 1 - smooth((t - 0.45) / 0.8); g.fillStyle = `rgba(4,4,8,${0.92 * a})`; g.fillRect(v.x0, v.y0, v.ww, v.wh); }
+  // weather on the glass only while it's out in the open: a tunnel's roof keeps rain and snow off (the wind
+  // through the bore dries the beads)
+  const open = 1 - train.tunnel, inTunnel = (x) => (train.tunnels || []).some(([a, b]) => x > a - 10 && x < b + 10);
   // static beads when the glass is wet
-  if (E.wetGlass > 0.02) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = E.wetGlass * 0.9; g.drawImage(beadsCv, OX * dpr + (v.x0 + rock.x) * U, OY * dpr + (v.y0 + rock.y) * U, v.ww * U, v.wh * U); g.restore(); }
+  if (E.wetGlass * open > 0.02) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = E.wetGlass * 0.9 * open; g.drawImage(beadsCv, OX * dpr + (v.x0 + rock.x) * U, OY * dpr + (v.y0 + rock.y) * U, v.ww * U, v.wh * U); g.restore(); }
   // streaks run diagonally backwards (the train's wind pushes them)
   const rate = E.rain * 70;
-  if (rate > 0.5) { for (let i = 0; i < rate * dt; i++) streaks.push({ x: w.x0 + Math.random() * (w.w + 200), y: w.y0 + Math.random() * w.h * 0.8, len: 10 + Math.random() * 26, sp: 50 + Math.random() * 90, life: 0 }); }
+  if (rate > 0.5) { for (let i = 0; i < rate * dt * open; i++) streaks.push({ x: w.x0 + Math.random() * (w.w + 200), y: w.y0 + Math.random() * w.h * 0.8, len: 10 + Math.random() * 26, sp: 50 + Math.random() * 90, life: 0 }); }
   const ang = Math.atan2(1, 0.4 + train.v / 160), dx = -Math.cos(ang), dy = Math.sin(ang);
   g.strokeStyle = 'rgba(214,228,248,0.32)'; g.lineWidth = 1.3; g.lineCap = 'round'; g.beginPath();
   for (let i = streaks.length - 1; i >= 0; i--) {
     const s = streaks[i]; s.life += dt; s.x += dx * s.sp * dt * (1 + train.v / 200); s.y += dy * s.sp * dt;
-    if (s.y > w.y1 || s.x < w.x0 - 40 || s.life > 4 || streaks.length > 260) { streaks.splice(i, 1); continue; }
+    if (s.y > w.y1 || s.x < w.x0 - 40 || s.life > 4 || streaks.length > 260 || inTunnel(s.x)) { streaks.splice(i, 1); continue; }
     if (s.x > w.x1) continue;
     g.moveTo(s.x, s.y); g.lineTo(s.x - dx * s.len, s.y - dy * s.len);
   }
   g.stroke();
+  // snow packed into the corners of the frame outside, building up while it snows, melting after
+  if (snowAcc > 0.01) {
+    g.save(); winClip(g);
+    const A = snowAcc, col = mix3([120, 136, 176], [238, 242, 250], E.day), lit = mix3(col, [255, 226, 180], 0.18 * E.lamp * (1 - E.day));
+    const gr = g.createLinearGradient(0, w.y1 - 60, 0, w.y1); gr.addColorStop(0, rgba(lit, 0.75 * A)); gr.addColorStop(1, rgba(col, 0.95 * A));
+    g.fillStyle = gr;
+    for (const [cx, dir] of [[w.x0, 1], [w.x1, -1]]) {
+      const R = 30 + 34 * A, Hh = 16 + 30 * A;
+      g.beginPath(); g.moveTo(cx, w.y1); g.lineTo(cx, w.y1 - Hh - 18 * A);
+      g.quadraticCurveTo(cx + dir * R * 0.25, w.y1 - Hh * 0.55, cx + dir * R, w.y1 - 4 - 6 * A);
+      g.lineTo(cx + dir * (R + 40), w.y1 - 3 * A); g.lineTo(cx + dir * (R + 40), w.y1); g.closePath(); g.fill();
+      // a thinner rim in the top corner, where flakes stick to the seal
+      g.beginPath(); g.moveTo(cx, w.y0); g.lineTo(cx, w.y0 + 10 + 16 * A); g.quadraticCurveTo(cx + dir * 6, w.y0 + 6, cx + dir * (14 + 20 * A), w.y0); g.closePath(); g.fill();
+    }
+    g.fillRect(w.x0, w.y1 - 3 - 4 * A, w.w, 8);   // a ridge along the bottom seal
+    g.restore();
+  }
   // condensation along the bottom edge when wet or cold
-  const cond = Math.max(E.wetGlass * 0.6, E.snow * 0.8, E.fog * 0.4);
+  const cond = Math.max(E.wetGlass * 0.6 * open, E.snow * 0.8, E.fog * 0.4);
   if (cond > 0.02) { const cg = g.createLinearGradient(0, w.y1 - 120, 0, w.y1); cg.addColorStop(0, 'rgba(220,226,235,0)'); cg.addColorStop(1, `rgba(220,226,235,${0.12 * cond})`); g.fillStyle = cg; g.fillRect(w.x0, w.y1 - 120, w.w, 120); }
 }
 
@@ -1203,13 +1666,23 @@ function drawSweeps(g, dt) {
 // =====================================================================
 //  chai
 // =====================================================================
+// where the chai's surface is (painted kulhad sprite, or the procedural cup)
+function teaSurface() {
+  const r = tpGeom('drink');
+  if (!r) return { x: L.cup.x, y: L.cup.y - 62, rx: 15.5, ry: 3.2, painted: false, live: skinId === 'indian' };
+  const tea = TP.drink.tea;
+  if (!tea) return { x: r.x + r.w * (TP.drink.sx || 0.5), y: r.y + (TP.drink.sy || 0.08) * r.h, rx: 0, ry: 0, painted: true, live: false };
+  const [tx, ty, trx, try_] = tea;
+  return { x: r.x + tx * r.s, y: r.y + ty * r.s, rx: trx * r.s * 0.9, ry: try_ * r.s * 0.75, painted: true, live: true, depth: (TP.drink.depth || 10) * r.s };
+}
 function drawTea(g, T) {
-  const { x, y } = L.cup, lt = lightAt(x, y - 60);
+  const ts = teaSurface(); if (!ts.live) return;
+  const lt = ts.painted ? tpCache.tint : lightAt(ts.x, ts.y);
   setWR(g);
-  // tea surface sloshing with the rocking
-  const tilt = clamp(rock.x * 0.08 + rock.jv * 0.004, -0.2, 0.2);
-  g.fillStyle = rgba(mul([181, 119, 66], lt)); g.beginPath(); g.ellipse(x, y - 62 + rock.y * 0.3, 15.5, 3.2, tilt, 0, TAU); g.fill();
-  g.fillStyle = rgba(mul([255, 220, 170], lt), 0.4); g.beginPath(); g.ellipse(x - 4, y - 63 + rock.y * 0.3, 6, 1, tilt, 0, TAU); g.fill();
+  // tea surface sloshing with the rocking (the painted chai underneath; only the moving skin is live)
+  const tilt = clamp(rock.x * 0.08 + rock.jv * 0.004, -0.2, 0.2), sl = rock.y * 0.25;
+  g.fillStyle = rgba(mul(ts.painted ? [196, 146, 102] : [181, 119, 66], lt), ts.painted ? 0.55 : 1); g.beginPath(); g.ellipse(ts.x, ts.y + sl, ts.rx, ts.ry, tilt, 0, TAU); g.fill();
+  g.fillStyle = rgba(mul([255, 226, 185], lt), 0.35); g.beginPath(); g.ellipse(ts.x - ts.rx * 0.3 + rock.x * 0.2, ts.y - ts.ry * 0.25 + sl, ts.rx * 0.38, ts.ry * 0.3, tilt, 0, TAU); g.fill();
 }
 
 // =====================================================================
@@ -1243,7 +1716,7 @@ function updateOutsideBirds(dt) {
 function drawOutsideBirds(g) {
   if(!birdAtlas.complete || !birdAtlas.naturalWidth || !outsideBirds.length)return;
   const w=L.win,fw=birdAtlas.naturalWidth/4,fh=birdAtlas.naturalHeight;
-  g.save();setW(g);winPath(g);g.clip();
+  g.save();setW(g);winClip(g);
   for(const b of outsideBirds){
     if(b.t<0)continue;
     const p=b.t/b.life,x=w.x0+w.w*(b.dir>0?-.12+1.24*p:1.12-1.24*p);
@@ -1262,7 +1735,7 @@ function updateParticles(dt, T) {
   // tea steam (wavers when the carriage jolts)
   // calm: the steam rises with the breath — a taller, fuller plume on the in-breath, thin and low on the out
   const sb = calm.lv * breath(), sMax = 7 + Math.round(7 * calm.lv), up = 1 + calm.lv * (1.6 * breath() - 0.5);
-  if (steam.length < sMax && Math.random() < dt * 2.4 * (1 + calm.lv * (2 * breath() - 0.4))) steam.push({ x: L.cup.x + rand(-6, 6), y: L.cup.y - 70, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
+  if (steam.length < sMax && Math.random() < dt * 2.4 * (1 + calm.lv * (2 * breath() - 0.4))) steam.push({ x: L.cup.x + rand(-6, 6), y: teaSurface().y - 6, t: 0, life: rand(2.6, 4), r: rand(5, 8), vx: rand(-3, 3), ph: rand(0, 6), a: rand(0.1, 0.18) });
   for (let i = steam.length - 1; i >= 0; i--) { const s = steam[i]; s.t += dt; s.x += (s.vx + Math.sin(T * 1.1 + s.ph + s.t) * 5 - rock.jv * 0.3) * dt; s.y -= dt * (14 + s.t * 4) * up; s.r += dt * 4 * (1 + 1.8 * sb); if (s.t > s.life) steam.splice(i, 1); }
 
 }
@@ -1278,8 +1751,8 @@ function drawParticles(g) {
 // =====================================================================
 //  wellbeing: a glass of water, stretch, calm
 // =====================================================================
-let water = null, note = null;
-function startWater(text) { water = { t: 0, text: text || 'a sip of water?', out: -1 }; sSlide(); showNote('a sip of water?', 'stay hydrated · tap the glass', 10); }
+let water = null;
+function startWater() { water = { t: 0, out: -1 }; sSlide(); }   // the glass is the reminder; the host labels it
 function updateWater(dt) { if (!water) return; water.t += dt; if (water.out < 0 && water.t > 12.5) water.out = 0; if (water.out >= 0) { water.out += dt; if (water.out > 1.4) water = null; } }
 function drawWater(g) {
   if (!water) return;
@@ -1302,23 +1775,12 @@ function drawWater(g) {
   g.strokeStyle = rgba(mul([235, 245, 255], lt), 0.55); g.lineWidth = 1.3; g.stroke(gp);
   g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x - wTop + 4, top + 5, 2.6, 46);
   g.fillStyle = rgba(mul([245, 215, 90], lt)); g.beginPath(); g.arc(x + wTop - 3, top + 2, 8, Math.PI * 0.95, Math.PI * 2.05); g.fill();
-  // small paper tag on a string
-  const tx = x + 30, ty = gy - 86;
-  g.strokeStyle = rgba(mul([220, 210, 190], lt), 0.8); g.lineWidth = 0.9; g.beginPath(); g.moveTo(x + wTop - 4, top + 5); g.quadraticCurveTo(x + 26, top - 8, tx, ty + 10); g.stroke();
-  g.font = `italic 13px ${SERIF}`;
-  const tw = g.measureText(water.text).width + 24, tagIn = smooth((water.t - 1.1) / 0.8);
-  g.globalAlpha = a * tagIn;
-  g.save(); g.translate(tx - 6, ty); g.rotate(-0.04 + Math.sin(water.t * 1.3) * 0.02 + rock.x * 0.01);
-  g.fillStyle = 'rgba(0,0,0,0.25)'; rr(g, 3, -7, tw, 26, 4); g.fill();
-  g.fillStyle = rgba(mul([246, 238, 222], lt.map((v) => Math.max(v, 0.6)))); rr(g, 0, -10, tw, 26, 4); g.fill();
-  g.fillStyle = 'rgba(60,40,30,0.9)'; g.fillText(water.text, 12, 7.5);
-  g.restore();
   g.restore();
 }
-function showNote(head, text, secs) { note = { head, text, until: nowS() + secs }; }
-function startStretch(text) {
-  showNote('stretch break', text && text.length < 32 ? text : 'roll your shoulders', 12);
-}
+// stretch: no words in the world — the berth lamps swell gently three times (stand up, reach, settle)
+let stretchT = -1;
+function startStretch() { stretchT = 0; }
+function stretchGlow() { if (stretchT < 0) return 0; const k = stretchT / 9; return k > 1 ? 0 : Math.pow(Math.sin(Math.PI * k * 3), 2) * (1 - k * 0.5); }
 // fromLW: echo of LW's own 'calm' event. Scene-started calm (reminder / menu action) flips LW.calm
 // so lw.js shows its breathing guide too.
 function setCalm(on, auto = 0, fromLW = false) {
@@ -1354,6 +1816,14 @@ function tone(a, t, f0, f1, dur, amp, out, type = 'sine') {
   o.connect(gn); gn.connect(out); o.start(t); o.stop(t + dur + 0.05);
 }
 function sClick() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.01; noiseHit(a, t, 0.025, 'bandpass', 2600, 2, 0.04, o); }
+function sWhoosh() {   // the surge: air rushing past the bars, swelling and settling with the speed
+  const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02;
+  const s = a.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+  const b = a.createBiquadFilter(); b.type = 'bandpass'; b.Q.value = 0.9;
+  b.frequency.setValueAtTime(320, t); b.frequency.exponentialRampToValueAtTime(1500, t + 1.0); b.frequency.exponentialRampToValueAtTime(380, t + 2.9);
+  const gn = a.createGain(); gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(0.05, t + 0.9); gn.gain.setValueAtTime(0.05, t + 1.2); gn.gain.exponentialRampToValueAtTime(0.0001, t + 2.9);
+  s.connect(b); b.connect(gn); gn.connect(o); s.start(t, Math.random()); s.stop(t + 3);
+}
 function sSlide() { const a = ac(); if (!a) return; const o = outNode(a), t = a.currentTime + 0.02; noiseHit(a, t, 1.0, 'lowpass', 900, 0.7, 0.02, o); tone(a, t + 1.1, 2900, 2850, 0.4, 0.016, o); }
 function sThunder() {
   const a = ac(); if (!a) return; outNode(a);
@@ -1448,10 +1918,14 @@ function ambBuild(a, B, X) {
   ambLoop('wind', 'pink', 'bandpass', 520, 1.1, X);
   AMB.ev.clack = a.currentTime + 0.4; AMB.ev.n = 0; AMB.ev.tun = train.tunnel;
 }
-function sClack(a, t, v, amp, o, bridge) {   // one bogie over a joint: da-dum
-  const gap = clamp(26 / Math.max(60, v), 0.08, 0.3), f = 480 + 500 * bridge;
-  for (const dt of [0, gap]) { noiseHit(a, t + dt, 0.07, 'lowpass', f, 0.8, amp, o); tone(a, t + dt, 90, 60, 0.08, amp * 0.8, o); }
-  if (bridge > 0.3) tone(a, t + gap, 260, 250, 0.35, amp * 0.25 * bridge, o, 'triangle');   // girders ring on the bridge
+// one axle over a rail gap: a soft metallic clack (wheel tread on the rail end) over a low thud through
+// the floor; the rear bogie sounds a little lower and duller, a tunnel muffles it, a bridge's girders ring
+function sJoint(a, t, ax, amp, o, bridge, tun) {
+  const f = (ax.front ? 1900 : 1450) * (1 - 0.55 * tun) + 600 * bridge;
+  noiseHit(a, t, 0.028, 'bandpass', f, 1.4, amp * 0.55, o);
+  noiseHit(a, t, 0.08, 'lowpass', 520 * (1 - 0.4 * tun), 0.8, amp * 0.8, o);
+  tone(a, t, ax.front ? 92 : 80, 58, 0.09, amp * 0.9, o);
+  if (bridge > 0.3) tone(a, t + 0.004, 262 + 40 * ax.k, 255, 0.4, amp * 0.22 * bridge, o, 'triangle');
 }
 function sCreak(a, t, amp, o) {             // the carriage flexing: a short bandpassed sawtooth groan
   const s = a.createOscillator(), b = a.createBiquadFilter(), g = a.createGain(), f = rand(130, 240), d = rand(0.2, 0.45);
@@ -1479,12 +1953,20 @@ function ambUpdate(a, t, dt, B, X) {
   const gust = 0.65 + 0.35 * Math.sin(t * 0.19) * Math.sin(t * 0.07 + 2);
   ambGain('rain', 0.045 * E.rain * out); ambGain('rainLow', 0.055 * E.rain * out);
   ambGain('wind', (0.05 * E.storm + 0.02 * E.snow) * gust * out); ambFreq('wind', 420 + 260 * gust);
-  // rail joints: two bogies over each joint → da-dum … da-dum (period follows the train's speed)
-  if (AMB.ev.clack < t) AMB.ev.clack = t + 0.05;
-  const period = 173 / Math.max(25, train.v);
-  while (AMB.ev.clack < t + dt + 0.3) {
-    if (!train.skip) sClack(a, AMB.ev.clack, train.v, 0.026 * (AMB.ev.n++ % 3 === 0 ? 1 : 0.7) * (1 + 0.6 * tun) * q, B, bridge);
-    AMB.ev.clack += period;
+  // rail joints (jointed track only): schedule each axle's crossing of each gap ahead of time from the
+  // current speed → dha-dha … dhaa-dhaa. Welded track (other skins) is a smooth hiss with no beat.
+  if (S.rail === 'jointed') {
+    const vm = Math.max(0.5, train.v / RAIL.dPerM), sm = train.d / RAIL.dPerM, ahead = sm + vm * (dt + 0.3);
+    if (AMB.ev.rs == null || AMB.ev.rs < sm - 1 || AMB.ev.rs > ahead + 30) AMB.ev.rs = sm;
+    if (!train.skip && vm < 70) for (const ax of RAIL.axles) {
+      let j = jointIndex(AMB.ev.rs + ax.o) + 1;
+      for (let m = jointPos(j) - ax.o; m <= ahead; m = jointPos(++j) - ax.o) {
+        if (m <= AMB.ev.rs) continue;
+        const when = t + (m - sm) / vm + rand(-0.004, 0.004);
+        if (when > t - 0.02) AMB.ev.hits = (AMB.ev.hits || 0) + 1, sJoint(a, Math.max(t, when), ax, (0.03 * ax.k * rand(0.85, 1.12)) * (1 + 0.9 * bridge) * (1 - 0.35 * tun) * q, B, bridge, tun);
+      }
+    }
+    AMB.ev.rs = ahead;
   }
   if (ambN(0.11 * (0.4 + 0.6 * Math.min(v, 1)), dt)) sCreak(a, t + Math.random() * dt, 0.0035 * q, B);
   if (tun < 0.05 && !train.skip && ambN(1 / 110, dt)) sHorn(a, t + 0.1, 0.006 * q, B);
@@ -1502,9 +1984,11 @@ function onDown(px, py) {
   let [x, y] = toWorld(px, py); x -= rock.x; y -= rock.y;
   const T = nowS();
   if (water && Math.abs(x - L.glass.x) < 60 && y > L.glass.y - 110 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; return; }
+  const dh = deckHit(x, y);
+  if (dh) { media(dh); return; }
   const w = L.win;
   if (x > w.x0 && x < w.x1 && y > w.y0 && y < w.y1) {
-    if (!train.skip) { train.skip = { t: 0, jumped: false }; sClick(); }
+    if (!train.skip) { train.skip = { t: 0, jumped: false, v0: train.v }; sWhoosh(); }
   }
 }
 LW.on('down', onDown);
@@ -1523,6 +2007,7 @@ LW.on('action', (a) => {
 });
 if (!LW.isHost) addEventListener('keydown', (e) => {
   if (e.key === 's') startStretch('roll your shoulders');
+  if (e.key === 'k') LW.set('skin', SKIN_ORDER[(SKIN_ORDER.indexOf(skinId) + 1) % SKIN_ORDER.length]);
 });
 
 // =====================================================================
@@ -1544,13 +2029,16 @@ function step(dt, T) {
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
   stepGuide(dt);
   updateEnv(dt);
-  if (note && T > note.until) note = null;
+  if (stretchT >= 0) { stretchT += dt; if (stretchT > 9) stretchT = -1; }
   updateTrain(dt, T);
   // storms: the odd flash over the fields
   flash.t += dt;
   if (E.storm > 0.5 && flash.t > flash.next) { flash.t = 0; flash.next = rand(9, 26); later(rand(1.5, 4), sThunder); }
   updateParticles(dt * calmPace(), T);
   updateWater(dt);
+  if (artMode()) tsWarm();
+  snowAcc = clamp(snowAcc + (E.snow > 0.1 ? dt * E.snow / 150 : -dt / (E.day > 0.5 ? 200 : 500)), 0, 1);
+  stepDeck(dt);
   updateOutsideBirds(dt);
 }
 function render(T, dt) {
@@ -1568,19 +2056,14 @@ function render(T, dt) {
   // in calm the berth lamps become the breath: they fill with light on the in-breath, hold, and empty on the
   // out-breath (lit by day too, as soft candlelight, so the rhythm always reads)
   const bl = calm.lv > 0.01 ? breath() : 0;
-  const lv = lerp(E.lamp * (1 - E.day), 0.12 + 0.88 * bl, calm.lv);
+  const sg = stretchGlow(), lv = Math.max(lerp(E.lamp * (1 - E.day), 0.12 + 0.88 * bl, calm.lv), sg * 0.9);
   if (lv > 0.02) for (const lp of [L.lampL, L.lampR]) {
     drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 6, 60 + 60 * calm.lv * bl, 0.45 * lv);
     if (calm.lv > 0.01) drawSprite(ctx, GLOW_WARM, lp.x, lp.y + 70, 150 + 200 * bl, 0.3 * calm.lv * lv);   // the pool it casts on the wall + berth
   }
   drawTea(ctx, T);
+  drawDeck(ctx, T);
   drawWater(ctx);
-  if(note && !water){
-    ctx.save();setWR(ctx);ctx.font=`400 15px ${SERIF}`;ctx.textAlign='center';
-    const tw=ctx.measureText(note.text).width+32,x=L.table.cx,y=900;
-    ctx.fillStyle='rgba(18,25,31,.8)';rr(ctx,x-tw/2,y-22,tw,36,10);ctx.fill();
-    ctx.fillStyle='rgba(242,230,210,.88)';ctx.fillText(note.text,x,y);ctx.restore();
-  }
   drawParticles(ctx);
   drawSweeps(ctx, dt);
   // Quiet night shading (+ the calm-mode breathing warmth)
@@ -1592,7 +2075,37 @@ function render(T, dt) {
     const b = breath();
     drawSprite(ctx, GLOW_WARM, L.table.cx, L.cup.y - 30, 160 + 110 * b, 0.12 * calm.lv * (0.3 + 0.7 * b));
   }
+  drawSkinFade(dt);
 }
+// =====================================================================
+//  skins: switch live (LW.settings.skin) — load the new skin's art, then crossfade from a still of the
+//  old carriage to the live new one (no reload; train, weather, music and calm carry straight on)
+// =====================================================================
+const xf = { cv: null, a: 0, want: null };
+function applySkin(id) {
+  skinId = id; S = SKINS[id];
+  TS = S.track; buildRoute(); applySkinProps();
+  tsKey = ''; tsLit.clear(); tsBlur.clear(); deck.cardKey = null; if (train.lampSeen) train.lampSeen.clear();
+  AMB.ev.rs = null; for (const ax of RAIL.axles) ax.n = null; train.joint = Math.floor(train.d / 4200);
+}
+function setSkin(id) {
+  if (!SKINS[id]) id = 'indian';
+  xf.want = id;
+  if (id === skinId) return;
+  loadSkinArt(SKINS[id], () => {
+    if (xf.want !== id || id === skinId) return;
+    if (!ART.img[SKINS[id].dir + SKINS[id].files.night]) { console.warn('train: skin art missing', id); return; }
+    const c = xf.cv && xf.cv.width === cv.width && xf.cv.height === cv.height ? xf.cv : newCanvas(cv.width, cv.height);
+    c.getContext('2d').drawImage(cv, 0, 0); xf.cv = c; xf.a = 1;
+    applySkin(id); rebuild();
+  });
+}
+function drawSkinFade(dt) {
+  if (xf.a <= 0) return;
+  xf.a = Math.max(0, xf.a - dt / 1.4);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = smooth(xf.a); ctx.drawImage(xf.cv, 0, 0); ctx.globalAlpha = 1;
+}
+LW.on('settings', (st) => setSkin(st && st.skin));
 // =====================================================================
 //  boot
 // =====================================================================
@@ -1606,6 +2119,8 @@ function rebuild() {
 }
 let rsT = null;
 addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 150); });
+LW.on('layout', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 60); });
+applySkin(SKINS[LW.settings.skin] ? LW.settings.skin : 'indian'); xf.want = skinId;
 computeTarget();
 E.amb = envAmb();
 rebuild();
@@ -1628,7 +2143,7 @@ function selfTest(secs = 60) {
   }
   return {err,maxBirds};
 }
-window.__train = { get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, RT, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
+window.__train = { AMB, get skin() { return skinId; }, setSkin, SKINS, get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, get RT() { return RT; }, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

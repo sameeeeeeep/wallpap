@@ -1,0 +1,11 @@
+Use your image generation tool to create a NEW image and save it as a PNG at exactly this path:
+/Users/sameeprehlan/Documents/Projects/visuals/livewall/art-src/grass/mountains-raw.png
+Size 1536x1024.
+
+Content: a very wide, calm panorama of DISTANT mountain ridges for the horizon of a live wallpaper meadow (the second attached image shows the scene: a green meadow with pandas and a bamboo grove; its current far hills are a flat grey silhouette that this painting replaces). Paint, in a soft hand-painted storybook style matching the painted panda in the first attached image (gentle gouache texture, soft edges, no outlines):
+- Two or three overlapping layers of misty mountain ridges, the kind in Sichuan panda country: soft rounded forested ridges with a few taller, gentle peaks (not dramatic spikes, not snowy), the nearest layer a little darker and greener with hints of forest texture and bamboo slopes, the farther layers paler and bluer with atmospheric haze, a soft low mist band between layers.
+- The mountains occupy ONLY the bottom 30% of the canvas: the tallest peak reaches no higher than 30% of the canvas height from the bottom edge; most of the ridge line sits between 10% and 22%. The ridges continue all the way to the left and right edges at a similar height (the band is stretched sideways on wide screens), with the tallest mass a little left of centre.
+- The very bottom edge is the near layer's base, flat and continuous across the full width (it meets the meadow).
+- Lighting: neutral, soft, overcast-ish daylight from the upper left, low contrast (the scene re-colours it for sunrise, dusk and night).
+- EVERYTHING above the mountains (the sky) must be one pure flat colour #00ff00 (a keying background), no clouds, no sun, no birds, no gradient.
+- No people, animals, buildings, text, signatures or frames.

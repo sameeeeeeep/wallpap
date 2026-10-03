@@ -4,7 +4,8 @@
   const clamp=t=>Math.max(0,Math.min(1,t));
   const ease=t=>{t=clamp(t);return t*t*(3-2*t);};
   const name=p=>typeof p==='string'?p:((p&&p.src||'').split('/').pop()||'').replace(/\.png.*$/,'');
-  const walking=p=>/^walk[12]$/.test(name(p));
+  // walk1/walk2 and the drawn gait-cycle frames (walk-1..8, run-1..6): swapped as hard cuts
+  const walking=p=>/^(walk[12]|walk-\d+|run-\d+)$/.test(name(p));
   LW.petUnit=(kind,walk)=>(kind==='dog'?96:78)/(walk.naturalHeight||walk.height);
   LW.petPoseScale=(kind,pose,walk,im)=>{
     if(im&&im.petK)return im.petK;   // a drawn in-between frame carries its own size (LW.petSeqPrep)
@@ -135,12 +136,173 @@
   // the jump crouch) or 'fade' (the ordinary pose crossfade).
   LW.petSwap=(a,b,walkA,walkB)=>{
     const sa=!!(a&&a.petName),sb=!!(b&&b.petName);
+    // a gait-cycle frame is a walking pose: cycle ↔ cycle / walk1 / walk2 are gait cuts
+    walkA=walkA||!!(a&&a.petCycle);walkB=walkB||!!(b&&b.petCycle);
     if(walkA&&walkB||sa&&sb)return 'cut';
     if(sb)return b.petName.startsWith('jump-')?'quick':'cut';
     return sa?'quick':'fade';
   };
   // jump frames for a hop's phases: 'crouch' → 1, 'air' (u 0…1) → 2-4, 'land' → 5
   LW.petJumpFrame=(ph,u)=>'jump-'+(ph==='crouch'?1:ph==='land'?5:u<.36?2:u<.64?3:4);
+  // ---- drawn gait cycles: art/sprites/<set>/cycle/walk-1..8.png, run-1..6.png ------------
+  // One full stride each (walk: R contact, down, passing, up, L contact, down, passing, up;
+  // run: one gallop/trot stride), facing right, frame 1 ≈ walk1. The frame shown is chosen
+  // by DISTANCE travelled (LW.petGaitFrame), so planted paws stay put on the ground.
+  LW.PET_CYCLE_N={walk:8,run:6};
+  // Which sets have which cycles (update when a sheet ships; a missing one keeps walk1/walk2).
+  LW.PET_CYCLE_HAS={'cats/orange':['walk','run'],'cats/black':['walk','run'],'cats/grey':['walk','run'],'cats/calico':['walk','run'],'cats/siamese':['walk','run'],
+    'dogs/golden':['walk','run'],'dogs/corgi':['walk','run'],'pandas/mei':['walk'],'pandas/bao':['walk'],'pandas/cub':['walk']};
+  // Ground covered by one full cycle, in walking heights (the drawn walk1 height); tuned per
+  // set by eye against the planted paw (docs/scene-polish.md). Defaults for unknown sets.
+  // (walk = stance sweep of the drawn paws ÷ .6 duty, art-src/cycles/stride.py; run ≈ 1.6)
+  LW.PET_STRIDE={'cats/orange':{walk:.82,run:1.6},'cats/black':{walk:.78,run:1.7},'cats/grey':{walk:.84,run:1.6},'cats/calico':{walk:.9,run:1.6},
+    'cats/siamese':{walk:.87,run:1.6},'dogs/golden':{walk:.81,run:1.6},'dogs/corgi':{walk:.81,run:1.5},'pandas/mei':{walk:.86},'pandas/bao':{walk:.81},'pandas/cub':{walk:.7}};
+  const STRIDE_DEF={walk:.85,run:1.6};
+  // Load a set's cycles (base = 'art/sprites/', set = 'cats/orange'). A cycle counts once all
+  // of its frames load; done(C) fires when every listed cycle has loaded or failed.
+  LW.petCycleLoad=(base,set,done)=>{
+    const gs=LW.PET_CYCLE_HAS[set]||[],C={set,raw:{},img:{},cyc:{},has:g=>!!C.cyc[g],left:gs.length,ready:!gs.length};
+    const fin=()=>{if(--C.left===0&&done)done(C);};
+    if(!C.left&&done)setTimeout(()=>done(C),0);
+    for(const g of gs){
+      const N=LW.PET_CYCLE_N[g],ims=[];let n=0,bad=false;
+      for(let i=1;i<=N;i++){
+        const im=new Image();
+        im.onload=()=>{if(bad)return;if(!(im.naturalWidth>0)){bad=true;fin();return;}if(++n===N){C.raw[g]=ims;fin();}};
+        im.onerror=()=>{if(!bad){bad=true;fin();}};
+        im.src=base+set+'/cycle/'+g+'-'+i+'.png';ims.push(im);
+      }
+    }
+    return C;
+  };
+  // Alpha measurements of one image (browser only): size, opaque top/bottom rows and the
+  // x-centroid of the torso band (30–65 % of the opaque height — below the ears, above
+  // the swinging legs; the thin tail barely moves it). Used to pin the body in place.
+  LW.petCycleMeasure=im=>{
+    const [w,h]=dims(im),cv=document.createElement('canvas');cv.width=w;cv.height=h;
+    const g=cv.getContext('2d',{willReadFrequently:true});g.drawImage(im,0,0);
+    let a;try{a=g.getImageData(0,0,w,h).data;}catch(e){return {w,h,cx:w/2,top:0,bot:h-1};}
+    let top=h,bot=-1;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(a[(y*w+x)*4+3]>127){if(y<top)top=y;bot=y;break;}
+    if(bot<0)return {w,h,cx:w/2,top:0,bot:h-1};
+    const y0=Math.round(top+(bot-top)*.3),y1=Math.round(top+(bot-top)*.65);let sx=0,n=0;
+    for(let y=y0;y<=y1;y++)for(let x=0;x<w;x++)if(a[(y*w+x)*4+3]>127){sx+=x;n++;}
+    return {w,h,cx:n?sx/n:w/2,top,bot};
+  };
+  // ---- paw planting --------------------------------------------------------------------
+  // A sprite that glides with the pet drags its grounded paws along the floor. Instead the
+  // sprite holds still in the world while a cycle frame shows and steps forward at each
+  // frame change; the installed cycle frames are drawn so that their grounded paws slide
+  // back by exactly that step relative to the body (art-src/cycles/plant.py detects each
+  // frame's grounded paws, hind/fore, and bends the legs about the hip to plant them; QA in
+  // art-src/cycles/plant/*.json). So a paw stays put in the world for its whole stance and
+  // the body walks over it, handing off to the next paw at its contact frame. Net travel per
+  // cycle = the stride, so the average speed is the pet's own.
+  // Cumulative body position at the start of each frame (X[0] = 0 … X[n] = S) for a stride
+  // of S. m = optional per-cut steps (null / missing = even); scaled to sum to S.
+  LW.petPlantSteps=(n,S,m)=>{
+    const d=[];let t=0;
+    for(let i=0;i<n;i++){const v=m&&m[i]>0?m[i]:1;d.push(v);t+=v;}
+    const X=[0];for(let i=0;i<n;i++)X.push(X[i]+d[i]*S/t);
+    X[n]=S;return X;
+  };
+  // Sprite offset along the travel direction (image px, + = ahead of the pet's own position)
+  // at cycle phase ph ∈ [0,1): the frame holds still in the world while the pet's position
+  // runs on, then steps at the next cut. 0 at phase 0 (= walk1); within (−1 step, 0] when even.
+  LW.petPlantOffset=(X,ph,n)=>{
+    const S=X[n],k=Math.floor(ph*n+1e-6)%n;
+    return X[k]-ph*S;
+  };
+  // The pure layout maths (tested). ms = per-frame measures, ref = walk1's {w,h,cx,k,fa}
+  // (k = its pose scale, fa = the scene's anchor for it as a fraction of width).
+  //  · one size for the whole cycle (no scale pops): the median frame is as tall as walk1;
+  //  · the anchor sits at the same torso point as walk1's anchor, from each frame's torso
+  //    centroid smoothed round the loop, so the body does not jitter frame to frame.
+  LW.petCycleLayout=(ms,ref)=>{
+    const n=ms.length,hs=ms.map(m=>m.bot-m.top+1).sort((a,b)=>a-b),med=hs[n>>1];
+    const k=(ref.bot-ref.top+1)*ref.k/med,off=(ref.fa*ref.w-ref.cx)*ref.k/k;
+    let c=ms.map(m=>m.cx);
+    for(let pass=0;pass<2;pass++)c=c.map((v,i)=>(c[(i+n-1)%n]+2*v+c[(i+1)%n])/4);
+    return ms.map((m,i)=>({k,fa:(c[i]+off)/m.w}));
+  };
+  // Lay the loaded cycles out against walk1 (ref = {im, k, fa}); prep(im) → drawable (e.g. a
+  // de-fringed canvas). Frames get petK / petFa / petName / petCycle and land in C.img.
+  // Call every frame (cheap once done); returns true once every loaded cycle is laid out.
+  LW.petCyclePrep=(C,ref,prep=im=>im)=>{
+    if(!C||C.ready)return !!C;
+    if(!ref||!ref.im)return false;
+    for(const g in C.raw){
+      const ims=C.raw[g];delete C.raw[g];
+      const R=Object.assign(LW.petCycleMeasure(ref.im),{k:ref.k||1,fa:ref.fa==null?.5:ref.fa});
+      const ms=ims.map(LW.petCycleMeasure),L=LW.petCycleLayout(ms,R);
+      // petFa0 = the torso-pinned anchor; petFa is re-set per pet by LW.petGait (paw planting)
+      ims.forEach((im,i)=>{const p=g+'-'+(i+1),d=prep(im);d.petK=L[i].k;d.petFa=d.petFa0=L[i].fa;d.petW0=dims(im)[0];d.petName=p;d.petCycle=g;d.petNear='walk1';C.img[p]=d;});
+      C.plant=C.plant||{};C.plant[g]={n:ims.length,H:ms.map(m=>m.bot-m.top+1).sort((a,b)=>a-b)[ims.length>>1]};
+      C.cyc[g]=true;
+    }
+    if(C.left<=0&&!Object.keys(C.raw).length)C.ready=true;
+    return C.ready;
+  };
+  // Phase of a cycle from distance (tested). o = the pet (state in o._gait), dist = its
+  // running distance travelled (any units, never reset), stride = distance one full cycle
+  // covers in those units, gait 'walk' | 'run'. Returns the frame name ('walk-3').
+  //  · moving: the phase advances by distance ÷ stride, so the paws stay planted;
+  //  · stopped (dist unchanged): it settles on the nearest contact frame (walk-1 / walk-5,
+  //    run-1) — stepping forward through the frames at opt.settle cycles/s when opt.dt is
+  //    given, otherwise at once — instead of freezing mid-stride; o._gait.settled says so;
+  //  · walk ↔ run keeps the stride's progress: half a walk cycle (one step) maps onto a whole
+  //    run cycle, so the legs carry on from where they were.
+  LW.petGaitFrame=(o,dist,stride,gait='walk',opt={})=>{
+    const N=LW.PET_CYCLE_N[gait]||8,s=o._gait||(o._gait={ph:0,g:gait,d:dist,side:0,settled:true});
+    let dd=Math.abs(dist-s.d);s.d=dist;
+    if(!(dd<stride*.5))dd=0;   // a teleport / reset counter is not a stride
+    if(gait!==s.g){
+      if(s.g==='walk'&&gait==='run'){s.side=s.ph>=.5?.5:0;s.ph=(s.ph-s.side)*2;}
+      else if(s.g==='run'&&gait==='walk')s.ph=s.side+s.ph*.5;
+      s.g=gait;
+    }
+    const step=1/N,cs=gait==='walk'?[0,.5,1]:[0,1];
+    s.moving=dd>1e-9;
+    if(s.moving){s.ph=(s.ph+dd/stride)%1;s.settled=false;}
+    else if(!s.settled){
+      // the nearest contact; the one just behind only when less than half a frame back
+      let t=cs.find(c=>c>=s.ph-1e-9);const back=cs.filter(c=>c<=s.ph+1e-9).pop();
+      if(s.ph-back<step*.5)t=back;
+      if(opt.dt>0&&t>s.ph)s.ph=Math.min(t,s.ph+opt.dt*(opt.settle||2.2));else s.ph=t;
+      if(Math.abs(s.ph-t)<1e-9){s.ph=t%1;s.settled=true;}
+    }
+    return gait+'-'+(Math.floor(s.ph*N+1e-6)%N+1);
+  };
+  // Scene helper: the cycle frame for a pet on its feet, or null (→ keep the scene's own
+  // walk1/walk2). C = LW.petCycleLoad result (laid out), dist = distance in the units where
+  // walk1 is h tall, gait 'walk' | 'run' (a run without a run sheet strides out the walk).
+  // Once a stopped pet has settled on frame 1 it returns 'walk1' (the scene's own standing pose,
+  // which frame 1 matches); null only when the set has no cycle at all.
+  // Paw planting (on by default; opt.plant === false turns it off): o._gait.off is the
+  // sprite's offset along its travel in walking heights (+ = ahead), LW.petGaitShift(o, h)
+  // the same in scene units. Scenes that read the returned frame's im.petFa when they draw
+  // get it for free: petFa is re-set to petFa0 − offset / width for this pet on every call
+  // (each pet owns its set's frames). Scenes that cache anchors use petFa0 + LW.petGaitShift.
+  LW.petGait=(o,C,dist,h,gait='walk',opt={})=>{
+    if(!C||!C.cyc)return null;
+    const g=C.has(gait)?gait:C.has('walk')?'walk':null;if(!g)return null;
+    const st=LW.PET_STRIDE[C.set]||{},sw=(st[g]||STRIDE_DEF[g])*(g===gait?1:1.3),stride=sw*h;
+    const f=LW.petGaitFrame(o,dist,stride,g,opt),s=o._gait,P=C.plant&&C.plant[g];
+    let off=0;
+    if(P&&opt.plant!==false){
+      const S=sw*P.H,X=P.X&&P.S===S?P.X:(P.S=S,P.X=LW.petPlantSteps(P.n,S));
+      const target=LW.petPlantOffset(X,s.ph,P.n)/P.H;   // walking heights
+      // moving: hold-and-step; settling onto a contact without travelling: the feet shuffle in
+      // place (offset held); settled: ease back onto the pet's own position (0 at a contact)
+      if(s.off==null||s.moving)s.off=target;
+      else if(s.settled){const r=opt.dt>0?Math.min(1,opt.dt*10):1;s.off+=(target-s.off)*r;if(Math.abs(target-s.off)<.004)s.off=target;}
+      off=s.off;
+      const im=C.img[f];if(im&&im.petFa0!=null)im.petFa=im.petFa0-off*P.H/(im.petW0||im.naturalWidth||im.width);
+    }else s.off=0;
+    s.offH=off;
+    return s.settled&&s.ph===0&&Math.abs(off)<.004?'walk1':f;
+  };
+  LW.petGaitShift=(o,h)=>(o&&o._gait&&o._gait.offH||0)*h;
   // Premultiplied blending on a small isolated canvas: ordinary source-over
   // fades darken the overlapping fur and expose the background through it.
   // All frames share the animal's ground anchor and follow its live position.

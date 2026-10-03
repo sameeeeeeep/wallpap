@@ -1,0 +1,12 @@
+=== cat-grey-walk 02:04:49
+--- cat-grey-walk exit 0 ok 02:08:05
+=== cat-grey-run 02:08:05
+--- cat-grey-run exit 0 ok 02:10:28
+=== cat-calico-walk 02:10:28
+--- cat-calico-walk exit 0 ok 02:12:47
+=== cat-calico-run 02:12:47
+--- cat-calico-run exit 0 ok 02:15:48
+=== cat-siamese-walk 02:15:48
+--- cat-siamese-walk exit 0 ok 02:19:12
+=== cat-siamese-run 02:19:12
+--- cat-siamese-run exit 0 ok 02:22:21

@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Beach</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#0b1a22}</style>
+</head>
+<body>
+<script src="astronomy.js"></script>
+<script src="kit.js"></script>
+<script src="lw.js"></script>
+<script>
+'use strict';
+// Beach — a high-angle shoreline. Waves (kit) do sand, swell, bores, swash, wet sand, foam lace, caustics and
+// night bioluminescence; this file adds shells + ghost crabs (under the water line), gulls with shadows,
+// click splashes, and hands the swash to the breath in calm mode.
+// atlas.png (generated, see art-src/kit-addons): gullL/gullR wing halves, crab, cockle, scallop, whelk, tellin.
+const FRAMES = {"gullL":[10,10,150,174],"gullR":[180,10,150,174],"crab":[350,10,150,138],"cockle":[520,10,84,85],"scallop":[624,10,84,80],"whelk":[728,10,84,98],"tellin":[832,10,84,57]};
+const { rand, clamp, lerp, smooth, ease, angDiff, pick, noise1, TAU } = Kit.math;
+const WHITE = [1, 1, 1];
+
+let sheet, shells = [], crabs = [], gulls = [];
+const surf = Kit.waves({ shore: { a: [0.28, -0.05], b: [0.66, 1.05] }, period: 11, runup: 0.075, backwash: 0.03, breakAt: 0.3,
+  under(b, k) {   // things on the sand: drawn unlit (the waves shader lights + refracts them)
+    b.use(sheet);
+    const sd = k.L.sunDir;
+    for (const s of shells) { b.shadow(s.f, s.x + sd[0] * 3, s.y + sd[1] * 3, s.w, s.h, s.r, 0.35, 1.5); b.sprite(s.f, s.x, s.y, s.w, s.h, s.r, WHITE); }
+    for (const c of crabs) {
+      if (c.a < 0.01) continue;
+      const wob = c.moving ? Math.sin(c.step * 22) * 0.05 : 0, sz = c.size * (0.9 + 0.1 * c.a);
+      b.shadow(sheet.f.crab, c.x + sd[0] * 6, c.y + sd[1] * 6, sz, sz * sheet.f.crab.aspect, c.body + wob, 0.45 * c.a, 2);
+      b.sprite(sheet.f.crab, c.x, c.y, sz, sz * sheet.f.crab.aspect * (1 + wob * 0.3), c.body + wob, WHITE, c.a);
+    }
+  } });
+
+// ── Ghost crabs: scuttle sideways in bursts, keep ahead of the swash, duck into burrows when startled ──
+function sandSpot(k, sMin, sMax) {   // a point on the beach (shore coordinate range), clear of the widget zone
+  for (let i = 0; i < 40; i++) { const x = k.clearX(rand(0.04, 0.92)), y = rand(k.H * 0.06, k.H * 0.94), s = surf.s(x, y); if (s > sMin && s < sMax && k.restOK(x, y)) return [x, y]; }
+  return [k.mx(k.W * 0.15), k.H * 0.5];
+}
+function crabGoal(c, k, fast) { [c.tx, c.ty] = sandSpot(k, -0.3, surf.edge - 0.03); c.speed = fast ? rand(230, 300) : rand(80, 150); c.state = 'scuttle'; }
+function updateCrabs(dt, t, k) {
+  const want = k.L.night > 0.5 ? 5 : ['rain', 'storm', 'snow'].includes(LW.env.weather) ? 1 : 3;   // ghost crabs come out at night
+  while (crabs.length < want) { const [x, y] = sandSpot(k, -0.28, -0.04); crabs.push({ x, y, vx: 0, vy: 0, size: rand(34, 46), body: rand(TAU), a: 0, state: 'emerge', timer: rand(1, 3), step: 0, seed: rand(99) }); }
+  for (let i = crabs.length - 1; i >= 0; i--) {
+    const c = crabs[i], s = surf.s(c.x, c.y), cur = k.cursor;
+    if (i >= want && c.state !== 'burrow') { c.state = 'burrow'; c.timer = 0.8; }
+    if (c.state !== 'burrow' && c.state !== 'hidden') {
+      if (s > surf.edge - 0.012) { const [x, y] = surf.toXY(surf.edge - 0.09, ((c.x - 0) * surf.tangent()[0] + c.y * surf.tangent()[1]) / k.H); c.tx = x; c.ty = y; c.speed = 260; c.state = 'scuttle'; }
+      const d = Math.hypot(cur.x - c.x, cur.y - c.y);
+      if (cur.inside && d < 140 && cur.speed > 450) { if (Math.random() < 0.35) { c.state = 'burrow'; c.timer = 0.6; } else { crabGoal(c, k, true); const a = Math.atan2(c.y - cur.y, c.x - cur.x); c.tx = clamp(c.x + Math.cos(a) * 220, k.layout.clearPx[0] + 20, k.layout.clearPx[1] - 20); c.ty = clamp(c.y + Math.sin(a) * 220, 20, k.H - 20); } }
+    }
+    c.moving = false;
+    if (c.state === 'emerge') { c.a = Math.min(1, c.a + dt * 1.5); c.timer -= dt; if (c.timer <= 0) { c.state = 'pause'; c.timer = rand(1, 4); } }
+    else if (c.state === 'pause') { c.timer -= dt; c.vx *= 0.8; c.vy *= 0.8; if (c.timer <= 0) crabGoal(c, k); }
+    else if (c.state === 'scuttle') {
+      const [fx, fy, d] = Kit.steer.arrive(c, c.tx, c.ty, 40);
+      Kit.steer.move(c, fx, fy, dt, c.speed, 7);
+      c.moving = c.speed > 15; c.step += dt * c.speed / 60;
+      if (c.moving) c.body += angDiff(c.body, Math.atan2(c.vy, c.vx) - Math.PI / 2 + (noise1(c.seed + t) > 0 ? Math.PI : 0)) * (1 - Math.exp(-dt * 6));
+      if (d < 6) { c.state = Math.random() < 0.06 ? 'burrow' : 'pause'; c.timer = c.state === 'burrow' ? 0.8 : rand(1.5, 6); }
+    } else if (c.state === 'burrow') { c.a = Math.max(0, c.a - dt * 1.6); c.timer -= dt; if (c.a <= 0) { if (i >= want) { crabs.splice(i, 1); continue; } c.state = 'hidden'; c.timer = rand(5, 14); } }
+    else if (c.state === 'hidden') { c.timer -= dt; if (c.timer <= 0) { [c.x, c.y] = sandSpot(k, -0.28, surf.edge - 0.05); c.state = 'emerge'; c.timer = 1; } }
+  }
+}
+
+// ── Gulls: long glides in lazy loops, the odd flap, a shadow sliding over sand and sea ──
+function updateGulls(dt, t, k) {
+  const wx = LW.env.weather, want = k.L.night > 0.55 || wx === 'storm' ? 0 : wx === 'rain' || wx === 'snow' ? 1 : 3;
+  if (gulls.length < want && (k.gullWait = (k.gullWait ?? 0) - dt) <= 0) { k.gullWait = rand(3, 9); const fromLeft = Math.random() < 0.6; const ang = fromLeft ? rand(-0.4, 0.4) : rand(1.2, 1.9); gulls.push({ x: fromLeft ? k.mx(-120) : k.clearX(rand(0.1, 0.8)), y: fromLeft ? rand(k.H * 0.1, k.H * 0.9) : -120, ang: k.layout.mirror ? Math.PI - ang : ang, speed: 90, z: rand(140, 260), span: rand(100, 135), flap: 0, flapT: rand(2, 6), seed: rand(99), bank: 0, wx: rand(0.1, 0.6), wy: rand(0.15, 0.85) }); }
+  for (let i = gulls.length - 1; i >= 0; i--) {
+    const g = gulls[i], leaving = i >= want;
+    // a wandering anchor in the left/middle sky; gulls circle it and drift on
+    const ax = k.mx(k.W * (g.wx + 0.12 * Math.sin(t * 0.05 + g.seed))), ay = k.H * (g.wy + 0.15 * Math.cos(t * 0.04 + g.seed));
+    let [fx, fy] = Kit.steer.wander(g, t, 0.08, 0.9);
+    const [sx, sy, d] = Kit.steer.seek(g, ax, ay, 1); const pull = smooth(80, 420, d);
+    fx += sx * pull * 1.4; fy += sy * pull * 1.4;
+    const [px, py] = Kit.steer.separate(g, gulls, 240, 2.6); fx += px; fy += py;
+    if (leaving) { fx = Math.cos(g.ang) + (k.layout.mirror ? -0.5 : 0.5); fy = Math.sin(g.ang); }
+    const before = g.ang;
+    Kit.steer.turnMove(g, fx, fy, dt, (leaving ? 130 : 85 + 25 * noise1(g.seed + t * 0.2)) * (1 + g.flap * 0.3), 0.5, 0.6);
+    g.bank = ease(g.bank, clamp(angDiff(before, g.ang) / dt * 0.9, -0.6, 0.6), 2, dt);
+    g.flapT -= dt; if (g.flapT <= 0) { g.flap = 1; g.flapT = rand(4, 11); if (Math.random() < 0.35) k.sound.gull(g.x); }
+    g.flap = Math.max(0, g.flap - dt * 0.45);
+    if (leaving && (g.x < -200 || g.x > k.W + 200 || g.y < -200 || g.y > k.H + 200)) gulls.splice(i, 1);
+  }
+}
+function drawGull(b, g, k, t, shadow) {
+  const fl = g.flap > 0 ? Math.sin((1 - g.flap) * TAU * 3.2) : 0, fold = 0.06 * Math.sin(t * 0.7 + g.seed);
+  const rot = g.ang + Math.PI / 2, c = Math.cos(rot), s = Math.sin(rot), w = g.span / 2, h = g.span * sheet.f.gullL.aspect;
+  const sd = k.L.sunDir, ox = shadow ? sd[0] * g.z * 0.6 : 0, oy = shadow ? sd[1] * g.z * 0.6 : 0;
+  for (const side of [-1, 1]) {
+    const lift = clamp(fl * 0.55 + fold + side * g.bank * 0.5, -0.6, 0.9), sx = Math.cos(lift) * (1 - Math.max(0, lift) * 0.12);
+    const x0 = side < 0 ? -w * sx : 0, x1 = side < 0 ? 0 : w * sx, y0 = -h / 2, y1 = h / 2;
+    const P = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [g.x + ox + x * c - y * s, g.y + oy + x * s + y * c]);
+    const f = side < 0 ? sheet.f.gullL : sheet.f.gullR;
+    if (shadow) b.quad4(f, P, [0, 0, 0], 0.11 * k.L.day * (1 - k.L.cloud * 0.6), 4, 3.6);
+    else { const lit = 1 - Math.max(0, lift) * 0.25 + (side * g.bank > 0 ? -0.08 : 0.04); b.quad4(f, P, k.L.tint.map((v) => v * lit * 0.92), 1); }
+  }
+}
+
+Kit.scene({
+  assets: { atlas: 'atlas.png' },
+  setup(k) { sheet = k.sheet(k.assets.atlas, FRAMES); },
+  resize(k) {
+    shells = [];
+    for (let i = 0; i < 16; i++) { const [x, y] = sandSpot(k, -0.22, i < 4 ? 0.05 : -0.01), f = sheet.f[pick(['cockle', 'scallop', 'whelk', 'tellin', 'cockle'])], w = rand(16, 26); shells.push({ x, y, f, w, h: w * f.aspect, r: rand(TAU) }); }
+  },
+  layers: [
+    surf,
+    Kit.sprites((b, k, t) => { b.use(sheet); for (const g of gulls) drawGull(b, g, k, t, true); }),
+    Kit.particles(),
+    Kit.sprites((b, k, t) => { b.use(sheet); for (const g of gulls) drawGull(b, g, k, t, false); }),
+    Kit.light({ glow: 0.45, threshold: 0.8, vignette: 0.32 }),
+  ],
+  update(dt, t, k) { updateCrabs(dt, t, k); updateGulls(dt, t, k); },
+  surfaceAt: (x, y) => (surf.waterAt(x, y) ? 'water' : 'ground'),   // rain rings on the sand, ripples on the sea
+  onDown(x, y, k) {
+    const P = k.layer('particles');
+    if (surf.waterAt(x, y)) { k.ripples.drop(x, y, 14, -0.9); P.burst(x, y, 18, k.L.tint.map((v) => v * 0.95 + 0.05), 240, 0.55, 3.2, 22); k.sound.splash(x); }
+    else { P.burst(x, y, 8, [0.85, 0.74, 0.55].map((v, i) => v * k.L.tint[i]), 120, 0.4, 1.6); for (const c of crabs) if (Math.hypot(c.x - x, c.y - y) < 160 && c.state !== 'hidden') { c.state = 'burrow'; c.timer = 0.5; } }
+  },
+  onMove(x, y, k) { if (k.cursor.speed > 120 && surf.waterAt(x, y) && Math.random() < 0.5) k.ripples.drop(x, y, 7, -0.22); },
+  // Calm: the swash follows the breath — a wave runs in on the in-breath, holds, slides back on the out-breath.
+  breathe(level, phase, k) {
+    const B = k.breath, o = surf.opt;
+    surf.auto = B.fade < 0.05;
+    if (surf.auto) return;
+    const target = lerp(o.backwash * 0.7, -o.runup * 0.95, level);
+    surf.edge = lerp(surf.edge, target, Math.min(1, B.fade * 1.5));
+    surf.wetLine = Math.min(ease(surf.wetLine, surf.edge, 0.03, k.dt), surf.edge);
+    surf.recede = ease(surf.recede, phase === 'out' ? 1 : 0, 2, k.dt);
+    for (let i = 0; i < 4; i++) surf.boreA[i] *= Math.exp(-k.dt * 2);
+    if (phase === 'in') { surf.bores[0] = surf.edge + (1 - B.k) * 0.16 + 0.004; surf.boreA[0] = smooth(0, 0.25, B.k) * smooth(1, 0.8, B.k) * B.fade; }
+  },
+  ambience: {
+    windLevel: 0.012,
+    build(A, k, ctx) {
+      A.surf = A.loop(ctx, 'brown', A.out, 0.0, A.filt(ctx, 'lowpass', 520));
+      A.wash = A.loop(ctx, 'pink', A.out, 0.0, A.filt(ctx, 'highpass', 900), A.filt(ctx, 'lowpass', 4200));
+    },
+    tick(A, k, at, ctx) {
+      const energy = surf.boreA.reduce((s, a, i) => s + a * smooth(0.25, 0.02, surf.bores[i] - surf.edge), 0);
+      A.surf.gain.setTargetAtTime(0.05 + 0.13 * Math.min(1.5, energy), at, 0.5);
+      A.wash.gain.setTargetAtTime(0.006 + 0.03 * surf.recede + 0.02 * smooth(0, -0.05, surf.edge), at, 0.4);
+      if (gulls.length && Math.random() < 0.02) A.gull(ctx, A.out, at, 0.006);
+    },
+  },
+});
+</script>
+</body>
+</html>

@@ -3,7 +3,10 @@
 // • the online catalog (https://wallpap.live/catalog.json) — scenes we ship without an app
 //   update, downloaded as a zip on first pick and updated when the catalog's version is newer;
 // • folders the user adds themselves (menu → Add Scene Folder…).
-// scene.json: {"id":"snowglobe","title":"Snow Globe","category":"Cozy Rooms","pro":true,"version":2}
+// scene.json: {"id":"snowglobe","title":"Snow Globe","category":"Cozy Rooms","pro":true,"version":2,
+//              "author":"Jane Doe","authorURL":"https://…","music":false}
+// A `.source` file in the folder records where it came from: "catalog" or "user" (user folders are the
+// Custom tab and need Pro).
 // Each add-on folder receives a fresh copy of the shared runtime (lw.js, pet-motion.js,
 // astronomy.js) on install and launch, so `<script src="lw.js">` works exactly as in bundled scenes.
 import AppKit
@@ -11,12 +14,13 @@ import AppKit
 struct CatalogEntry {
     let id: String, title: String, category: String, pro: Bool, version: Int
     let zip: URL, thumb: URL?
+    var author = "wallpap", blurb = "", featured = false, isNew = false
 }
 
 private var catalogEntries: [CatalogEntry] = []
 private var installing: Set<String> = []
 let catalogURL = URL(string: ProcessInfo.processInfo.environment["WALLPAP_CATALOG"] ?? "https://wallpap.live/catalog.json")!
-let sharedRuntime = ["lw.js", "pet-motion.js", "astronomy.js"]
+let sharedRuntime = ["lw.js", "pet-motion.js", "astronomy.js", "moon.js", "music.js", "kit.js", "art/shared/moon.png"]
 
 /// Bundled + installed add-on scenes, bundled first, in menu order.
 var scenes: [Scene] { builtinScenes + addonScenes().map(\.scene) }
@@ -40,10 +44,16 @@ func readManifest(_ dir: URL) -> Addon? {
           let id = m["id"] as? String, validSceneID(id),
           FileManager.default.fileExists(atPath: dir.appendingPathComponent("index.html").path) else { return nil }
     let title = (m["title"] as? String) ?? id
+    let source = (try? String(contentsOf: dir.appendingPathComponent(".source"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "user"
+    let custom = source != "catalog"
     var cat = (m["category"] as? String) ?? "More"
-    if !categories.contains(cat) { cat = "More" }
-    return Addon(scene: Scene(id: id, title: title, key: "", pro: m["pro"] as? Bool ?? false, category: cat),
-                 dir: dir, version: m["version"] as? Int ?? 1)
+    if !categories.contains(cat) || cat == "Custom" { cat = "More" }
+    if custom { cat = "Custom" }
+    var sc = Scene(id: id, title: title, key: "", pro: custom || (m["pro"] as? Bool ?? false), category: cat, music: m["music"] as? Bool ?? false)
+    sc.author = (m["author"] as? String) ?? (custom ? "you" : "wallpap")
+    sc.authorURL = (m["authorURL"] as? String) ?? ""
+    sc.custom = custom
+    return Addon(scene: sc, dir: dir, version: m["version"] as? Int ?? 1)
 }
 
 func addonScenes() -> [Addon] {
@@ -65,7 +75,8 @@ extension App {
     func installRuntime(into dir: URL) {
         for f in sharedRuntime {
             let src = scenesDir.appendingPathComponent(f), dst = dir.appendingPathComponent(f)
-            guard let s = try? Data(contentsOf: src) else { continue }
+            guard let s = try? Data(contentsOf: src) else { continue }   // older bundles may lack newer files
+            try? FileManager.default.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
             if (try? Data(contentsOf: dst)) == s { continue }
             try? s.write(to: dst, options: .atomic)
         }
@@ -90,9 +101,12 @@ extension App {
             let entries: [CatalogEntry] = list.compactMap { m in
                 guard let id = m["id"] as? String, validSceneID(id), let z = m["zip"] as? String,
                       let zip = URL(string: z, relativeTo: catalogURL)?.absoluteURL, zip.scheme == "https" else { return nil }
-                return CatalogEntry(id: id, title: m["title"] as? String ?? id, category: m["category"] as? String ?? "More",
-                                    pro: m["pro"] as? Bool ?? true, version: m["version"] as? Int ?? 1, zip: zip,
-                                    thumb: (m["thumb"] as? String).flatMap { URL(string: $0, relativeTo: catalogURL)?.absoluteURL })
+                var e = CatalogEntry(id: id, title: m["title"] as? String ?? id, category: m["category"] as? String ?? "More",
+                                     pro: m["pro"] as? Bool ?? true, version: m["version"] as? Int ?? 1, zip: zip,
+                                     thumb: (m["thumb"] as? String).flatMap { URL(string: $0, relativeTo: catalogURL)?.absoluteURL })
+                e.author = m["author"] as? String ?? "wallpap"; e.blurb = m["blurb"] as? String ?? ""
+                e.featured = m["featured"] as? Bool ?? false; e.isNew = m["new"] as? Bool ?? false
+                return e
             }
             DispatchQueue.main.async {
                 catalogEntries = entries
@@ -132,6 +146,7 @@ extension App {
                     let dst = addonDir.appendingPathComponent(id, isDirectory: true)
                     try? fm.removeItem(at: dst)
                     ok = (try? fm.moveItem(at: root, to: dst)) != nil
+                    if ok { try? "catalog".write(to: dst.appendingPathComponent(".source"), atomically: true, encoding: .utf8) }
                 }
                 try? fm.removeItem(at: stage)
             }
@@ -167,6 +182,8 @@ extension App {
         let dst = addonDir.appendingPathComponent(a.scene.id, isDirectory: true)
         try? FileManager.default.removeItem(at: dst)
         do { try FileManager.default.copyItem(at: src, to: dst) } catch { NSSound.beep(); return }
+        try? "user".write(to: dst.appendingPathComponent(".source"), atomically: true, encoding: .utf8)
+        guard isPro else { openPro(); rebuildMenu(); return }   // custom scenes are a Pro feature
         installRuntime(into: dst)
         sceneID = a.scene.id
         loadScene()

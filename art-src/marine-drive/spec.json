@@ -1,0 +1,28 @@
+{
+  "id": "marine-drive",
+  "title": "Marine Drive",
+  "style": "photo",
+  "plates": ["day", "dusk", "night", "overcast"],
+  "scene": "Wide landscape photograph of Marine Drive in Mumbai, India — the famous curved seafront known as the Queen's Necklace — seen from a high apartment balcony about 25 storeys up at the northern (Chowpatty / Malabar Hill) end of Back Bay, looking south across the bay. The balcony itself is NOT visible: a clean view. Composition, exactly:\n- Horizon at about 40% from the top of the frame.\n- The bay: calm Arabian Sea water fills the centre and the whole right side of the frame, out to a flat, open sea horizon on the right.\n- The curve: the broad six-lane seafront road with its wide paved promenade and low sea wall starts in the lower-LEFT foreground (closest to the camera, seen from above at a fairly steep angle) and sweeps in one long, smooth, elegant arc through the middle distance toward the far end of the bay, ending at a cluster of Nariman Point high-rise towers on the horizon at about 55-62% from the left.\n- Along the water side of the promenade the sea wall is lined with a continuous band of grey concrete tetrapods (a breakwater) where small waves break.\n- Tall slender street-light poles stand at regular spacing along the promenade side of the road all the way round the curve.\n- On the land side of the road a continuous line of 5-8 storey Art Deco apartment buildings in cream, beige, pale yellow and soft pastel tones follows the curve, with the denser city of taller buildings and a few green rain trees behind them on the left.\n- The road surface, promenade and sea are EMPTY: no cars, no buses, no taxis, no people, no boats.",
+  "sky_area": "the top ~40% of the frame, above the horizon and the skyline",
+  "calm": "only open calm sea and plain sky",
+  "space": "Keep the carriageway, the promenade paving and the water surface clean and uncluttered: cars, walkers, waves and birds are added live on them.",
+  "preserve": "buildings, road curve, promenade, tetrapods, street-light poles, sea and horizon",
+  "sunset_side": "right (low over the open sea)",
+  "surfaces": "the road, the promenade and the building facades",
+  "night_lights": "The Queen's Necklace: every street light along the whole curve glows warm golden-white, forming one continuous glittering necklace of lights round the bay, with long golden reflections shimmering on the dark sea and soft pools of light on the promenade; the apartment buildings and the Nariman Point towers show many softly lit warm windows (a natural, random mix of lit and dark windows); the road surface itself stays dark and EMPTY (no cars, no headlight or tail-light trails); a faint warm city glow along the horizon on the left",
+  "wet": "a heavy Mumbai monsoon mood: low dark slate-grey sky (still plain, no distinct cloud shapes), the road and promenade soaking WET with soft mirror-like reflections, the sea grey-green and a little choppy with white foam at the tetrapods, building facades darker and rain-stained, a soft grey mist hiding the far end of the bay a little",
+  "keys": {
+    "sky": "the whole sky (everything above the horizon and the skyline, between and around all buildings)",
+    "water": "all of the sea water — the whole bay and the open sea up to the horizon, right up to the tetrapods and the sea wall (but NOT the tetrapods, wall, promenade or road)",
+    "road": "the asphalt road carriageway only (all lanes of the curved seafront road, from the lower-left foreground round the whole curve), NOT the promenade paving, NOT the pavement on the building side"
+  },
+  "sheets": {
+    "cars": {
+      "prompt": "Subjects: twelve small generic city cars, all seen from about 35 degrees above in a three-quarter side view, all facing LEFT, all at the SAME scale, arranged in a neat 4 columns x 3 rows grid: four classic Mumbai black-and-yellow taxis (generic rounded 1960s compact sedan shape, glossy black body, bright yellow roof, no text, no sign), two white compact hatchbacks, one silver sedan, one dark blue SUV, one red hatchback, one grey sedan, one white SUV, one dark green sedan. Generic designs, no badges, no number plates text. Photorealistic like a real photograph, real paint, glass and tyres."
+    },
+    "people": {
+      "prompt": "Subjects: sixteen small full-body people walking along a seafront promenade in the evening, each in pure SIDE VIEW walking toward the LEFT, all at the SAME scale, arranged in a neat 4 columns x 4 rows grid: men and women of Mumbai in everyday clothes — shirts and trousers, kurtas, saris, salwar kameez, a jogger in sports clothes, an older man with a walking stick, a couple of young people. Natural poses mid-stride. Photorealistic like a real photograph."
+    }
+  }
+}

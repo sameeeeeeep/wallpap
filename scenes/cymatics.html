@@ -13,17 +13,29 @@
   nodal lines (the real mechanism behind Chladni figures). Modes crossfade, so sand flows
   from one figure into the next.
 
-  Music (no mic, no Web Audio input; everything comes from the host):
-    LW.music.level           → sand agitation
-    'beat' strength + bass   → sand jumps
-    brightness (high vs low) → complexity tier (higher-order modes), applied on the cadence
-    cadence                  → every 16 strong beats (≥ 7s) or 15s, the figure steps to a
-                               neighbour on cymatica's circle-of-fifths layout
-    new track                → its own "home" figure (hash of title), sand jumps, plate shape
-                               (auto: each track picks square or round; the plate morphs)
-    artwork                  → sand + light tint subtly toward the artwork palette
-    paused / nothing playing → autopilot, slower and dimmer. Calm → breathing sand, dim.
-  Never strobes: beats move sand, never the light.
+  Skins (LW.settings.skin), switching crossfades (both render for ~1.6 s):
+    'sand'     Chladni sand (default, free) — as above.
+    'faraday'  Faraday water: a round dish of water under a ring light (port of cymatica's water
+               instrument). N standing plane waves at even angles → 2N-fold (quasi)crystal patterns; what
+               you see is the ring light reflected wherever the surface slope matches it. Below the
+               Faraday threshold (quiet passages, idle, calm) the dish falls back to concentric rings.
+    'filings'  Iron filings on frosted paper under raking light (a fork of the grain engine: 36,864
+               filings with an angle channel). Hidden magnets under the sheet; each kick is a TAP that
+               frees the filings to turn into the field and chain along its lines (they drift toward the
+               contours of the 2D stream function, i.e. onto discrete field lines).
+
+  Music (LW.mx from music.js — real chroma/chord/key/tempo from the host when Beat Sync is on, a
+  synthesised progression otherwise; never a hash of the track title):
+    chord root (circle of fifths) → the figure: Chladni mode / water symmetry / magnet ring layout;
+                                    minor chords take the mode's ± partner. A new chord is applied once
+                                    the current figure has had ~3.5 s to form.
+    key (mode)                    → plate shape in 'auto' (minor keys round, major square; ≤ 1 change / 30 s)
+    brightness                    → complexity tier (higher-order modes / more poles / finer waves)
+    LW.music.level + kick         → sand agitation + jumps / water steepness + ripples / filing taps
+    artwork                       → tint subtly toward the artwork palette
+    paused / nothing playing      → autopilot (slow circle-of-fifths walk), slower and dimmer.
+    calm                          → breathing sand / breathing rings / filings lift on the in-breath
+  Never strobes: beats move matter, never the light.
 
   Layers (no 2D canvas is ever uploaded to WebGL):
     #bg   canvas2D backdrop, baked at half res on time-of-day / palette change only
@@ -32,10 +44,11 @@
           only while something in it changes
   Right ~28% of the screen: backdrop only.
 
-  Settings: plate = 'auto' | 'square' | 'round'   (LW.set('plate', …))
+  Settings: skin = 'sand' | 'faraday' | 'filings';  plate = 'auto' | 'square' | 'round' (sand only)
   URL (dev): ?set.side=256 (grain texture side), ?cap=1400 (render-res cap), ?fake=0
-  Dev keys (browser only): n = fake track on/off (lw.js) with generated levels + beats,
-    p = play/pause demo tracks (with artwork), . = next, o = cycle plate, k = kick,
+  Dev keys (browser only): n = fake track on/off (lw.js) with synthetic levels, beats AND chroma moving
+    through a chord progression (music.js), p = play/pause demo tracks (with artwork), . = next,
+    o = cycle plate, v = cycle skin, k = kick,
     s = stretch reminder, r = water reminder (lw.js), b = calm (lw.js), t = +3h (lw.js)
   Art slots: none (procedural).
   Debug: window.__cym.bench(120) → ms/frame incl. GPU sync.
@@ -52,6 +65,7 @@
 <canvas id="gl"></canvas>
 <canvas id="cap"></canvas>
 <script src="lw.js"></script>
+<script src="music.js"></script>
 <script>
 'use strict';
 const TAU = Math.PI * 2;
@@ -67,6 +81,7 @@ function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^=
 const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
 const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 const SIDE = clamp(+(LW.settings.side || 288) | 0, 128, 512);     // 288² = 82,944 grains
+const FSIDE = 168;                                                 // 168² = 28,224 iron filings
 const CAP = clamp(+(qs.get('cap') || 1100), 512, 2400);            // max internal render px
 
 // =====================================================================
@@ -81,11 +96,11 @@ const ROUND = [
   [0, 2], [2, 1], [3, 1], [1, 2], [4, 1], [2, 2],
   [5, 1], [3, 2], [6, 1], [4, 2], [0, 4], [5, 2],
 ];
-function sandMode(pc, tier, round) {
+function sandMode(pc, tier, round, minor) {
   const i = (pc * 7) % 12;
-  if (round) { const [n, m] = ROUND[i]; return [n + tier, m + tier, 1]; }
+  if (round) { const [n, m] = ROUND[i]; return [n + tier + (minor && n === 0 ? 1 : 0), m + tier, 1]; }
   const [n, m, s] = SQUARE[i];
-  return [n + tier, m + 2 * tier, s];
+  return [n + tier, m + 2 * tier, minor ? -s : s];   // a minor chord takes the mode's ± partner
 }
 
 // =====================================================================
@@ -289,6 +304,201 @@ void main() {
   o = vec4(c * m, m);
 }`;
 
+
+// ── Faraday water (from cymatica/src/water.js): N standing plane waves, shaded as the reflection of a
+//    ring light; a radial (Bessel-like) mode below threshold; kick ripples from the centre.
+const WATER_FS = `#version 300 es
+precision highp float;
+#define PI 3.14159265
+uniform float uTime, uK, uN0, uN1, uMix, uAmp, uPx, uRadial, uKp;
+uniform vec4 uRipples[4];
+uniform vec3 uHot, uCool, uBase;
+in vec2 vUv; out vec4 o;
+const float R = 0.93, RING_A = 0.30, RING_B = 0.62;
+float waves(vec2 p, float N, out vec2 g) {
+  float h = 0.0; g = vec2(0.0);
+  for (int i = 0; i < 8; i++) {
+    if (float(i) >= N) break;
+    float a = PI * float(i) / N;
+    vec2 d = vec2(cos(a), sin(a));
+    float ph = uK * dot(d, p) + 0.7 * sin(uTime * (0.11 + 0.037 * float(i)) + float(i) * 1.7);
+    h += cos(ph); g -= sin(ph) * uK * d;
+  }
+  return h / sqrt(N);
+}
+vec3 shade(vec2 p, out float cov) {
+  float r = length(p);
+  cov = 1.0 - smoothstep(R + 0.012 - uPx, R + 0.012 + uPx, r);
+  if (r > R + 0.03) return vec3(0.0);
+  vec2 g0, g1;
+  float h = mix(waves(p, uN0, g0), waves(p, uN1, g1), uMix);
+  vec2 g = mix(g0, g1, uMix) / sqrt(mix(uN0, uN1, uMix));
+  float kr = uK * r;
+  vec2 gr = -sin(kr) * uK * 1.4 * p / max(r, 1e-4);
+  h = mix(h, cos(kr) * 1.4, uRadial); g = mix(g, gr, uRadial);
+  float edge = smoothstep(R, R - 0.12, r);
+  float amp = uAmp * (0.35 + 0.65 * edge);
+  vec2 rd = p / max(r, 1e-4);
+  for (int i = 0; i < 4; i++) {
+    vec4 rp = uRipples[i];
+    if (rp.y <= 0.0) continue;
+    float x = r - rp.x * 0.9;
+    float env = exp(-x * x * 180.0) * rp.y * exp(-rp.x * 1.6);
+    h += 0.3 * env * sin(x * 70.0);
+    g += 0.3 * rd * env * (70.0 * cos(x * 70.0) - 360.0 * x * sin(x * 70.0));
+  }
+  vec3 n = normalize(vec3(-g * amp, 1.0));
+  vec3 refl = 2.0 * n * n.z - vec3(0, 0, 1);
+  float rr = length(refl.xy), ang = atan(refl.y, refl.x);
+  float leds = 0.85 + 0.15 * cos(ang * 36.0);
+  float ring = exp(-pow((rr - RING_A) / 0.022, 2.0)) * leds + 0.3 * exp(-pow((rr - RING_B) / 0.035, 2.0));
+  float fres = 0.04 + 0.96 * pow(1.0 - n.z, 5.0);
+  vec3 c = uBase * (0.2 + 0.1 * h);
+  c += uHot * ring * (0.7 + fres * 2.0);
+  c += uCool * exp(-rr * 6.0) * 0.05;
+  c += uCool * exp(-pow((r - R) / 0.004, 2.0)) * 0.35;      // the dish wall's highlight
+  return c;
+}
+void main() {
+  vec2 p = (vUv * 2.0 - 1.0) / uKp * R;
+  float a;
+  vec3 c = shade(p, a);
+  o = vec4(c * a, a);
+}`;
+
+// ── Iron filings: frosted paper under raking light + 36,864 oriented filings
+const PAPER_FS = `#version 300 es
+precision highp float;
+uniform vec3 uPaper, uLight;
+uniform vec2 uLd;            // raking light direction (from the light, in plate space)
+uniform float uK, uPx, uN;
+in vec2 vUv; out vec4 o;
+float h12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h12(i), h12(i + vec2(1, 0)), f.x), mix(h12(i + vec2(0, 1)), h12(i + vec2(1, 1)), f.x), f.y); }
+void main() {
+  vec2 p = (vUv * 2.0 - 1.0) / uK;
+  vec2 a = abs(p);
+  float r = pow(pow(a.x, uN) + pow(a.y, uN), 1.0 / uN);
+  if (r > 1.0 + 3.0 * uPx) { o = vec4(0.0); return; }
+  // raking light: bright on the side it comes from, falling off across the sheet
+  float rake = 0.55 + 0.45 * smoothstep(1.4, -1.2, dot(p, -uLd));
+  // frosted paper: soft cloudy formation + fine tooth, lit at a grazing angle (tooth shows as relief)
+  float form = vn(p * 7.0) * 0.6 + vn(p * 19.0) * 0.4;
+  float tooth = vn(p * 210.0) - vn(p * 210.0 + uLd * 0.9);
+  vec3 c = uPaper * rake * (0.9 + 0.12 * form + 0.18 * tooth);
+  c += uLight * 0.03 * rake;
+  float m = 1.0 - smoothstep(1.0 - uPx, 1.0 + uPx, r);
+  // the sheet's lit edge and its shadowed far edge
+  c *= 1.0 - 0.3 * smoothstep(0.985, 1.0, r) * step(0.0, dot(p, uLd));
+  o = vec4(c * m, m);
+}`;
+const FIL_UPDATE_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform vec4 uPoles[6];       // x, y, q (±strength), -
+uniform float uDt, uTap, uAlign, uLines, uScatter;
+uniform uint uFrame;
+out vec4 o;
+uvec3 pcg3d(uvec3 v) { v = v * 1664525u + 1013904223u; v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y; v ^= v >> 16u; v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y; return v; }
+vec3 hash3(uvec3 v) { return vec3(pcg3d(v)) * (1.0 / 4294967295.0); }
+// 2D field of the poles (line-charge model) and its stream function ψ (field lines = contours of ψ)
+void field(vec2 p, out vec2 B, out vec2 gpsi, out float B2) {
+  B = vec2(0.0); gpsi = vec2(0.0);
+  for (int i = 0; i < 6; i++) {
+    vec4 P = uPoles[i];
+    if (abs(P.z) < 1e-3) continue;
+    vec2 d = p - P.xy;
+    float r2 = dot(d, d) + 0.0045;
+    B += P.z * d / r2;
+    gpsi += P.z * vec2(-d.y, d.x) / r2;
+  }
+  B2 = dot(B, B);
+}
+float psi(vec2 p) {
+  float s = 0.0;
+  for (int i = 0; i < 6; i++) { vec4 P = uPoles[i]; if (abs(P.z) < 1e-3) continue; vec2 d = p - P.xy; s += P.z * atan(d.y, d.x); }
+  return s;
+}
+void main() {
+  ivec2 ij = ivec2(gl_FragCoord.xy);
+  vec4 s = texelFetch(uState, ij, 0);
+  vec3 r = hash3(uvec3(ij, uFrame));
+  vec2 p = s.xy;
+  if (uScatter > 0.5) { o = vec4(r.xy * 1.9 - 0.95, r.z * 3.14159, 0.0); return; }
+  vec2 B, gp; float B2;
+  field(p, B, gp, B2);
+  float Bm = sqrt(B2);
+  // tap: filings hop (more where the field is weak, they are less held), then settle
+  float free = min(uTap, 1.2) * (0.3 + r.y);
+  float ang = r.x * 6.2831853;
+  vec2 step = vec2(cos(ang), sin(ang)) * free * 0.0017;
+  // chain onto field lines: drift down ∇ sin²(Nψ/2), which points across the field toward the nearest
+  // line; the step is capped so a tap nudges filings into chains rather than sweeping them away
+  float ps = psi(p);
+  float gl = length(gp);
+  vec2 across = gp / max(gl, 1e-3);
+  float pull = sin(uLines * ps);                      // sign: which way the nearest line lies
+  float dist = abs(pull) / (uLines * max(gl, 0.5));   // ≈ distance to it
+  float hold = clamp(Bm * 0.22, 0.04, 1.0);            // chains form where the field is strong
+  step -= across * sign(pull) * min(dist * 0.35, 0.0009) * min(uTap * 3.0, 1.0) * hold;
+  p += step * min(uDt * 60.0, 2.0);
+  // reflect at the sheet's edge (a hard clamp would pile filings up along the border)
+  if (p.x > 0.965) p.x = 1.93 - p.x; if (p.x < -0.965) p.x = -1.93 - p.x;
+  if (p.y > 0.965) p.y = 1.93 - p.y; if (p.y < -0.965) p.y = -1.93 - p.y;
+  // rotate into the field (axis, so mod π): faster while tapped and in strong fields
+  float target = atan(B.y, B.x);
+  float da = target - s.z;
+  da = da - 3.14159265 * floor(da / 3.14159265 + 0.5);
+  float k = clamp((uAlign + uTap * 6.0) * min(Bm * 0.5, 1.0) * uDt * 60.0, 0.0, 1.0);
+  float a = s.z + da * k;
+  o = vec4(p, a, mix(s.w, clamp(length(step) * 400.0, 0.0, 1.0), 0.2));
+}`;
+const FIL_DRAW_VS = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform int uSide;
+uniform float uSize, uK;
+out vec2 vAx; out float vE; out float vSeed;
+void main() {
+  int id = gl_VertexID;
+  vec4 s = texelFetch(uState, ivec2(id % uSide, id / uSide), 0);
+  gl_Position = vec4(s.xy * uK, 0.0, 1.0);
+  gl_PointSize = uSize;
+  vAx = vec2(cos(s.z), sin(s.z)); vE = s.w;
+  vSeed = fract(float(id) * 0.61803);
+}`;
+const FIL_DRAW_FS = `#version 300 es
+precision highp float;
+uniform vec2 uLd;            // light direction (plate space), shadows fall along it
+uniform float uLift, uLen;
+uniform vec3 uSteel, uGlint;
+in vec2 vAx; in float vE; in float vSeed; out vec4 o;
+float capsule(vec2 q, vec2 ax, float len, float w) {
+  float t = clamp(dot(q, ax), -len, len);
+  return length(q - ax * t) - w;
+}
+void main() {
+  vec2 q = (gl_PointCoord * 2.0 - 1.0) * vec2(1.0, -1.0);
+  float len = uLen * 1.25 * (0.75 + 0.5 * vSeed), w = 0.13;
+  float d = capsule(q, vAx, len, w);
+  float fa = 1.0 - smoothstep(-0.05, 0.08, d);
+  float ds = capsule(q - uLd * (0.08 + uLift * 0.8), vAx, len, w * 1.5);
+  float sa = (1.0 - smoothstep(-0.05, 0.25, ds)) * 0.45;
+  // anisotropic sheen: a filing across the light's direction catches it along its length
+  float across = abs(vAx.x * uLd.y - vAx.y * uLd.x);
+  vec3 c = uSteel * (0.7 + 0.6 * vSeed) + uGlint * pow(across, 6.0) * (0.25 + 0.75 * step(0.82, vSeed));
+  float a = max(fa, sa * (1.0 - fa));
+  o = vec4(c * fa, a);
+}`;
+const BLIT_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; in vec2 vUv; out vec4 o;
+void main() { o = texture(uSrc, vUv); }`;
+const MIX_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uA, uB; uniform float uX; in vec2 vUv; out vec4 o;
+void main() { o = mix(texture(uB, vUv), texture(uA, vUv), uX); }`;
+
 // =====================================================================
 //  Post: HDR → dual-filter bloom → ACES (from cymatica/src/post.js), then an
 //  analytic plate mask so the canvas composites over the backdrop with alpha.
@@ -326,7 +536,7 @@ void main() {
 }`;
 const COMP_FS = `#version 300 es
 precision highp float;
-uniform sampler2D uScene, uBloom, uPlate;
+uniform sampler2D uScene, uBloom;
 uniform float uBloomAmt, uExposure, uGlow;
 in vec2 vUv; out vec4 o;
 vec3 aces(vec3 x) {
@@ -336,10 +546,10 @@ vec3 aces(vec3 x) {
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 void main() {
   vec2 q = vUv * 2.0 - 1.0;
-  vec4 pl = texture(uPlate, vUv);
-  float a = pl.a;
+  vec4 sc = texture(uScene, vUv);
+  float a = sc.a;
   float edge = 1.0 - smoothstep(0.80, 0.99, max(abs(q.x), abs(q.y)));
-  vec3 hdr = pl.rgb + texture(uScene, vUv).rgb * a + texture(uBloom, vUv).rgb * (uBloomAmt * mix(edge * uGlow, 1.0, a));
+  vec3 hdr = sc.rgb + texture(uBloom, vUv).rgb * (uBloomAmt * mix(edge * uGlow, 1.0, a));
   vec3 col = pow(aces(hdr * uExposure), vec3(1.0 / 2.2));
   col += (hash(gl_FragCoord.xy) - 0.5) / 255.0 * a;      // dither the dark metal
   float alpha = max(a, max(col.r, max(col.g, col.b)));   // outside the plate: valid premultiplied glow
@@ -354,6 +564,16 @@ function initGL() {
   GPU.down = program(FULLSCREEN_VS, DOWN_FS);
   GPU.up = program(FULLSCREEN_VS, UP_FS);
   GPU.comp = program(FULLSCREEN_VS, COMP_FS);
+  GPU.water = program(FULLSCREEN_VS, WATER_FS);
+  GPU.paper = program(FULLSCREEN_VS, PAPER_FS);
+  GPU.filUpdate = program(FULLSCREEN_VS, FIL_UPDATE_FS);
+  GPU.filDraw = program(FIL_DRAW_VS, FIL_DRAW_FS);
+  GPU.blit = program(FULLSCREEN_VS, BLIT_FS);
+  GPU.mix = program(FULLSCREEN_VS, MIX_FS);
+  const fcount = FSIDE * FSIDE, finit = new Float32Array(fcount * 4);
+  for (let i = 0; i < fcount; i++) { finit[i * 4] = Math.random() * 1.9 - 0.95; finit[i * 4 + 1] = Math.random() * 1.9 - 0.95; finit[i * 4 + 2] = Math.random() * Math.PI; }
+  GPU.fstate = [target(FSIDE, FSIDE, { internal: gl.RGBA32F, type: gl.FLOAT, filter: gl.NEAREST, data: finit }), target(FSIDE, FSIDE, { internal: gl.RGBA32F, type: gl.FLOAT, filter: gl.NEAREST })];
+  GPU.fcur = 0;
   const count = SIDE * SIDE, init = new Float32Array(count * 4);
   for (let i = 0; i < count; i++) {
     init[i * 4] = Math.random() * 1.96 - 0.98; init[i * 4 + 1] = Math.random() * 1.96 - 0.98;
@@ -366,10 +586,11 @@ function initGL() {
 function resizeGL(px) {
   if (px === GPU.size) return;
   GPU.size = px;
-  if (GPU.scene) { GPU.scene.dispose(); GPU.plateT.dispose(); }
+  if (GPU.scene) { GPU.scene.dispose(); GPU.plateT.dispose(); GPU.paperT.dispose(); GPU.scene2.dispose(); GPU.mixT.dispose(); }
   GPU.plateT = target(px, px); GPU.plateKey = '';
+  GPU.paperT = target(px, px); GPU.paperKey = '';
   GPU.mips.forEach((m) => m.dispose());
-  GPU.scene = target(px, px);
+  GPU.scene = target(px, px); GPU.scene2 = target(px, px); GPU.mixT = target(px, px);
   GPU.mips = [];
   let s = px >> 2;   // bloom starts at quarter res (glow only; keeps the pyramid cheap)
   for (let i = 0; i < 4 && s >= 8; i++, s >>= 1) GPU.mips.push(target(s, s));
@@ -418,10 +639,12 @@ function simStep(dt, agitate, morph) {
 const K = 0.88;          // plate size / GL canvas size (the rest is glow margin)
 const L = { W: 0, H: 0, dpr: 1, P: 0, cx: 0, cy: 0, C: 0, px: 0 };
 function layout() {
-  const W = innerWidth, H = innerHeight, zone = W * 0.72;
+  const W = innerWidth, H = innerHeight, cl = (LW.layout && LW.layout.clear) || [0, 0.72];
+  const x0 = cl[0] * W, zone = (cl[1] - cl[0]) * W;
   L.W = W; L.H = H; L.dpr = Math.min(2, devicePixelRatio || 1);
+  L.x0 = x0; L.x1 = x0 + zone;
   L.P = Math.round(Math.min(H * 0.72, zone * 0.8));
-  L.cx = Math.round(zone * 0.52);
+  L.cx = Math.round(x0 + zone * 0.52);
   L.cy = Math.round(H * 0.465);
   L.C = Math.round(L.P / K);
   L.px = Math.min(CAP, Math.round(L.C * L.dpr));
@@ -431,7 +654,7 @@ function layout() {
   layoutCaption();
   // breathing label: in the quiet strip right of the plate (still inside the left ~72%),
   // or above the plate when that strip is too narrow
-  const right = L.cx + L.P / 2, room = zone - right;
+  const right = L.cx + L.P / 2, room = L.x1 - right;
   LW.breathLabelAt = room > 150 ? [(right + room / 2) / W, L.cy / H] : [L.cx / W, Math.max(0.05, (L.cy - L.P / 2) / H - 0.045)];
   bg.dirty = true;
 }
@@ -440,7 +663,7 @@ function layout() {
 //  Backdrop: a dark studio, a soft light pool on the plate, time-of-day tint
 // =====================================================================
 const bgCv = document.getElementById('bg'), bgx = bgCv.getContext('2d');
-const bg = { dirty: true, at: -1, key: '', noise: null, shadow: null, shadowKey: '' };
+const bg = { dirty: true, at: -1, key: '', noise: null, shadow: null, shadowKey: '', round: false };
 // hour → [base, pool, light] (sRGB 0..255); light tints the plate bevel and sand highlights
 const TOD = [
   [0,    [6, 7, 12],   [24, 27, 38],  [190, 205, 235]],
@@ -490,7 +713,7 @@ function bakeBg() {
   g.fillStyle = gr; g.fillRect(0, 0, L.W, L.H);
   // contact shadow under the plate (light from straight above → soft, nearly centred).
   // shadowBlur is slow, so it is rendered once per layout/shape and reused by every rebake.
-  const skey = w + 'x' + h + '|' + L.cx + ',' + L.cy + ',' + L.P + '|' + (V.shapeShown > 0.5 ? 1 : 0);
+  const skey = w + 'x' + h + '|' + L.cx + ',' + L.cy + ',' + L.P + '|' + (bg.round ? 0 : 1);
   if (skey !== bg.shadowKey) {
     bg.shadowKey = skey;
     const sc = bg.shadow || (bg.shadow = document.createElement('canvas'));
@@ -500,7 +723,7 @@ function bakeBg() {
     sg.setTransform(s, 0, 0, s, 0, 0);
     sg.shadowColor = 'rgba(0,0,0,0.7)'; sg.shadowBlur = P * 0.05 * s; sg.shadowOffsetX = 20000 * s; sg.shadowOffsetY = P * 0.018 * s;
     sg.fillStyle = '#000'; sg.beginPath();
-    if (V.shapeShown > 0.5) sg.roundRect(x0 - 20000, y0, P, P, P * 0.04); else sg.arc(L.cx - 20000, L.cy, P / 2, 0, TAU);
+    if (!bg.round) sg.roundRect(x0 - 20000, y0, P, P, P * 0.04); else sg.arc(L.cx - 20000, L.cy, P / 2, 0, TAU);
     sg.fill();
     sg.shadowBlur = P * 0.16 * s; sg.shadowColor = 'rgba(0,0,0,0.45)'; sg.shadowOffsetY = P * 0.045 * s; sg.fill();
   }
@@ -528,7 +751,8 @@ function rgb2hsl(r, g, b) {
   const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
   return [h * 60, s, l];
 }
-function palFromHash(s) { const h = hash(s) % 360; return { tint: hsl2rgb(h, 0.45, 0.6), acc: hsl2rgb((h + 140) % 360, 0.4, 0.6), dark: hsl2rgb(h, 0.35, 0.14) }; }
+// until the artwork arrives, the tint comes from the harmony (music.js key palette), not the title
+function palFromHarmony() { const s = (c) => c.map((v) => Math.pow(clamp(v, 0, 1), 1 / 2.2) * 255); return { tint: s(LW.mx.pal.mid.map((v) => v * 2.2)), acc: s(LW.mx.pal.accent), dark: s(LW.mx.pal.deep) }; }
 function extractPalette(img) {
   try {
     const c = document.createElement('canvas'); c.width = c.height = 24;
@@ -576,7 +800,7 @@ function onNowPlaying(np) {
     const key = (np.title || '') + '\n' + (np.artist || '') + '\n' + (np.album || '');
     if (key !== prevKey) {
       music.key = key; music.newT = nowS(); music.art = null;
-      music.pal = palFromHash(key);
+      music.pal = palFromHarmony();
       if (!np.artwork) music.artKey = '';
       onTrack(key);
     }
@@ -612,36 +836,14 @@ function media(cmd) {
   else { demoI = (demoI + (cmd === 'next' ? 1 : DEMO.length - 1)) % DEMO.length; window.__lw('nowplaying', demoTrack(demoI)); }
 }
 
-// Dev only: a fake 122 bpm track (intro / build / drop / breakdown) fed through the host's
-// own beat entry point, so everything downstream is the real code path. Pauses itself for
-// 3s whenever someone else (the host, or __lw('beat', …) by hand) feeds frames.
-const FAKE = { on: DEV && qs.get('fake') !== '0', t: 0, lastBeat: -1, mine: -1, extUntil: -1 };
-function fakeMusic(dt, T) {
-  const M = LW.music;
-  if (FAKE.mine >= 0 && M.lastLive !== FAKE.mine && M.lastLive > FAKE.mine) FAKE.extUntil = T + 3;
-  if (!FAKE.on || !music.playing || T < FAKE.extUntil) return;
-  FAKE.t += dt;
-  const beat = FAKE.t * 122 / 60, bi = Math.floor(beat), fr = beat - bi;
-  const bar = Math.floor(bi / 4) % 32, sec = bar < 8 ? 0 : bar < 16 ? 1 : bar < 24 ? 2 : 3;
-  const prog = ((bar % 8) + ((bi % 4) + fr) / 4) / 8;
-  const kickOn = sec !== 3 && !(sec === 1 && prog > 0.92);
-  const env = Math.exp(-fr * 7), wob = 0.06 * Math.sin(FAKE.t * 1.7);
-  const base = [0.3, 0.38 + 0.22 * prog, 0.7, 0.2][sec];
-  const b = clamp(base * 0.85 + (kickOn ? 0.35 * env : 0), 0, 1);
-  const m = clamp([0.3, 0.4, 0.6, 0.32][sec] + wob, 0, 1);
-  const h = clamp([0.15, 0.22 + 0.55 * prog, 0.55, 0.38][sec] + wob, 0, 1);
-  const l = clamp(base * 0.55 + 0.2 * m + 0.15 * h + (kickOn ? 0.12 * env : 0), 0, 1);
-  let k = 0;
-  if (bi !== FAKE.lastBeat) { FAKE.lastBeat = bi; if (kickOn) k = sec === 2 ? 0.85 : 0.55; }
-  window.__lw('beat', { l, b, m, h, k });
-  FAKE.mine = M.lastLive;
-}
+// Dev: the fake track (levels, beats AND chroma through a chord progression) now lives in music.js.
+const MX = LW.mx;
 
 // =====================================================================
 //  Director: music → figure, agitation, light
 // =====================================================================
 const S = {
-  pc: 9, tier: 1, tierWant: 1, bright: 0.4, energy: 0.2, pulse: 0, burst: 0,
+  pc: 9, minor: true, pending: -1, tier: 1, tierWant: 1, bright: 0.4, energy: 0.2, pulse: 0, burst: 0,
   strong: 0, dwell: 0, silentFor: 99, autoT: 0, changes: 0,
   shapeWant: 0, // 0 square, 1 round (what the music asks for)
 };
@@ -651,19 +853,34 @@ const V = {
   bgBase: [6, 7, 12], bgPool: [24, 27, 38], expo: 0.9, bgA: 1, shape: 1, shapeShown: 1, fade: 1, gain: 0.3,
 };
 function plateSetting() { const p = LW.settings.plate; return p === 'square' || p === 'round' ? p : 'auto'; }
+// auto plate: the key's mode picks the shape (minor round, major square), at most one change per 30 s
+const AUTOSHAPE = { round: false, at: -99 };
+MX.on('key', ({ minor }) => { if (nowS() - AUTOSHAPE.at > 30 && MX.playing) { AUTOSHAPE.round = minor; AUTOSHAPE.at = nowS(); } });
 function wantRound() {
+  const sk = skinNow();
+  if (sk === 'faraday') return true;
+  if (sk === 'filings') return false;
   const s = plateSetting();
   if (s !== 'auto') return s === 'round';
-  return music.key ? ((hash(music.key) >>> 5) & 1) === 1 : false;
+  return music.key ? AUTOSHAPE.round : false;
 }
 function onTrack(key) {
-  S.pc = hash(key) % 12;            // each song has a home figure
+  S.pc = MX.root; S.minor = MX.minor; S.pending = -1;   // the figure follows the harmony from the first chord
   S.dwell = 0; S.strong = 0; S.autoT = 0;
   S.burst = 1;                      // the sand jumps at the new song
+  AUTOSHAPE.round = MX.keyMinor; AUTOSHAPE.at = nowS();
 }
-function nextFigure() {
+// chords: applied once the current figure has had time to form (sand needs a few seconds)
+MX.on('chord', ({ root, minor }) => { if (music.playing) S.pending = root + (minor ? 12 : 0); });
+function applyChord() {
+  if (S.pending < 0) return;
+  S.pc = S.pending % 12; S.minor = S.pending >= 12; S.pending = -1;
+  S.tier = S.tierWant;
+  S.dwell = 0; S.strong = 0; S.changes++;
+}
+function nextFigure() {   // autopilot (nothing playing): a slow walk round the circle of fifths
   const r = Math.random();
-  S.pc = (S.pc + (r < 0.62 ? 7 : r < 0.88 ? 5 : 2)) % 12;   // ±1 step around the circle of fifths, now and then 2
+  S.pc = (S.pc + (r < 0.62 ? 7 : r < 0.88 ? 5 : 2)) % 12;
   S.tier = S.tierWant;
   S.dwell = 0; S.strong = 0; S.autoT = 0; S.changes++;
 }
@@ -684,21 +901,20 @@ function direct(dt, T) {
   const auto = !playing || S.silentFor > 4;
   const cl = calm.lv;
 
-  // brightness: share of highs vs lows, slowly smoothed → complexity tier with hysteresis
-  const tot = M.bass + M.mid + M.high + 1e-3;
-  const centroid = auto ? 0.4 : (0.5 * M.mid + M.high) / tot;
-  S.bright = approach(S.bright, centroid, 2.5, dt);
-  const raw = clamp((S.bright - 0.3) / 0.22, 0, 1) * 2.6;
+  // brightness (music.js: host spectral centroid, or a band-ratio proxy) → complexity tier with hysteresis
+  S.bright = approach(S.bright, auto ? 0.4 : MX.bright, 2.5, dt);
+  const raw = clamp((S.bright - 0.25) / 0.4, 0, 1) * 2.6;
   if (raw > S.tierWant + 1.15) S.tierWant++;
   else if (raw < S.tierWant - 0.15) S.tierWant--;
   S.tierWant = clamp(S.tierWant, 0, 2);
   if (auto || cl > 0.5) S.tierWant = Math.min(S.tierWant, 1);
 
-  // cadence: 16 strong beats (and ≥ 7s), or 15s; autopilot walks slower; calm almost holds still
+  // cadence: playing → the harmony (a new chord once the figure has formed, ≥ 3.5 s); autopilot walks
+  // the circle of fifths slowly; calm almost holds still
   S.dwell += dt;
   if (cl > 0.5) { if (S.dwell > 45) nextFigure(); }
   else if (auto) { S.autoT += dt; if (S.autoT > (music.ever ? 16 : 20)) nextFigure(); }
-  else if ((S.strong >= 16 && S.dwell >= 7) || S.dwell >= 15) nextFigure();
+  else if (S.dwell >= 3.5) applyChord();
 
   // energy → agitation
   const breathLv = cl > 0.01 ? calm.br.level : 0;
@@ -774,8 +990,11 @@ function layoutCaption() {
   cap.dirty = true;
 }
 function figureLabel() {
-  const [n, m] = sandMode(S.pc, S.tier, sand.round);
-  return (sand.round ? 'round plate' : 'square plate') + ' · mode ' + n + ',' + m;
+  const chord = music.playing ? MX.pcName(S.pc) + (S.minor ? 'm' : '') + '  ·  ' : '';
+  if (SK.cur === 'faraday') return chord + (WAT.radial > 0.5 ? 'resting rings' : 2 * WAT.n1 + '-fold');
+  if (SK.cur === 'filings') { const n = FIL.poles.filter((p) => Math.abs(p.tq) > 0.5).length; return chord + (n === 2 ? 'dipole' : n === 4 ? 'quadrupole' : 'ring of ' + n); }
+  const [n, m] = sandMode(S.pc, S.tier, sand.round, S.minor);
+  return chord + (sand.round ? 'round plate' : 'square plate') + ' · mode ' + n + ',' + m;
 }
 function captionKey() {
   const np = music.np;
@@ -792,7 +1011,7 @@ function drawCaption(dt) {
     if (tag.t > 12) { tag = null; }
   }
   const fadeOn = Math.abs(cap.a - (want === cap.shownKey ? 1 : 0)) > 0.004;
-  const key = cap.shownKey + '|' + fig + '|' + (music.playing ? 1 : 0) + '|' + (music.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
+  const key = cap.shownKey + '|' + SK.cur + '|' + fig + '|' + (music.playing ? 1 : 0) + '|' + (music.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
   if (!cap.dirty && !fadeOn && !tag && key === cap.key) return;
   cap.key = key; cap.dirty = false;
 
@@ -827,9 +1046,9 @@ function drawCaption(dt) {
   } else {
     g.globalAlpha = A * 0.55; g.fillStyle = '#efe8dd';
     g.font = `italic 400 ${fsT}px ${SERIF}`;
-    g.fillText('Chladni plate', 0, top);
+    g.fillText(SK.cur === 'faraday' ? 'Faraday water' : SK.cur === 'filings' ? 'Iron filings' : 'Chladni plate', 0, top);
     g.globalAlpha = A * 0.3; g.font = `400 ${fsA}px ${SANS}`;
-    g.fillText('play some music, the sand will follow', 0, top + fsT * 1.3 + 4);
+    g.fillText(SK.cur === 'faraday' ? 'play some music, the water will follow' : SK.cur === 'filings' ? 'play some music, the filings will follow' : 'play some music, the sand will follow', 0, top + fsT * 1.3 + 4);
   }
   // right side of the band (still inside the left ~70% of the screen): the figure, engraved-small,
   // or a reminder tag when one is showing
@@ -865,9 +1084,46 @@ function ellipsize(g, s, maxW) {
 // =====================================================================
 const shapeN = () => Math.exp(lerp(Math.log(2), Math.log(40), V.shape));
 const DBG = { sim: 1, plate: 1, points: 1, bloom: 1, comp: 1 };   // perf bisection (window.__cym.DBG)
-function render(dt, T, d) {
+
+// =====================================================================
+//  Skins: sand · faraday · filings. Each renders HDR + coverage alpha into its own target;
+//  a switch crossfades the two targets for ~1.6 s (both simulate meanwhile).
+// =====================================================================
+const SKINS = ['sand', 'faraday', 'filings'];
+const skinWanted = () => SKINS.includes(LW.settings.skin) ? LW.settings.skin : 'sand';
+const SK = { cur: skinWanted(), prev: null, x: 1 };
+function skinNow() { return SK.cur; }
+function updateSkin(dt) {
+  const want = skinWanted();
+  if (want !== SK.cur) { SK.prev = SK.cur; SK.cur = want; SK.x = 0; cap.dirty = true; S.burst = 1; if (want === 'filings') FIL.tap = 1.4; }
+  if (SK.x < 1) SK.x = Math.min(1, SK.x + dt / 1.6);
+}
+// Faraday water state (cymatica/src/water.js)
+const WSYM = [2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3];
+const WAT = { n0: 3, n1: 3, mix: 1, k: 26, radial: 1, ripples: [], buf: new Float32Array(16), amp: 0.01, above: false };
+function waterSymmetry(pc, minor) { const n = WSYM[(pc * 7) % 12]; return minor && n < 8 ? n + 1 : n; }
+// Iron filings state: poles under the sheet, laid out on the circle of fifths
+const FIL = { poles: Array.from({ length: 6 }, (_, i) => ({ a: i, r: 0.5, q: 0, ta: i, tr: 0.5, tq: 0 })), buf: new Float32Array(24), tap: 1, lightA: 0.6, key: '' };
+// poles sit evenly round a ring under the sheet; the ring turns to the chord root's place on the circle of
+// fifths (+ the key), polarity alternates, minor chords pull the ring in. Brightness → pole count.
+function filPoles() {
+  const n = S.tier >= 2 ? 6 : S.tier >= 1 ? 4 : 2;
+  const base = -Math.PI / 2 + ((S.pc * 7) % 12) / 12 * TAU + (MX.keyPos / 12) * TAU * 0.25;
+  const R = (n === 2 ? 0.5 : n === 4 ? 0.52 : 0.58) * (S.minor ? 0.82 : 1);
+  FIL.poles.forEach((P, i) => {
+    if (i < n) { P.ta = base + i * TAU / n; P.tr = R; P.tq = i % 2 ? -1 : 1; } else P.tq = 0;
+  });
+}
+LW.on('beat', (s) => {
+  if (calm.lv > 0.5) return;
+  WAT.ripples.push({ age: 0, str: Math.min(1, 0.4 + s * 0.6) });
+  if (WAT.ripples.length > 4) WAT.ripples.shift();
+  FIL.tap = Math.max(FIL.tap, 0.25 + 0.75 * s * (0.4 + 0.6 * clamp(LW.music.level, 0, 1)));
+});
+
+function drawSand(tgt, dt, d) {
   // plate shape: fade the sand, morph the outline, swap the mode family at the midpoint
-  const wantR = wantRound();
+  const wantR = SK.cur === 'sand' ? wantRound() : sand.round;
   const shapeT = wantR ? 0 : 1;
   if (Math.abs(V.shape - shapeT) > 0.001 || sand.round !== wantR) {
     V.fade = approach(V.fade, 0, 0.25, dt);
@@ -875,14 +1131,11 @@ function render(dt, T, d) {
     if (Math.abs(V.shape - shapeT) < 0.5 && sand.round !== wantR) { sand.setRound(wantR); V.shapeShown = shapeT; bg.dirty = true; }
     if (Math.abs(V.shape - shapeT) < 0.002) V.shape = shapeT;
   } else V.fade = approach(V.fade, 1, 0.9, dt);
-
-  sand.setMode(...sandMode(S.pc, S.tier, sand.round));
+  sand.setMode(...sandMode(S.pc, S.tier, sand.round, S.minor));
   sand.morphModes(dt, d.morph);
   const n = clamp(Math.round(dt * 60), 1, 3), sdt = dt / n;
   const agit = d.agitate + 0.04 * (1 - V.fade);
   if (DBG.sim) for (let i = 0; i < n; i++) simStep(sdt, agit, d.morph);
-
-  // plate texture: re-rendered only when its look changes (palette glide, shape morph, resize)
   const px = GPU.size, platePx = px * K;
   gl.disable(gl.BLEND);
   const pkey = V.plate.concat(V.light).map((v) => Math.round(v * 2000)).join(',') + '|' + shapeN().toFixed(3);
@@ -892,10 +1145,10 @@ function render(dt, T, d) {
     GPU.plate.use({ uBase: V.plate, uLight: V.light, uK: K, uPx: 1.5 / platePx * 2, uBrush: platePx * 0.5, uN: shapeN() });
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
-  // scene (HDR): grains, additively
-  bindTarget(GPU.scene);
-  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  bindTarget(tgt); bindTex(0, GPU.plateT.tex);
+  GPU.blit.use({ uSrc: 0 });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
   bindTex(0, GPU.state[GPU.cur].tex);
   const hot = mix3(V.hot, V.light.map((v) => v * Math.max(V.hot[0], V.hot[1], V.hot[2])), 0.15);
   GPU.draw.use({
@@ -904,9 +1157,117 @@ function render(dt, T, d) {
   });
   if (DBG.points) gl.drawArrays(gl.POINTS, 0, SIDE * SIDE);
   gl.disable(gl.BLEND);
+}
 
-  // bloom
+function drawWater(tgt, dt, T, d) {
+  const playing = music.playing && !d.auto, cl = calm.lv;
+  // Faraday threshold (with hysteresis): below it the dish only shows axisymmetric rings
+  const e = S.energy;
+  if (!WAT.above && e > 0.32 && playing) WAT.above = true;
+  else if (WAT.above && (e < 0.2 || !playing)) WAT.above = false;
+  const n = waterSymmetry(S.pc, S.minor);
+  if (n !== WAT.n1) { WAT.n0 = WAT.mix > 0.5 ? WAT.n1 : WAT.n0; WAT.n1 = n; WAT.mix = 0; }
+  const morph = lerp(playing ? 0.8 : 1.4, 2.4, cl);
+  WAT.mix = Math.min(1, WAT.mix + dt / (morph * 2.5));
+  const restRing = !WAT.above || cl > 0.5;
+  const kMul = restRing ? (playing ? 1 : 0.3 + 0.7 * (cl > 0.5 ? calm.br.level : 0.35 + 0.15 * Math.sin(T * 0.2))) : 1;
+  const kT = (18 + S.tier * 9) * kMul;
+  WAT.k += (kT - WAT.k) * (1 - Math.exp(-dt / Math.min(1.5, morph * 1.5)));
+  WAT.radial += ((restRing ? 1 : 0) - WAT.radial) * (1 - Math.exp(-dt / morph));
+  const ampT = lerp(0.006 + 0.026 * e + 0.006 * S.pulse, 0.004 + 0.01 * calm.br.level, cl);
+  WAT.amp = approach(WAT.amp, ampT, 0.25, dt);
+  WAT.ripples.forEach((r) => { r.age += dt; });
+  WAT.ripples = WAT.ripples.filter((r) => r.age < 2.5);
+  WAT.buf.fill(0);
+  WAT.ripples.forEach((r, i) => WAT.buf.set([r.age, r.str, 0, 0], i * 4));
+  const m = WAT.mix * WAT.mix * (3 - 2 * WAT.mix);
+  bindTarget(tgt); gl.disable(gl.BLEND);
+  const hot = mix3(V.hot, V.light, 0.3).map((v) => v * 1.25);
+  GPU.water.use({
+    uTime: T, uK: WAT.k, uN0: WAT.n0, uN1: WAT.n1, uMix: m, uAmp: WAT.amp, uPx: 2 / (GPU.size * K), uRadial: WAT.radial, uKp: K,
+    uRipples: WAT.buf, uHot: hot, uCool: V.cool.map((v) => v * 1.6), uBase: V.plate.map((v) => v * 1.4 + 0.004),
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+function drawFilings(tgt, dt, T, d) {
+  const cl = calm.lv;
+  // poles: motor-limited glide toward the harmony's layout
+  const key = S.pc + '|' + S.minor + '|' + S.tier + '|' + MX.keyPos;
+  if (key !== FIL.key) { FIL.key = key; filPoles(); FIL.tap = Math.max(FIL.tap, 0.5); }
+  FIL.poles.forEach((P, i) => {
+    // motor-limited glide along the ring (shortest way round)
+    let da = ((P.ta - P.a) % TAU + TAU * 1.5) % TAU - Math.PI;
+    P.a += clamp(da * 1.2, -0.7, 0.7) * dt;
+    P.r = approach(P.r, P.tr, 1.5, dt); P.q = approach(P.q, P.tq, 1.2, dt);
+    FIL.buf.set([Math.cos(P.a) * P.r, Math.sin(P.a) * P.r, P.q, 0], i * 4);
+  });
+  // taps: kicks (+ the breath lifts them a little in calm); a slow idle tap now and then
+  const breath = cl > 0.01 ? calm.br.level : 0;
+  FIL.tap *= Math.exp(-dt / 0.35);
+  if (d.auto && Math.random() < dt / 9) FIL.tap = Math.max(FIL.tap, 0.35);
+  const tap = lerp(FIL.tap + 0.004, 0.02 + 0.06 * breath, cl);
+  // raking light: its direction follows the time of day, very slowly
+  const h = LW.env.hour || 12;
+  FIL.lightA = approach(FIL.lightA, -2.4 + (h / 24) * Math.PI * 1.2, 20, dt);
+  const ld = [Math.cos(FIL.lightA), Math.sin(FIL.lightA)];
+  // sim
+  const n = 1, sdt = dt;   // one step per frame (the shader caps the step for long frames)
+  gl.disable(gl.BLEND);
+  for (let i = 0; i < n; i++) {
+    const src = GPU.fstate[GPU.fcur], dst = GPU.fstate[1 - GPU.fcur];
+    bindTarget(dst); bindTex(0, src.tex);
+    GPU.filUpdate.use({ uState: 0, uDt: sdt, uTap: tap, uAlign: 0.004, uLines: 16, uPoles: FIL.buf, uScatter: 0, uFrame: GPU.frame++ });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    GPU.fcur = 1 - GPU.fcur;
+  }
+  // paper (re-rendered only when its look changes)
+  const px = GPU.size, platePx = px * K;
+  const paper = toLin(mix3([200, 194, 182], V.bgPool.map((v) => v * 4), 0.15)).map((v) => v * 0.3 * (0.7 + 0.3 * V.light[1]));
+  const pk = paper.concat(ld).map((v) => Math.round(v * 400)).join(',');
+  if (pk !== GPU.paperKey) {
+    GPU.paperKey = pk;
+    bindTarget(GPU.paperT);
+    GPU.paper.use({ uPaper: paper, uLight: V.light, uLd: ld, uK: K, uPx: 1.5 / platePx * 2, uN: 26 });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  bindTarget(tgt); bindTex(0, GPU.paperT.tex);
+  GPU.blit.use({ uSrc: 0 });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+  bindTex(0, GPU.fstate[GPU.fcur].tex);
+  const len = Math.max(5, platePx * 0.0085);
+  GPU.filDraw.use({
+    uState: 0, uSide: FSIDE, uSize: len * 1.3, uK: K, uLd: [ld[0], ld[1]], uLift: 0.05 + 0.25 * breath * cl + 0.1 * Math.min(1, FIL.tap),
+    uLen: 0.5, uSteel: [0.012, 0.012, 0.013], uGlint: V.light.map((v) => v * 0.28),
+  });
+  gl.drawArrays(gl.POINTS, 0, FSIDE * FSIDE);
+  gl.disable(gl.BLEND);
+}
+
+function drawSkin(name, tgt, dt, T, d) {
+  if (name === 'faraday') drawWater(tgt, dt, T, d);
+  else if (name === 'filings') drawFilings(tgt, dt, T, d);
+  else drawSand(tgt, dt, d);
+}
+function render(dt, T, d) {
+  updateSkin(dt);
+  drawSkin(SK.cur, GPU.scene, dt, T, d);
   let src = GPU.scene;
+  if (SK.x < 1 && SK.prev) {
+    drawSkin(SK.prev, GPU.scene2, dt, T, d);
+    bindTarget(GPU.mixT); gl.disable(gl.BLEND);
+    bindTex(0, GPU.scene.tex); bindTex(1, GPU.scene2.tex);
+    const e = SK.x * SK.x * (3 - 2 * SK.x);
+    GPU.mix.use({ uA: 0, uB: 1, uX: e });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    src = GPU.mixT;
+  }
+  // the backdrop's contact shadow follows the shown plate's shape
+  const shownRound = (SK.x > 0.5 ? SK.cur : SK.prev || SK.cur) === 'sand' ? V.shapeShown < 0.5 : (SK.x > 0.5 ? SK.cur : SK.prev) === 'faraday';
+  if (shownRound !== bg.round) { bg.round = shownRound; bg.dirty = true; }
+  // bloom
+  const scene = src;
   if (DBG.bloom) GPU.mips.forEach((m, i) => {
     bindTarget(m); bindTex(0, src.tex);
     GPU.down.use({ uSrc: 0, uTexel: [1 / src.w, 1 / src.h], uThreshold: 0.7, uPrefilter: i === 0 ? 1 : 0, uSpread: i === 0 ? 1 : 0.5 });
@@ -921,10 +1282,10 @@ function render(dt, T, d) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   gl.disable(gl.BLEND);
-
   bindTarget(null);
-  bindTex(0, GPU.scene.tex); bindTex(1, GPU.mips[0].tex); bindTex(2, GPU.plateT.tex);
-  GPU.comp.use({ uScene: 0, uBloom: 1, uPlate: 2, uBloomAmt: 0.75 / GPU.mips.length, uExposure: V.expo, uGlow: 0.9 });
+  bindTex(0, scene.tex); bindTex(1, GPU.mips[0].tex);
+  const filingsW = SK.cur === 'filings' ? SK.x : SK.prev === 'filings' ? 1 - SK.x : 0;
+  GPU.comp.use({ uScene: 0, uBloom: 1, uBloomAmt: lerp(0.75, 0.25, filingsW) / GPU.mips.length, uExposure: V.expo, uGlow: 0.9 });
   if (DBG.comp) gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
@@ -946,7 +1307,7 @@ function tick(dt, T) {
   // lw.js's guide clock while its label is up (it starts on the load event, which can trail this script by
   // seconds while art loads); our own clock only for scene-started calm (breathe reminder), which has no label
   calm.br = calm.lv > 0.01 ? LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) : { level: 0 };
-  if (DEV) fakeMusic(dt, T);
+  MX.update(dt);
   const d = direct(dt, T);
   updatePalette(dt);
   if (bg.dirty && T - bg.at > 0.5) { bg.dirty = false; bg.at = T; const b0 = rnow(); bakeBg(); PERF.bake = rnow() - b0; PERF.bakes++; }
@@ -992,6 +1353,7 @@ if (DEV) addEventListener('keydown', (e) => {
   if (e.key === '.') media('next');
   if (e.key === 'k') S.pulse = 1;
   if (e.key === 's') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  if (e.key === 'v') LW.set('skin', SKINS[(SKINS.indexOf(skinWanted()) + 1) % SKINS.length]);
   if (e.key === 'o') { const order = ['auto', 'square', 'round']; LW.set('plate', order[(order.indexOf(plateSetting()) + 1) % 3]); }
 });
 addEventListener('resize', layout);

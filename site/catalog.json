@@ -1,1 +1,34 @@
-{ "scenes": [] }
+{
+  "scenes": [
+    {
+      "id": "butterfly-garden",
+      "title": "Butterfly Garden",
+      "category": "Nature",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/butterfly-garden-1.zip",
+      "author": "wallpap",
+      "thumb": "scenes-pack/butterfly-garden.jpg"
+    },
+    {
+      "id": "beach",
+      "title": "Beach",
+      "category": "Nature",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/beach-1.zip",
+      "author": "wallpap",
+      "thumb": "scenes-pack/beach.jpg"
+    },
+    {
+      "id": "sky-kites",
+      "title": "Sky & Kites",
+      "category": "Mindful",
+      "pro": true,
+      "version": 1,
+      "zip": "scenes-pack/sky-kites-1.zip",
+      "author": "wallpap",
+      "thumb": "scenes-pack/sky-kites.jpg"
+    }
+  ]
+}

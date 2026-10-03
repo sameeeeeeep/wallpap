@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skies</title>
+<!--
+  wallpap scene: Skies, music played by the sky and the light. Skins (LW.settings.skin):
+    'komorebi'  Komorebi (default, free): sunlight through leaves on a linen wall. A patch of low sun
+                from a window falls on the wall; inside it, the shadows of a Japanese maple and a far
+                canopy sway with the song. The bright dapples are soft round pinhole images of the sun
+                (real optics): each gap between leaves projects the sun's disc, so the blur of a layer
+                grows with its depth and the dapples stretch into ellipses as the sun angle changes.
+                At night the light source is the moon, and the dapples take the moon's real phase
+                (crescent pinhole images, like the crescents under a tree during an eclipse): the kernel
+                is read from the shared photoreal moon (moon.js, LW.moonCanvas).
+
+  Music (LW.mx from music.js):
+    loudness           → wind: canopy sway amplitude (sway period tuned to one bar)
+    brightness         → leaf flutter speed + small glints where leaves flip
+    kick               → a gust crossing the wall left → right (a travelling sway, not a flash)
+    key + mode         → colour temperature of the light (major warmer, minor cooler; circle of fifths)
+    chord change       → the sun angle shifts slowly: dapples stretch/turn, the patch drifts a little
+    build              → a thin cloud drifts over the sun (the light softens, contrast drops)
+    drop               → the sun comes out from behind it (a 2 s exposure ramp, never a flash)
+    silence / paused   → a still afternoon: faint flutter, dust motes turning in the light
+    calm               → the canopy sways with the breath; the light dims a little
+  Time of day: golden mornings/evenings, neutral noon, blue dusk, moonlight at night (crescent dapples
+  by the real moon phase). Weather: cloud/rain/fog soften and dim the sun.
+
+  Render (WebGL2, one canvas, render res capped ~1.25 Mpx):
+    1. light pass (0.38× res): sun visibility through 3 canopy layers. Each layer's occluder is sampled
+       with a 16-tap pinhole kernel (Vogel disc, weighted by the sun/moon disc) at a mip matched to the
+       tap spacing → disc/crescent-shaped dapples. ~36 fetches/px at half res.
+    2. composite (full res): procedural linen weave × (sky ambient + sun × visibility × window patch),
+       window mullion shadow, a soft glow from the light buffer, dust motes, ACES, dither.
+  Art: scenes/art/skies/canopy-near.png, canopy-far.png (1024², grayscale, white = leaf; tileable-ish
+  Codex-generated silhouettes). Missing → procedural leaf masks.
+  Layout: the light patch sits in LW.layout.clear; the right ~28% is ambient wall only.
+  Dev keys (browser): n fake track, p play/pause demo, . next, k gust, s stretch, r water, b calm, t +3h.
+  Debug: window.__sky.bench(120).
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #2a241e; }
+  canvas { position: fixed; display: block; }
+  #gl { left: 0; top: 0; width: 100vw; height: 100vh; }
+  #cap { pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="cap"></canvas>
+<script src="lw.js"></script>
+<script src="moon.js"></script>
+<script src="music.js"></script>
+<script>
+'use strict';
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const approach = (v, t, tau, dt) => v + (t - v) * (1 - Math.exp(-dt / Math.max(1e-4, tau)));
+const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const nowS = () => performance.now() / 1000;
+const qs = new URLSearchParams(location.search);
+const DEV = !LW.isHost;
+const SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
+const SANS = '-apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
+const MX = LW.mx;
+const BUDGET = +(qs.get('px') || 1.25e6);
+
+// =====================================================================
+//  GL
+// =====================================================================
+const glCv = document.getElementById('gl');
+let gl = null;
+try {
+  gl = glCv.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, preserveDrawingBuffer: false });
+  if (gl && !gl.getExtension('EXT_color_buffer_float')) { console.warn('skies: EXT_color_buffer_float missing'); gl = null; }
+} catch (e) { gl = null; }
+if (gl) gl.bindVertexArray(gl.createVertexArray());
+const FS_VS = `#version 300 es
+out vec2 vUv;
+void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vUv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+function program(vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const setters = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) {
+    const info = gl.getActiveUniform(p, i), loc = gl.getUniformLocation(p, info.name), t = info.type, arr = info.size > 1;
+    setters[info.name.replace(/\[0\]$/, '')] = t === gl.FLOAT ? (arr ? (v) => gl.uniform1fv(loc, v) : (v) => gl.uniform1f(loc, v))
+      : t === gl.FLOAT_VEC2 ? (v) => gl.uniform2fv(loc, v) : t === gl.FLOAT_VEC3 ? (v) => gl.uniform3fv(loc, v)
+      : t === gl.FLOAT_VEC4 ? (v) => gl.uniform4fv(loc, v) : (v) => gl.uniform1i(loc, v);
+  }
+  return { use(u = {}) { gl.useProgram(p); for (const k in u) if (setters[k]) setters[k](u[k]); } };
+}
+function target(w, h) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex: t, fbo: f, w, h, dispose() { gl.deleteTexture(t); gl.deleteFramebuffer(f); } };
+}
+// canopy masks: uploaded ONCE (image or procedural canvas), mipmapped, repeating
+function maskTexture(src) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, src);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
+  return t;
+}
+// linen: a plain weave with slubs, baked once (512², tileable) and uploaded once
+function linenTexture() {
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), id = g.createImageData(S, S), d = id.data;
+  let s = 5; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const slubX = Array.from({ length: S }, () => 0.7 + 0.6 * r()), slubY = Array.from({ length: S }, () => 0.7 + 0.6 * r());
+  const wobX = Array.from({ length: S }, () => r()), low = [];
+  for (let i = 0; i < 64; i++) low.push(r());
+  const lowAt = (x, y) => { const a = low[((x >> 6) + (y >> 6) * 8) & 63], b = low[(((x >> 6) + 1) % 8 + (y >> 6) * 8) & 63]; return a + (b - a) * ((x & 63) / 64); };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const tx = x >> 1, ty = y >> 1, fx = (x & 1) + 0.5, fy = (y & 1) + 0.5;
+    const over = (tx + ty) & 1;
+    const wx = (1 - Math.abs(fx - 1) * 0.8) * slubX[tx] * (0.9 + 0.2 * Math.sin(y * 0.05 + wobX[tx] * 6));
+    const wy = (1 - Math.abs(fy - 1) * 0.8) * slubY[ty] * (0.9 + 0.2 * Math.sin(x * 0.043 + wobX[ty] * 6));
+    const v = 0.5 + 0.06 * (over ? wx : wy) + 0.035 * (lowAt(x, y) - 0.5) + 0.018 * (r() - 0.5);
+    const o = (y * S + x) * 4; d[o] = d[o + 1] = d[o + 2] = clamp(v, 0, 1) * 255; d[o + 3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, gl.RED, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  return t;
+}
+function proceduralCanopy(seed, n, leafR, branches) {
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, S, S); g.fillStyle = g.strokeStyle = '#fff';
+  let s = seed; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let b = 0; b < branches; b++) {
+    let x = r() * S, y = r() * S, a = r() * TAU;
+    g.lineWidth = 3 + r() * 4; g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 40; k++) {
+      a += (r() - 0.5) * 0.5; x += Math.cos(a) * 14; y += Math.sin(a) * 14; g.lineTo(x, y);
+      if (r() < 0.7) for (let l = 0; l < n / branches / 40 * 3; l++) {
+        const lx = x + (r() - 0.5) * leafR * 5, ly = y + (r() - 0.5) * leafR * 5, la = r() * TAU, lr = leafR * (0.6 + r() * 0.7);
+        g.save(); g.translate(lx, ly); g.rotate(la); g.beginPath(); g.ellipse(0, 0, lr, lr * 0.45, 0, 0, TAU); g.fill(); g.restore();
+      }
+    }
+    g.stroke();
+  }
+  return c;
+}
+
+// light pass: sun visibility through three canopy layers (pinhole kernels)
+const LIGHT_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uNear, uFar;
+uniform vec2 uAsp;             // (aspect, 1): uv → isotropic wall coords
+uniform vec4 uL0, uL1, uL2;    // per layer: scale, radius (wall units), mip bias, density
+uniform vec4 uO0, uO1, uO2;    // per layer: offset.xy (sway), flutter amount, seed
+uniform vec4 uGust;            // x position, width, strength, -
+uniform float uTime, uFlut, uMoteT;
+uniform vec2 uEll;             // ellipse: stretch, angle
+uniform float uTapW[16];
+uniform vec2 uTex;             // mask texel count (1024, 1024)
+in vec2 vUv; out vec4 o;
+uniform vec2 uTap[16];          // kernel tap positions (unit disc): the sun's disc, or the lit part of the moon
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
+float layer(sampler2D tex, vec2 p, vec4 L, vec4 O, mat2 E) {
+  vec2 gp = p;
+  float gx = exp(-pow((p.x - uGust.x) / uGust.y, 2.0)) * uGust.z;
+  gp += vec2(gx * 0.035, gx * 0.012) * (1.0 + O.w);
+  gp += O.xy;
+  // flutter: small per-leaf wobble
+  gp += O.z * 0.0035 * vec2(sin(gp.y * 57.0 + uTime * uFlut * 1.3 + O.w * 5.0), sin(gp.x * 61.0 - uTime * uFlut * 1.1));
+  vec2 uv = gp * L.x;
+  float rTex = L.y * L.x * uTex.x;           // kernel radius in texels
+  float lod = max(0.0, log2(max(rTex * 0.42, 1.0)) + L.z);
+  float acc = 0.0, wsum = 0.0;
+  int n = L.y < 0.0015 ? 1 : L.y < 0.006 ? 6 : L.y < 0.016 ? 10 : 16;
+  for (int i = 0; i < 16; i++) {
+    if (i >= n) break;
+    float w = n == 1 ? 1.0 : uTapW[i];
+    if (w < 0.01) continue;
+    vec2 q = uv + E * uTap[i] * L.y * L.x;
+    acc += w * (1.0 - textureLod(tex, q, lod).r * L.w);
+    wsum += w;
+  }
+  return acc / max(wsum, 1e-3);
+}
+void main() {
+  vec2 p = vUv * uAsp;
+  mat2 E = rot(uEll.y) * mat2(uEll.x, 0.0, 0.0, 1.0) * rot(-uEll.y);
+  float v = layer(uFar, p, uL0, uO0, E);
+  v *= layer(uFar, p + vec2(0.37, 0.61), uL1, uO1, E);
+  float vn = layer(uNear, p, uL2, uO2, E);
+  v *= vn;
+  // glow: the far layers' light seen through a wider kernel (cheap: two coarse taps)
+  float lodG = 4.5;
+  float gw = (1.0 - textureLod(uFar, (p + uO0.xy) * uL0.x, lodG).r * uL0.w) * (1.0 - textureLod(uFar, (p + vec2(0.37, 0.61) + uO1.xy) * uL1.x, lodG).r * uL1.w);
+  // dust motes: sparse specks drifting in the air, lit only where the sun reaches
+  vec2 mp = p * 26.0 + vec2(uTime * 0.0 + uMoteT * 0.11, -uMoteT * 0.05);
+  vec2 mc = floor(mp), mf = fract(mp);
+  float mh = fract(sin(dot(mc, vec2(127.1, 311.7))) * 43758.5453);
+  float mote = 0.0;
+  if (mh > 0.88) {
+    vec2 c = vec2(fract(mh * 13.7), fract(mh * 71.3)) * 0.6 + 0.2;
+    c += 0.2 * vec2(sin(uMoteT * 0.7 + mh * 30.0), cos(uMoteT * 0.53 + mh * 17.0));
+    mote = smoothstep(0.06, 0.0, length(mf - c)) * (0.5 + 0.5 * sin(uMoteT * 1.3 + mh * 40.0)) * v;
+  }
+  o = vec4(v, gw, mote, 1.0);
+}`;
+
+const COMP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uLight;
+uniform vec2 uRes, uAsp;
+uniform vec3 uSun, uSky, uWall, uBounce;
+uniform vec4 uPatch;     // centre.xy (uv), half size.xy (uv)
+uniform vec2 uSkew;      // shear of the patch (sun azimuth), mullion position
+uniform float uExpo, uTime, uGlow, uMull, uSoft;
+uniform vec4 uMote;      // count-ish, brightness, time, -
+in vec2 vUv; out vec4 o;
+vec3 aces(vec3 x) { const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
+float h12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h12(i), h12(i + vec2(1, 0)), f.x), mix(h12(i + vec2(0, 1)), h12(i + vec2(1, 1)), f.x), f.y); }
+uniform sampler2D uLinen;
+float linen(vec2 px) { return texture(uLinen, px / 512.0).r * 1.6 + 0.08; }
+float patchMask(vec2 uv) {
+  vec2 d = uv - uPatch.xy;
+  d.x -= d.y * uSkew.x;                         // the window's light is a parallelogram
+  vec2 a = abs(d) / uPatch.zw;
+  float m = smoothstep(1.0, 1.0 - uSoft, a.x) * smoothstep(1.0, 1.0 - uSoft * uAsp.x, a.y);
+  // mullion: a soft vertical + horizontal bar shadow
+  float mv = smoothstep(0.0, 0.012 + uSoft * 0.05, abs(d.x - uSkew.y * uPatch.z));
+  float mh = smoothstep(0.0, 0.012 + uSoft * 0.05, abs(d.y + 0.12 * uPatch.w));
+  return m * mix(1.0, mv * mh, uMull);
+}
+void main() {
+  vec2 px = gl_FragCoord.xy;
+  vec4 L = texture(uLight, vUv);
+  float vis = L.r;
+  float pm = patchMask(vUv);
+  float lin = linen(px * (1440.0 / max(uRes.x, 1.0)));
+  // ambient: skylight + a warm floor bounce toward the bottom; the patch lights the room a little
+  vec3 amb = uSky * (0.85 + 0.25 * vUv.y) + uBounce * (1.0 - vUv.y) * 0.6;
+  float spill = exp(-dot((vUv - uPatch.xy) * uAsp, (vUv - uPatch.xy) * uAsp) * 1.6);
+  amb += uSun * 0.05 * spill;
+  vec3 direct = uSun * vis * pm;
+  // glow around bright dapples + dust motes (both computed in the low-res light pass)
+  vec3 col = uWall * lin * (amb + direct) + uSun * pm * (L.g * L.g * uGlow + L.b * uMote.y);
+  // vignette
+  vec2 q = vUv - vec2(uPatch.x, 0.5);
+  col *= 1.0 - 0.28 * dot(q * vec2(0.9, 1.2), q * vec2(0.9, 1.2));
+  vec3 c = pow(aces(col * uExpo), vec3(1.0 / 2.2));
+  c += (h12(px + fract(uTime) * 61.0) - 0.5) / 255.0;
+  o = vec4(c, 1.0);
+}`;
+
+const GPU = { w: 0, h: 0 };
+function initGL() {
+  GPU.light = program(FS_VS, LIGHT_FS);
+  GPU.comp = program(FS_VS, COMP_FS);
+  GPU.near = maskTexture(proceduralCanopy(11, 900, 18, 6));
+  GPU.far = maskTexture(proceduralCanopy(37, 2600, 8, 14));
+  GPU.linen = linenTexture();
+  // Codex art, if present: replace the procedural masks
+  for (const [k, file] of [['near', 'canopy-near.png'], ['far', 'canopy-far.png']]) {
+    const img = new Image();
+    img.onload = () => { if (!gl || !img.naturalWidth) return; gl.deleteTexture(GPU[k]); GPU[k] = maskTexture(img); };
+    img.src = 'art/skies/' + file;
+  }
+}
+function resizeGL(w, h) {
+  if (w === GPU.w && h === GPU.h) return;
+  GPU.w = w; GPU.h = h;
+  if (GPU.lt) GPU.lt.dispose();
+  GPU.lt = target(Math.max(8, Math.round(w * 0.38)), Math.max(8, Math.round(h * 0.38)));
+}
+
+// =====================================================================
+//  Layout
+// =====================================================================
+const L = { W: 0, H: 0, dpr: 1, x0: 0, x1: 0, cx: 0, cy: 0, pw: 0, ph: 0 };
+function layout() {
+  const W = innerWidth, H = innerHeight, cl = (LW.layout && LW.layout.clear) || [0, 0.72];
+  L.W = W; L.H = H; L.dpr = Math.min(2, devicePixelRatio || 1);
+  L.x0 = cl[0] * W; L.x1 = cl[1] * W;
+  L.cx = L.x0 + (L.x1 - L.x0) * 0.5; L.cy = H * 0.44;
+  const scale = Math.min(L.dpr, Math.sqrt(BUDGET / (W * H)));
+  L.pw = Math.round(W * scale); L.ph = Math.round(H * scale);
+  if (glCv.width !== L.pw || glCv.height !== L.ph) { glCv.width = L.pw; glCv.height = L.ph; }
+  if (gl) resizeGL(L.pw, L.ph);
+  layoutCaption();
+  LW.breathLabelAt = [L.cx / W, 0.8];
+}
+
+// =====================================================================
+//  Light: time of day, weather, harmony → sun colour/intensity/angle
+// =====================================================================
+// hour → [sun colour (sRGB), sun intensity, sky colour, sky intensity, sun elevation]
+const TOD = [
+  [0, [150, 175, 225], 0.55, [30, 42, 70], 0.09, 0.6],
+  [5.2, [160, 170, 215], 0.4, [40, 46, 76], 0.1, 0.5],
+  [6.4, [255, 170, 120], 1.1, [120, 110, 130], 0.3, 0.1],
+  [8, [255, 206, 150], 2.8, [150, 165, 195], 0.38, 0.3],
+  [12, [255, 246, 232], 3.0, [175, 188, 210], 0.45, 0.9],
+  [16, [255, 222, 172], 3.0, [160, 172, 198], 0.4, 0.5],
+  [18.2, [255, 172, 104], 2.8, [140, 140, 170], 0.32, 0.14],
+  [19.4, [235, 140, 120], 0.8, [90, 90, 120], 0.2, 0.02],
+  [20.5, [160, 175, 225], 0.5, [36, 46, 78], 0.1, 0.5],
+  [24, [150, 175, 225], 0.55, [30, 42, 70], 0.09, 0.6],
+];
+function todAt(h) {
+  h = ((h % 24) + 24) % 24;
+  for (let i = 0; i < TOD.length - 1; i++) {
+    const a = TOD[i], b = TOD[i + 1];
+    if (h >= a[0] && h <= b[0]) {
+      const t = (h - a[0]) / (b[0] - a[0]), e = t * t * (3 - 2 * t);
+      return { sun: mix3(a[1], b[1], e), sunI: lerp(a[2], b[2], e), sky: mix3(a[3], b[3], e), skyI: lerp(a[4], b[4], e), elev: lerp(a[5], b[5], e) };
+    }
+  }
+  return null;
+}
+const isNight = (h) => { h = ((h % 24) + 24) % 24; return h < 5.6 || h > 20; };
+
+const K = {
+  wind: 0.2, swayT: 0, sway: [[0, 0], [0, 0], [0, 0]], gusts: [], flut: 0.5, flutT: 0, cloud: 0.25, cloudT: 0.25,
+  sunOut: 1, angle: 0.4, angleT: 0.4, stretch: 1.15, sun: [1, 0.9, 0.8], sky: [0.2, 0.2, 0.22], expo: 1, motes: 0,
+  night: 0, patchX: 0, tapW: new Float32Array(16).fill(1), tapKey: '', drift: 0,
+};
+// Vogel disc: n points evenly covering the unit disc
+const vogel = (n, i) => { const r = Math.sqrt((i + 0.5) / n), a = i * 2.39996323; return [r * Math.cos(a), r * Math.sin(a)]; };
+const SUN_TAPS = new Float32Array(32);
+for (let i = 0; i < 16; i++) SUN_TAPS.set(vogel(16, i), i * 2);
+K.taps = SUN_TAPS.slice();
+// kernel: the sun's disc by day; at night the moon's lit shape, read from the shared moon (moon.js),
+// so the dapples are pinhole images of tonight's real phase
+function updateTaps() {
+  const night = K.night > 0.5;
+  const key = night ? 'moon|' + (LW.moonKey ? LW.moonKey({}) : '') : 'sun';
+  if (key === K.tapKey) return;
+  K.tapW.fill(1);
+  if (!night) { K.taps.set(SUN_TAPS); K.tapKey = key; return; }
+  const c = LW.moonCanvas && LW.moonCanvas(48, {});
+  if (!c) return;                                   // moon art not loaded yet: keep trying
+  try {
+    const d = c.getContext('2d').getImageData(0, 0, 48, 48).data;
+    const lit = [];
+    for (let i = 0; i < 160; i++) {
+      const [x, y] = vogel(160, i);
+      const px = clamp(Math.round((x * 0.95 * 0.5 + 0.5) * 47), 0, 47), py = clamp(Math.round((-y * 0.95 * 0.5 + 0.5) * 47), 0, 47);
+      const o = (py * 48 + px) * 4, w = d[o + 3] / 255 * ((d[o] + d[o + 1] + d[o + 2]) / 765);
+      if (w > 0.12) lit.push([x, y, w]);
+    }
+    if (lit.length < 4) { K.taps.set(SUN_TAPS); K.tapW.fill(0.04); K.tapKey = key; return; }   // new moon: almost no light
+    for (let i = 0; i < 16; i++) { const p = lit[Math.floor((i + 0.5) / 16 * lit.length)]; K.taps[i * 2] = p[0]; K.taps[i * 2 + 1] = p[1]; K.tapW[i] = 0.4 + p[2]; }
+    K.tapKey = key;
+  } catch (e) { K.taps.set(SUN_TAPS); K.tapKey = key; }
+}
+MX.on('kick', (s) => {
+  if (calm.lv > 0.5) return;
+  K.gusts.push({ x: -0.25, s: 0.35 + 0.65 * s, v: 0.75 + 0.3 * s });
+  if (K.gusts.length > 4) K.gusts.shift();
+});
+MX.on('chord', () => { if (MX.playing) K.angleT = 0.25 + (MX.rootPos / 12) * 0.9 + (MX.minor ? 0.2 : 0); });
+MX.on('drop', () => { K.cloudT = 0; K.sunOut = 0; });
+
+function direct(dt, T) {
+  const cl = calm.lv, playing = MX.playing && MX.silentFor < 2;
+  const h = LW.env.hour || 12, tod = todAt(h), wx = LW.env.weather;
+  K.night = approach(K.night, isNight(h) ? 1 : 0, 3, dt);
+  // wind: loudness → sway amplitude; the sway period sits near one bar
+  const windT = lerp(playing ? 0.18 + 1.05 * Math.pow(MX.energy, 1.1) : 0.12, 0.25, cl);
+  K.wind = approach(K.wind, windT, windT > K.wind ? 0.8 : 2.5, dt);
+  const barHz = playing ? MX.bpm / 60 / 4 : 0.11;
+  K.swayT += dt * TAU * barHz;
+  const breath = calm.br.level;
+  for (let i = 0; i < 3; i++) {
+    const depth = [1, 0.7, 0.35][i], ph = i * 1.9;
+    let sx = Math.sin(K.swayT + ph) * 0.6 + Math.sin(K.swayT * 0.53 + ph * 2.1) * 0.4;
+    let sy = Math.sin(K.swayT * 0.77 + ph * 1.3) * 0.35;
+    const a = K.wind * 0.012 / depth;
+    const sxw = sx * a, syw = sy * a;
+    const bx = (breath - 0.5) * 0.018 / depth, by = (breath - 0.5) * 0.006 / depth;
+    K.sway[i][0] = lerp(sxw, bx, cl); K.sway[i][1] = lerp(syw, by, cl);
+  }
+  K.drift += dt * 0.0012 * (playing ? 1 : 0.4);
+  for (const g of K.gusts) g.x += dt * g.v * 0.9;
+  K.gusts = K.gusts.filter((g) => g.x < 2.2);
+  K.flut = approach(K.flut, lerp(playing ? 0.6 + 2.4 * MX.bright : 0.35, 0.2, cl), 1.5, dt);
+  K.flutT += dt * K.flut;
+  // clouds: weather + the build (a thin cloud over the sun) + the drop (sun out over ~2 s)
+  let cloudT = wx === 'clear' ? 0.05 : wx === 'cloudy' ? 0.62 : wx === 'fog' ? 0.7 : wx === 'snow' ? 0.6 : 0.78;
+  if (playing && MX.section === 'build') cloudT = Math.max(cloudT, 0.25 + 0.4 * MX.tension);
+  if (!playing && !MX.ever) cloudT = Math.max(cloudT, 0.05 + 0.08 * (0.5 + 0.5 * Math.sin(T * 0.05)));
+  K.cloud = approach(K.cloud, cloudT, MX.section === 'drop' ? 0.7 : 4, dt);
+  K.sunOut = Math.min(1, K.sunOut + dt / 2);
+  // sun angle: follows the harmony slowly (a chord change turns/stretches the dapples)
+  if (!playing) K.angleT = 0.35 + 0.15 * Math.sin(T * 0.01);
+  K.angle = approach(K.angle, K.angleT, 6, dt);
+  K.stretch = 1 + (1 - clamp(tod.elev, 0, 1)) * 0.65;
+  // colour: time of day, then harmony (major warmer, minor cooler), a hint of the artwork
+  let sun = toLin(tod.sun);
+  const warm = MX.playing ? (MX.keyMinor ? -1 : 1) : 0;
+  sun = mix3(sun, warm > 0 ? [1, 0.72, 0.45] : [0.75, 0.82, 1], Math.abs(warm) * 0.12 * (1 - K.night));
+  const pal = MX.pal.light, pm = Math.max(...pal, 1e-3);
+  sun = mix3(sun, pal.map((v) => v / pm), MX.playing ? 0.05 : 0);
+  if (MX.art && MX.art.tint && MX.playing) { const t = toLin(MX.art.tint), tm = Math.max(...t, 1e-3); sun = mix3(sun, t.map((v) => v / tm), 0.08); }
+  const sunI = tod.sunI * (1 - 0.82 * K.cloud) * lerp(1, 0.6 + 0.2 * breath, cl);
+  const k = !K.started ? 1 : LW.envBlend ? LW.envBlend(dt, 3) : 1 - Math.exp(-dt / 3);
+  if (!K.started) { K.started = true; K.night = isNight(h) ? 1 : 0; }
+  for (let i = 0; i < 3; i++) {
+    K.sun[i] += (sun[i] * sunI - K.sun[i]) * k;
+    K.sky[i] += (toLin(tod.sky)[i] * tod.skyI * (1 + 0.6 * K.cloud) - K.sky[i]) * k;
+  }
+  K.patchX = approach(K.patchX, (K.angle - 0.6) * 0.05, 5, dt);
+  K.motes = approach(K.motes, (playing ? 0.35 : 0.8) * (1 - K.cloud) * (1 - K.night * 0.7), 2, dt);
+  K.expo = approach(K.expo, (MX.playing || !MX.ever ? 1 : 0.9) * lerp(1, 0.8, cl), 1.5, dt);
+  updateTaps();
+}
+
+// =====================================================================
+//  Calm + reminders
+// =====================================================================
+const calm = { on: false, lv: 0, auto: 0, t: 0, br: { level: 0 } };
+LW.breathDiegetic = true;   // the canopy sways with the breath; lw.js keeps only a quiet phase label
+const BR = { t0: nowS(), off: -1e9 };
+function setCalm(on, auto = 0) {
+  if (on && !calm.on && nowS() - BR.off > 3) BR.t0 = nowS();
+  if (!on && calm.on) BR.off = nowS();
+  calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
+}
+let tag = null;
+function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') K.gusts.push({ x: -0.25, s: 1, v: 0.8 }); }
+
+// =====================================================================
+//  Caption
+// =====================================================================
+const capCv = document.getElementById('cap'), capx = capCv.getContext('2d');
+const cap = { dirty: true, x: 0, y: 0, w: 0, h: 0, a: 0, shownKey: '', key: '', dark: true };
+function layoutCaption() {
+  cap.w = Math.round(Math.min(L.H * 0.72, L.x1 - L.x0 - 60)); cap.x = Math.round(L.cx - cap.w / 2);
+  cap.y = Math.round(L.H * 0.85); cap.h = Math.round(Math.min(L.H * 0.1, L.H - cap.y - 6));
+  capCv.style.left = cap.x + 'px'; capCv.style.top = cap.y + 'px'; capCv.style.width = cap.w + 'px'; capCv.style.height = cap.h + 'px';
+  const w = Math.round(cap.w * L.dpr), h = Math.round(cap.h * L.dpr);
+  if (capCv.width !== w || capCv.height !== h) { capCv.width = w; capCv.height = h; }
+  cap.dirty = true;
+}
+function ellipsize(g, s, maxW) { if (g.measureText(s).width <= maxW) return s; while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s.trimEnd() + '…'; }
+function stateLabel() {
+  if (calm.lv > 0.5) return 'the canopy breathes';
+  if (K.night > 0.5) return 'moonlight through leaves';
+  if (!MX.playing) return 'a still afternoon';
+  return MX.keyName().toLowerCase() + '  ·  ' + (MX.section === 'build' ? 'cloud passing' : 'wind ' + Math.round(K.wind * 10));
+}
+function drawCaption(dt) {
+  const np = MX.np, want = np ? 'np|' + MX.trackKey : 'idle';
+  if (want !== cap.shownKey) { cap.a = approach(cap.a, 0, 0.25, dt); if (cap.a < 0.02) { cap.shownKey = want; cap.dirty = true; } }
+  else cap.a = approach(cap.a, 1, 0.6, dt);
+  if (tag) { tag.t += dt; if (tag.t > 12) tag = null; }
+  // text colour follows the wall's brightness: ink by day, pale at night
+  const dark = (K.sky[0] + K.sky[1] + K.sky[2]) / 3 > 0.06;
+  const fadeOn = Math.abs(cap.a - (want === cap.shownKey ? 1 : 0)) > 0.004;
+  const lab = stateLabel();
+  const key = cap.shownKey + '|' + lab + '|' + dark + '|' + (MX.playing ? 1 : 0) + '|' + (MX.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
+  if (!cap.dirty && !fadeOn && !tag && key === cap.key) return;
+  cap.key = key; cap.dirty = false;
+  const g = capx, d = L.dpr, H = L.H, w = cap.w, h = cap.h;
+  g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  const ink = dark ? '#2f2720' : '#efe9e0', inkSoft = dark ? '#4a3f34' : '#ddd5ca';
+  const A = cap.a * (1 - 0.5 * calm.lv) * (MX.playing || !np ? 1 : 0.7);
+  const fsT = clamp(Math.round(H * 0.019), 13, 30), fsA = clamp(Math.round(H * 0.0118), 10, 18), top = clamp(H * 0.006, 2, 12);
+  let x = 0;
+  g.textBaseline = 'top'; g.textAlign = 'left';
+  const shown = cap.shownKey.startsWith('np|') ? np : null;
+  if (shown) {
+    const th = Math.round(fsT * 1.25 + fsA * 1.5 + 6);
+    if (MX.art && MX.art.img) {
+      g.globalAlpha = A * 0.92; g.save(); g.beginPath(); g.roundRect(0, top, th, th, 3); g.clip(); g.drawImage(MX.art.img, 0, top, th, th); g.restore();
+      x = th + Math.round(fsT * 0.8);
+    }
+    g.globalAlpha = A * 0.8; g.fillStyle = ink; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText(ellipsize(g, shown.title || '', w * 0.58 - x), x, top);
+    g.globalAlpha = A * 0.55; g.fillStyle = inkSoft; g.font = `500 ${fsA}px ${SANS}`;
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0.14em';
+    g.fillText(ellipsize(g, (shown.artist || '').toUpperCase() + (shown.playing ? '' : '  ·  PAUSED'), w * 0.58 - x), x, top + fsT * 1.3 + 4);
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0px';
+  } else {
+    g.globalAlpha = A * 0.6; g.fillStyle = ink; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText('Komorebi', 0, top);
+    g.globalAlpha = A * 0.4; g.fillStyle = inkSoft; g.font = `400 ${fsA}px ${SANS}`;
+    g.fillText('sunlight through leaves · play some music', 0, top + fsT * 1.3 + 4);
+  }
+  g.textAlign = 'right';
+  if (tag) {
+    const k = clamp(tag.t / 1.5, 0, 1) * clamp((12 - tag.t) / 2, 0, 1), ee = k * k * (3 - 2 * k);
+    g.globalAlpha = 0.75 * ee * (1 - 0.3 * calm.lv); g.fillStyle = ink; g.font = `italic 400 ${fsT * 0.92}px ${SERIF}`;
+    const tw = g.measureText(tag.text).width;
+    g.fillText(tag.text, w, top + 1);
+    if (tag.kind === 'water') {
+      const gx = w - tw - fsT, gy = top + 1, gh = fsT * 0.95, gw = gh * 0.62;
+      g.strokeStyle = ink; g.lineWidth = 1; g.globalAlpha *= 0.8;
+      g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + gw * 0.12, gy + gh); g.lineTo(gx + gw * 0.88, gy + gh); g.lineTo(gx + gw, gy); g.stroke();
+      g.globalAlpha *= 0.5; g.beginPath(); g.moveTo(gx + gw * 0.06, gy + gh * 0.42); g.lineTo(gx + gw * 0.94, gy + gh * 0.42); g.stroke();
+    }
+  } else {
+    g.globalAlpha = A * 0.32 + 0.06; g.fillStyle = inkSoft; g.font = `400 ${fsA}px ${MONO}`;
+    g.fillText(lab, w, top + 3);
+  }
+  g.globalAlpha = 1;
+}
+
+// =====================================================================
+//  Frame
+// =====================================================================
+function render(dt, T) {
+  const asp = L.W / L.H;
+  // layer geometry in wall units (height = 1): scale = tiles per unit, radius = pinhole blur (depth)
+  const soft = LW.env.weather === 'fog' ? 1.6 : 1;
+  const rFar = 0.022 * soft, rMid = 0.013 * soft, rNear = 0.0042 * soft;
+  const G = K.gusts[K.gusts.length - 1];
+  const gu = G ? [G.x * asp, 0.32 * asp, G.s * (0.6 + K.wind), 0] : [0, 1, 0, 0];
+  gl.disable(gl.BLEND);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, GPU.lt.fbo); gl.viewport(0, 0, GPU.lt.w, GPU.lt.h);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GPU.near);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GPU.far);
+  GPU.light.use({
+    uNear: 0, uFar: 1, uAsp: [asp, 1], uTex: [1024, 1024], uTime: K.flutT, uFlut: 1, uGust: gu,
+    uL0: [0.9, rFar, 0.0, 0.92], uO0: [K.sway[0][0] + K.drift, K.sway[0][1], 0.2, 0.0],
+    uL1: [0.62, rMid, 0.0, 0.85], uO1: [K.sway[1][0] - K.drift * 0.6, K.sway[1][1], 0.5, 1.0],
+    uL2: [0.58, rNear, 0.0, 0.97], uO2: [K.sway[2][0], K.sway[2][1], K.flut * 0.5, 2.0],
+    uEll: [K.stretch, K.angle], uTapW: K.tapW, uTap: K.taps, uMoteT: T,
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, L.pw, L.ph);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GPU.lt.tex);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GPU.linen);
+  // the window's patch of light: in the clear band, lower when the sun is high
+  const tod = todAt(LW.env.hour || 12);
+  const pcx = L.cx / L.W + K.patchX, pcy = 1 - (0.46 + 0.06 * (tod.elev - 0.5));
+  const hw = (L.x1 - L.x0) / L.W * 0.36, hh = 0.36 + 0.06 * (1 - tod.elev);
+  const wall = toLin([234, 222, 202]);
+  GPU.comp.use({
+    uLight: 0, uLinen: 1, uRes: [L.pw, L.ph], uAsp: [asp, 1], uSun: K.sun, uSky: K.sky, uWall: wall,
+    uBounce: K.sun.map((v, i) => v * 0.06 + K.sky[i] * 0.2), uPatch: [pcx, pcy, hw, hh],
+    uSkew: [0.18 + (K.angle - 0.6) * 0.25, 0.08], uExpo: K.expo, uTime: T, uGlow: 0.35, uMull: 0.85, uSoft: 0.07 + 0.08 * K.cloud,
+    uMote: [0, K.motes, T, 0],
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+let tPrev = nowS();
+function frame() {
+  requestAnimationFrame(frame);
+  const T = nowS(), dt = Math.min(0.1, Math.max(0, T - tPrev));
+  tPrev = T;
+  tick(dt, T);
+}
+function tick(dt, T) {
+  MX.update(dt);
+  if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
+  calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 1.2 : 1.6, dt);
+  calm.br = calm.lv > 0.01 ? LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) : { level: 0 };
+  direct(dt, T);
+  if (gl) render(dt, T);
+  drawCaption(dt);
+}
+
+// =====================================================================
+//  Wiring
+// =====================================================================
+LW.on('down', (x, y) => {
+  if (x >= cap.x && x <= cap.x + cap.w * 0.58 && y >= cap.y && y <= cap.y + cap.h && MX.np) MX.media('next');
+  else if (Math.abs(x - L.cx) < (L.x1 - L.x0) * 0.36 && y < L.H * 0.82) { MX.media('playpause'); K.gusts.push({ x: -0.25, s: 0.6, v: 0.8 }); }
+});
+LW.on('nowplaying', () => { cap.dirty = true; });
+MX.on('art', () => { cap.dirty = true; });
+LW.on('layout', layout);
+LW.on('reminder', (r) => {
+  if (!r) return;
+  if (r.kind === 'water') showTag('water', r.text || 'a sip of water?');
+  else if (r.kind === 'stretch') showTag('stretch', r.text || 'roll your shoulders, unclench your jaw');
+  else if (r.kind === 'breathe') setCalm(true, 60);
+});
+LW.on('calm', (on) => setCalm(!!on));
+LW.on('action', (a) => {
+  if (a === 'water') showTag('water', 'a sip of water?');
+  else if (a === 'stretch') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
+  else if (a === 'playpause' || a === 'next' || a === 'previous') MX.media(a);
+});
+if (DEV) addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey) return;
+  if (e.key === 'p') MX.media('playpause');
+  if (e.key === '.') MX.media('next');
+  if (e.key === 'k') K.gusts.push({ x: -0.25, s: 1, v: 0.8 });
+  if (e.key === 's') showTag('stretch', 'roll your shoulders, unclench your jaw');
+});
+addEventListener('resize', layout);
+
+if (gl) { try { initGL(); } catch (e) { console.error('skies GL init failed', e); gl = null; } }
+layout();
+if (LW.calm) setCalm(true);
+requestAnimationFrame(frame);
+
+window.__sky = {
+  K, L, calm, MX,
+  bench(n = 120) {
+    const realNow = () => new Event('x').timeStamp, px = new Uint8Array(4);
+    let T = nowS(); const t0 = realNow();
+    for (let i = 0; i < n; i++) { T += 1 / 30; tick(1 / 30, T); if (gl) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    return { msPerFrameSynced: +((realNow() - t0) / n).toFixed(2), renderPx: [L.pw, L.ph], dpr: L.dpr, view: [L.W, L.H] };
+  },
+};
+</script>
+</body>
+</html>

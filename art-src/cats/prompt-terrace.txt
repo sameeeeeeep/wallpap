@@ -1,0 +1,13 @@
+Use your image generation tool to EDIT the first attached image (cats-ref-surfaces.png, 1536x1024) and save the result as a PNG at exactly this path:
+/Users/sameeprehlan/Documents/Projects/visuals/livewall/art-src/cats/terrace-raw.png
+
+The first image is a flat vector layout of a Santorini rooftop terrace for a cozy live wallpaper: a whitewashed Cycladic house on the left with a blue dome on a short drum, a small window with blue louvred shutters and a blue-and-white striped awning, a pale blue arched door with its own striped awning, four whitewashed steps rising to the door, magenta bougainvillea spilling over the roof corner, a low whitewashed parapet wall running to the right edge, and a pale limestone terrace floor in gentle perspective.
+
+Repaint it as a rich hand-painted storybook illustration (soft gouache / painterly lo-fi animation background), in the same style as the second attached image (a painted cat sprite that will walk on this terrace): visible but gentle brush texture, soft ink-free edges, warm natural colour variation in the whitewash and limestone, subtle hand-made imperfections, believable materials (lime-washed plaster with slight unevenness, worn stone pavers with soft grout lines, painted wood shutters, textured fabric awnings, lush bougainvillea with leaves and papery bracts).
+
+STRICT RULES:
+- Preserve ALL geometry exactly: every object stays exactly where it is with exactly the same outline, size and position (house edges, dome, drum, window, shutters, awnings, door, each step edge, parapet top and front, floor horizon line, bougainvillea extent). The image must line up pixel-for-pixel with the original when overlaid. Same canvas size 1536x1024.
+- Keep every pure green (#00ff00) area pure flat #00ff00 (it is a keying background for the sky and sea, which are drawn separately). Do not paint sky, sea, clouds or anything into the green.
+- Lighting: neutral soft daylight from the upper left, soft shadows (the scene re-lights it for dusk/night). Add gentle contact shadows where the house and steps meet the floor and soft occlusion under the parapet coping, but no strong cast shadows.
+- The terrace floor and parapet must stay even and uniform along their length (they are stretched sideways for wider screens): no unique objects, cracks, puddles, plants or stains on the floor or parapet.
+- No people, no animals, no text, no lettering, no signatures, no lamps, no furniture, no props on the terrace.

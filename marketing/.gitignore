@@ -1,0 +1,4 @@
+.cache/
+frames/
+clips/**/*.mp4
+audio/*.wav

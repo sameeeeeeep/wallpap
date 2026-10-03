@@ -13,6 +13,7 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script src="pet-motion.js"></script>
 <script>
 'use strict';
@@ -27,7 +28,11 @@
    Static scenery is painted once per light/weather change (albedo ×
    soft light map + emissive signs), cached, and crossfaded. Each frame
    draws that image plus the moving things: lanterns, noren, steam, the
-   vending-machine screen (album artwork), radio display, cats, weather.
+   vending-machine ad panel (decor: painted ads, never the track), the radio
+   (THE music player: its display scrolls the title; click = play/pause, its
+   tuning knob = next), cats, weather. Rain ripples only land on open paving.
+   Painted props in art/ramen/: noren-1..5.png, lantern-1..2.png, radio.png,
+   ad-1..3.jpg (Codex, prompts in docs/scene-polish.md).
 
    ART SLOTS (optional, for future painted art) — scenes/art/ramen/*.png
    Every file is optional; anything missing (404) falls back to the
@@ -159,6 +164,10 @@ function glyph(g, cx, cy, s, seed, col, w) {
 // =====================================================================
 const ART = {};
 const ART_SLOTS = ['bg-night', 'bg-dusk', 'bg-day'];
+// painted props (Codex, see docs/scene-polish.md): the noren panels, the two chochin lanterns,
+// the radio (the music player) and the vending machine's three backlit ads (decor, cycling)
+const PROP_SLOTS = ['noren-1', 'noren-2', 'noren-3', 'noren-4', 'noren-5', 'lantern-1', 'lantern-2', 'radio'];
+const ADS = [];
 let artDirty = false;
 function loadArtSlots() {
   for (const name of ART_SLOTS) {
@@ -169,7 +178,14 @@ function loadArtSlots() {
       im.src = 'art/' + SCENE_ID + '/' + name + '.png';
     } catch (e) { /* ignore */ }
   }
+  for (const name of PROP_SLOTS) {
+    const im = new Image();
+    im.onload = () => { if (im.naturalWidth > 1) { ART[name] = im; artDirty = true; } };
+    im.src = 'art/' + SCENE_ID + '/' + name + '.png';
+  }
+  for (let i = 1; i <= 3; i++) { const im = new Image(); im.onload = () => { if (im.naturalWidth > 1) ADS[i - 1] = im; }; im.src = `art/${SCENE_ID}/ad-${i}.jpg`; }
 }
+const hasNoren = () => PROP_SLOTS.slice(0, 5).every((n) => ART[n]);
 
 // =====================================================================
 //  environment: time of day + weather (glides over ~30 s; never pops)
@@ -244,7 +260,7 @@ function updateEnv(dt) {
   fade = Math.min(1, fade + dt / 1.6);
   const snap = envSnap();
   const diff = bakedSnap ? Math.max(...snap.map((v, i) => Math.abs(v - bakedSnap[i]))) : 1;
-  if ((diff > 0.03 || artDirty) && nowS() - lastBake > 2.5 && fade >= 1) { artDirty = false; bake(true); }
+  if ((diff > 0.03 || artDirty) && nowS() - lastBake > 2.5 && fade >= 1) { if (artDirty) { artDirty = false; computeLayout(); } bake(true); }
 }
 const envSnap = () => [...ENV_KEYS.map((q) => E[q] * (q === 'litFrac' ? 0.5 : 1)), E.wet * 0.5, E.snowCover * 0.5, ...E.top.map((v) => v / 255), ...E.bot.map((v) => v / 255)];
 
@@ -274,6 +290,10 @@ function computeLayout() {
   // vanishing point sits left of centre: the stall + vending machine (the music
   // hero) live in the left ~70%; the right side is a calm wall + lit shoji door.
   o.sx = (W - 1600) / 2; o.vx = o.sx + 640;
+  // widgets on the LEFT: slide the painted alley right, so the stall and the radio sit inside the
+  // clear band and the widget band holds only the (procedural, quiet) near wall of the alley
+  const lay = LW.layout || {};
+  if (lay.side === 'left') { o.sx += Math.min(300, Math.max(0, (lay.clear ? lay.clear[0] : 0.28) * W - 150)); o.vx = o.sx + 640; }
   L = o;
   const vx = o.vx;
   // ---- the yatai (ramen stall) ----
@@ -303,6 +323,12 @@ function computeLayout() {
   o.bowl = { x: vx - 1.55 * cz, y: HY - (1.0 - EYE) * cz + 2, r: 30 };
   o.radio = { x: vx - 0.47 * cz - 6, y: HY - (1.0 - EYE) * cz + 2, w: 108, h: 68 };
   o.radio.disp = { x: o.radio.x - 2, y: o.radio.y - 50, w: 44, h: 15 };
+  if (ART.radio) {
+    // art/ramen/radio.png 520×358: display glass px 306–484 × 155–215, knobs at (343,284) (440,284)
+    const R = o.radio, k = 132 / 520; R.k = k; R.w = 132; R.h = 358 * k; R.ax = R.x - 66; R.ay = R.y - R.h + 1.5;
+    R.disp = { x: R.ax + 306 * k, y: R.ay + 155 * k, w: 178 * k, h: 60 * k };
+    R.knob = { x: R.ax + 440 * k, y: R.ay + 284 * k, r: 26 * k };
+  }
   o.glass = { x: vx - 2.02 * cz, y: HY - (1.0 - EYE) * cz + 2 };
   // stools
   const tz = SC(2.75);
@@ -493,8 +519,31 @@ function bakeRoom() {
   paintEmissiveNear(nl);
   g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(nearCv, 0, 0); g.setTransform(U, 0, 0, U, 0, 0);
   paintArtBg(g);
-  if(ART['bg-night'] || ART['bg-day']) { LW.roomGrade(g,L.sx,0,1600,1000,E.day); paintRadio(g); }
+  if(ART['bg-night'] || ART['bg-day']) { LW.roomGrade(g,L.sx,0,1600,1000,E.day); paintArtMoon(g); paintNearWall(g); paintRadio(g); }
   albCv.width = albCv.height = 1; nearCv.width = nearCv.height = 1; lmCv.width = lmCv.height = 1;
+}
+// widgets on the left (the painting slid right): the band left of it is the alley's near wall,
+// close to us and in deep shadow — a quiet dark surface with a little plaster texture and the
+// lantern's warmth grazing its edge
+// the shared photoreal moon (real phase) in the gap of sky between the wires, above the far roofs
+let moonReady = false;
+function paintArtMoon(g) {
+  const a = E.moon * (1 - E.cloud * 0.8) * (1 - E.fog * 0.7);
+  if (a < 0.02 || !LW.drawMoon) return;
+  const k = 1600 / 1586, x = L.sx + 671 * k, y = 46 * k;
+  LW.drawMoon(g, x, y, 11.5, { alpha: a, glow: 0.45, haze: clamp(E.fog + E.cloud * 0.4, 0, 1), alt: 0.5 });
+}
+function paintNearWall(g) {
+  const x1 = L.sx + 150; if (L.sx < 2) return;
+  const base = mix3([16, 14, 24], [92, 88, 96], E.day * 0.8);
+  let gr = g.createLinearGradient(0, 0, x1, 0);
+  gr.addColorStop(0, rgba(base)); gr.addColorStop(Math.max(0.01, (x1 - 150) / x1), rgba(base, 0.97)); gr.addColorStop(1, rgba(base, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, x1, H);
+  const r = mulberry(404);
+  for (let i = 0; i < 140; i++) { g.fillStyle = `rgba(${r() < 0.5 ? '0,0,0' : '255,240,220'},${0.02 + r() * 0.03})`; g.fillRect(r() * (x1 - 120), r() * H, 1 + r() * 3, 20 + r() * 120); }
+  gr = g.createLinearGradient(L.sx - 120, 0, L.sx + 40, 0);
+  gr.addColorStop(0, 'rgba(255,150,90,0)'); gr.addColorStop(1, `rgba(255,150,90,${0.07 * E.lamp})`);
+  g.fillStyle = gr; g.fillRect(L.sx - 120, 200, 160, 600);
 }
 function paintArtBg(g) {
   // optional painted backgrounds: pick/blend by time of day
@@ -532,16 +581,7 @@ function paintSky(g) {
     const x = L.vx - 360 + r() * 720, y = r() * 230, s = r();
     g.fillStyle = `rgba(255,250,235,${starA * (0.25 + 0.6 * s * s)})`; g.fillRect(x, y, s > 0.85 ? 2 : 1.2, s > 0.85 ? 2 : 1.2);
   }
-  if (E.moon > 0.02) {
-    const mx = L.vx + 60, my = 64;
-    const skyAt = mix3(E.top, E.bot, my / (HY + 60));
-    g.globalAlpha = E.moon * 0.5;
-    g.drawImage(GLOW_WHITE, mx - 60, my - 60, 120, 120);
-    g.globalAlpha = E.moon;
-    g.fillStyle = '#f4ecd6'; g.beginPath(); g.arc(mx, my, 13, 0, TAU); g.fill();
-    g.fillStyle = rgba(skyAt); g.beginPath(); g.arc(mx + 6, my - 4, 11.5, 0, TAU); g.fill();
-    g.globalAlpha = 1;
-  }
+  if (E.moon > 0.02 && !(ART['bg-night'] || ART['bg-day']) && LW.drawMoon) LW.drawMoon(g, L.vx + 60, 64, 13, { alpha: E.moon * (1 - E.cloud * 0.8), glow: 0.45, alt: 0.5 });
   // clouds: soft drifts lit from below by the city
   const ca = E.cloud * 0.8;
   if (ca > 0.05) {
@@ -967,7 +1007,18 @@ function paintStall(g) {
   paintRadio(g);
 }
 function paintRadio(g) {
-  const R = L.radio, x0 = R.x - R.w / 2, y0 = R.y - R.h;
+  const R = L.radio;
+  if (ART.radio && R.k) {
+    // the painted radio, graded by the stall light where it stands on the counter
+    const lt = lightAt(R.x, R.y - 30).map((v) => clamp(Math.max(v, 0.5), 0, 1.1));
+    g.fillStyle = 'rgba(20,10,6,0.45)'; g.beginPath(); g.ellipse(R.x + 3, R.y, R.w * 0.5, 4, 0, 0, TAU); g.fill();
+    const c = newCanvas(ART.radio.naturalWidth, ART.radio.naturalHeight), t = c.getContext('2d');
+    t.drawImage(ART.radio, 0, 0); t.globalCompositeOperation = 'multiply'; t.fillStyle = rgba(lt.map((v) => Math.min(1, v) * 255)); t.fillRect(0, 0, c.width, c.height);
+    t.globalCompositeOperation = 'destination-in'; t.drawImage(ART.radio, 0, 0);
+    g.drawImage(c, R.ax, R.ay, R.w, R.h);
+    return;
+  }
+  const x0 = R.x - R.w / 2, y0 = R.y - R.h;
   g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(R.x + 4, R.y, R.w / 2 + 6, 5, 0, 0, TAU); g.fill();
   // antenna
   g.strokeStyle = '#c8c8cc'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(x0 + R.w - 14, y0 + 4); g.lineTo(x0 + R.w + 34, y0 - 74); g.stroke();
@@ -1264,6 +1315,21 @@ function bakeNoren() {
     g.setTransform(U, 0, 0, U, U, U);
     const x = s.nxl + i * (pw + gap);
     const lt = lightAt(x + pw / 2, s.ny0 + ph * 0.6);
+    if (hasNoren()) {
+      // the painted panel (cropped to the panel's proportions from the top), graded by the light here
+      const im = ART['noren-' + (i + 1)], iw = im.naturalWidth, ih = im.naturalHeight, sw = Math.min(iw, ih * pw / ph);
+      g.drawImage(im, (iw - sw) / 2, 0, sw, Math.min(ih, sw * ph / pw), 0, 0, pw, ph);
+      g.globalCompositeOperation = 'source-atop';
+      g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => clamp(v * 1.05, 0.25, 1) * 255)); g.fillRect(0, 0, pw, ph);
+      g.globalCompositeOperation = 'destination-in'; g.drawImage(im, (iw - sw) / 2, 0, sw, Math.min(ih, sw * ph / pw), 0, 0, pw, ph);
+      g.globalCompositeOperation = 'source-atop';
+      const bl = g.createLinearGradient(0, ph * 0.6, 0, ph);
+      bl.addColorStop(0, 'rgba(255,200,130,0)'); bl.addColorStop(1, `rgba(255,190,120,${0.16 * E.lamp})`);
+      g.fillStyle = bl; g.fillRect(0, 0, pw, ph);
+      g.globalCompositeOperation = 'source-over';
+      L.noren.panels.push({ x, sh: 0, v: 0 });
+      continue;
+    }
     const base = mul([38, 52, 98], lt);
     const gr = g.createLinearGradient(0, 0, 0, ph);
     gr.addColorStop(0, rgba(mul(base, [0.75, 0.75, 0.8]))); gr.addColorStop(0.5, rgba(base)); gr.addColorStop(1, rgba(mul(base, [1.15, 1.1, 1.05])));
@@ -1296,6 +1362,23 @@ function bakeNoren() {
 function bakeLanterns() {
   L.lanterns.forEach((ln, i) => {
     const c = lanternCv[i] || (lanternCv[i] = newCanvas(1, 1));
+    const im = ART['lantern-' + (i + 1)];
+    if (im) {
+      // the painted chochin (240×~500 px; caps span px 56–413): lit from inside at night,
+      // a dull red paper lantern by day
+      const bw = ln.bw, bh = ln.bh, pad = 24, k = bh / 357, iw = im.naturalWidth * k, ih = im.naturalHeight * k;
+      c.width = Math.ceil((bw + pad * 2) * U); c.height = Math.ceil((bh + 40 + pad * 2) * U);
+      const g = c.getContext('2d');
+      g.setTransform(U, 0, 0, U, (pad + bw / 2) * U, pad * U);
+      g.drawImage(im, -iw / 2, -56 * k, iw, ih);
+      const lt = lightAt(ln.x, ln.y + ln.len + bh / 2), lit = E.lamp;
+      const m = mix3(lt.map((v) => clamp(v, 0.3, 1) * 0.62), [1, 1, 1], lit);
+      g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(m.map((v) => v * 255)); g.fillRect(-iw / 2, -56 * k, iw, ih);
+      g.globalCompositeOperation = 'destination-in'; g.drawImage(im, -iw / 2, -56 * k, iw, ih);
+      g.globalCompositeOperation = 'source-over';
+      ln.cvPad = pad;
+      return;
+    }
     const bw = ln.bw, bh = ln.bh, pad = 6;
     c.width = Math.ceil((bw + pad * 2) * U); c.height = Math.ceil((bh + 40 + pad * 2) * U);
     const g = c.getContext('2d');
@@ -1426,8 +1509,8 @@ function rebuildArt(swap) {
   if (key === screenKey && !swap) return;
   const trackChange = swap || (screenKey.split('|')[1] !== music.key);
   screenKey = key;
-  if (trackChange && screenCv.width > 1) { prevScreenCv = screenCv; screenCv = newCanvas(1, 1); music.swap = 0; }
-  buildScreen(st);
+  // the vending machine is decor: its screen runs its own ads (never the track); the radio is the player
+  if (!ADS.length) { if (trackChange && screenCv.width > 1) { prevScreenCv = screenCv; screenCv = newCanvas(1, 1); music.swap = 0; } buildScreen('idle'); }
   const p = music.pal || DEFAULT_PAL;
   tintGlow = sprite(96, [[0, rgba(p.tint, 0.9)], [0.4, rgba(p.tint, 0.3)], [1, rgba(p.tint, 0)]]);
 }
@@ -1439,6 +1522,14 @@ function genCover(g, s) {
   g.fillStyle = rgba(p.acc, 0.9); g.beginPath(); g.arc(s * 0.64, s * 0.4, s * 0.22, 0, TAU); g.fill();
   g.strokeStyle = 'rgba(255,250,240,0.5)'; g.lineWidth = s * 0.006;
   for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(s * 0.08, s * (0.62 + i * 0.03)); g.lineTo(s * 0.58, s * (0.62 + i * 0.03)); g.stroke(); }
+}
+// digital signage: a new painted ad slides in every ~18 s
+let adI = 0, adT = 0;
+function stepAds(dt) {
+  if (!ADS.length) return;
+  if (!(screenCv instanceof HTMLImageElement)) { screenCv = ADS[adI % ADS.length] || ADS.find(Boolean); return; }
+  adT += dt;
+  if (adT > 18) { adT = 0; const n = ADS.filter(Boolean).length; if (n < 2) return; prevScreenCv = screenCv; adI = (adI + 1) % ADS.length; screenCv = ADS[adI] || screenCv; music.swap = 0; }
 }
 function buildScreen(st) {
   const sc = L.vend.scr, Wd = Math.round(sc.w * U), Hd = Math.round(sc.h * U);
@@ -1467,9 +1558,6 @@ function buildScreen(st) {
     g.fillStyle = '#e58f8f'; g.beginPath(); g.arc(58, 146, 2.2, 0, TAU); g.fill();
     g.fillStyle = '#0a1a2c'; g.fillRect(0, 150, 200, 50);
     glyph(g, 22, 34, 22, 512, '#ffd27a', 3); glyph(g, 22, 60, 22, 513, '#ffd27a', 3);
-    g.fillStyle = 'rgba(240,248,255,0.9)'; g.font = `600 11px ${SANS}`; g.textAlign = 'left';
-    g.fillText('♪  press play on the radio', 14, 178);
-    g.fillStyle = 'rgba(240,248,255,0.5)'; g.font = `9px ${SANS}`; g.fillText('nothing playing yet', 14, 191);
   } else {
     if (music.art) g.drawImage(music.art, 0, 0, 200, 200); else genCover(g, 200);
     // bottom scrim + type
@@ -1789,7 +1877,7 @@ function drawCatFace(g, P, F, pal, coat) {
 const SPR = {};
 function loadSpriteSet(set, poses) {
   if (SPR[set]) return;
-  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set) };
+  const o = SPR[set] = { pending: poses.length, img: {}, seq: LW.petSeqLoad('art/sprites/', set), cyc: LW.petCycleLoad('art/sprites/', set) };
   for (const p of poses) {
     const im = new Image();
     im.onload = () => { if (im.naturalWidth > 1) o.img[p] = im; o.pending--; };
@@ -1798,7 +1886,16 @@ function loadSpriteSet(set, poses) {
   }
 }
 const SPR_REF_W = 176;   // a walking cat (nose → tail tip) is this many world units at k = 1
-const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2;
+const isWalkFrame = (im, S) => im === S.img.walk1 || im === S.img.walk2 || !!(im && im.petCycle);
+// the drawn gait cycle (cycle/walk-N): frame by distance walked (c.gait / 0.03 = sprite units),
+// settling onto a contact frame as the walk winds down
+function sprCycStep(c) {
+  const S = SPR[c.spr]; c.gaitF = null;
+  if (!S || S.pending > 0 || !S.img.walk1 || !S.cyc) return;
+  LW.petCyclePrep(S.cyc, { im: S.img.walk1, k: 1, fa: 0.5 });
+  const now = nowS(), dt = c.gaitT ? Math.min(0.1, now - c.gaitT) : 0; c.gaitT = now;
+  if (c.walk > 0.3) c.gaitF = LW.petGait(c, S.cyc, c.gait / 0.03, LW.petUnit(c.kind, S.img.walk1) * S.img.walk1.naturalHeight, 'walk', { dt });
+}
 // a drawn in-between frame (pose change / turn / jump) stands in for the pose while it plays
 function spriteFor(c) {
   const sp = spriteBase(c);
@@ -1806,12 +1903,13 @@ function spriteFor(c) {
 }
 // once per update: lay out the set's drawn in-between frames, then pick the one to show
 function sprSeqStep(c) {
+  sprCycStep(c);
   const S = SPR[c.spr]; c.seqF = null;
   const sp = spriteBase(c); if (!sp) return;
   const T = S.seq;
   if (!LW.petSeqPrep(T, (f) => { const im = S.img[f]; return im ? { im, k: LW.petPoseScale('cat', f, S.img.walk1, im), fa: 0.5 } : null; }) && !Object.keys(T.seq).length) return;
   const key = sp.im.petName || Object.keys(S.img).find((k) => S.img[k] === sp.im);
-  const fam = key === 'walk2' ? 'walk1' : key.startsWith('jump-') ? 'jump' : key;
+  const fam = key === 'walk2' || /^(walk|run)-\d/.test(key) ? 'walk1' : key.startsWith('jump-') ? 'jump' : key;
   const f = LW.petSeqStep(c, T, fam, c.face, nowS());
   if (f && T.img[f]) { c.seqF = f; if (f.startsWith('turn-')) c.faceS = c.face; }   // the frames do the turning
 }
@@ -1821,7 +1919,7 @@ function spriteBase(c) {
   const I = S.img;
   if (c.act && c.act.t === 'hop' && c.hopPh && S.seq.has('jump')) return { im: S.seq.img[LW.petJumpFrame(c.hopPh, c.hopU)], kind: 'jump' };
   if (c.act && c.act.t === 'hop') return { im: (c.air > 0.1 ? I.walk2 : I.walk1) || I.walk1, kind: 'hop' };
-  if (c.walk > 0.3) return { im: (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
+  if (c.walk > 0.3) return { im: (c.gaitF && (S.cyc.img[c.gaitF] || I[c.gaitF])) || (Math.floor(c.gait * 2) % 2 ? I.walk2 : I.walk1) || I.walk1, kind: 'walk' };
   let best = 'sit', bw = -1; for (const n of POSE_NAMES) if (c.w[n] > bw) { bw = c.w[n]; best = n; }
   const map = { stand: 'walk1', sniff: 'walk1', sit: 'sit', loaf: 'loaf', curl: 'sleep', stretch: 'stretch' };
   const fb = { loaf: 'sit', stretch: 'walk1', sleep: 'loaf', sit: 'walk1' };
@@ -1862,7 +1960,7 @@ function drawCatSprite(g, c, sp, T) {
   const vibe = playing ? music.lv * awake * (c.walk > 0.5 ? 0.3 : 1) : 0;
   const br = calm.lv > 0.5 ? breath() * 2 - 1 : Math.sin(c.breathP);
   let sx = 1, sy = 1 + 0.014 * (1 + 0.6 * calm.lv) * br - 0.035 * Math.max(0, c.nod) * vibe, rot = 0, bob = 0;   // calm: breaths sync to the guide
-  if (sp.kind === 'walk') bob = Math.abs(Math.sin(c.gait * TAU)) * 2.2 * c.k;
+  if (sp.kind === 'walk' && !sp.im.petCycle) bob = Math.abs(Math.sin(c.gait * TAU)) * 2.2 * c.k;
   if (sp.kind === 'hop') { sy *= 1 - 0.14 * c.crouch + 0.06 * c.air; sx *= 1 + 0.06 * c.crouch; rot = (c.air > 0.05 ? -0.12 * Math.cos(c.air * Math.PI) : 0); }
   if (sp.kind === 'stretch' && sp.faked) { sx *= 1 + 0.1 * c.w.stretch; sy *= 1 - 0.14 * c.w.stretch; rot = 0.06 * c.w.stretch; }
   if (sp.kind === 'sniff') rot = 0.07 * c.w.sniff;
@@ -1872,7 +1970,7 @@ function drawCatSprite(g, c, sp, T) {
   LW.petComposite(g,c,transition.layers.map(layer=>{
     const im=layer.pose,key=Object.keys(S.img).find(k=>S.img[k]===im);
     const pk=LW.petPoseScale(c.kind||'cat',key,S.img.walk1,im),w=im.naturalWidth*sc*pk,h=im.naturalHeight*sc*pk;
-    return {image:tinted(c,im,sc1),x:-w/2,y:-h,w,h,alpha:layer.alpha};
+    return {image:tinted(c,im,sc1),x:-w*(im.petFa!=null?im.petFa:.5),y:-h,w,h,alpha:layer.alpha};
   }));
   g.globalAlpha = 1; g.restore();
 }
@@ -1915,7 +2013,38 @@ function placeCat(c, name) {
   else { c.x = S.x; c.y = S.y; c.k = c.KB * S.k; }
   c.restPose = (S.rest || ['sit'])[0]; c.restLook = S.look || null;
 }
+// pets on/off (LW.settings.pets) + the desktop layout: they only settle where widgets are not
+const petsOn = () => LW.settings.pets !== false;
+function spotFree(name) {
+  const S = L.spots[name]; if (!S) return false;
+  const lay = LW.layout || {}, cl = lay.clear || [0, 0.72], fx = S.x / W, fy = S.y / H;
+  if (fx < cl[0] + 0.03 || fx > cl[1] - 0.03) return false;
+  for (const b of lay.avoid || []) if (fx > b[0] && fx < b[0] + b[2] && fy > b[1] - 0.05 && fy < b[1] + b[3] + 0.05) return false;
+  return true;
+}
+// leaving: climb down if up somewhere, then pad off out of frame (left, along the near side of the alley)
+function planExit(c) {
+  const S = L.spots, plan = [{ t: 'pose', pose: 'stand', dur: c.s > 0.5 ? 1.2 : 0.6 }];
+  let at = c.plat;
+  if (at === 'roof') { plan.push({ t: 'walkp', x: S.roof.hopX }, { t: 'hop', to: 'crates' }); at = 'crates'; }
+  if (at === 'crates') { plan.push({ t: 'hop', toG: S.crates.from }); at = 'ground'; }
+  if (at === 'stool') { plan.push({ t: 'hop', toG: S.stool.from }); at = 'ground'; }
+  const Z = 2.3, X = (-150 - L.vx) / SC(Z);
+  plan.push({ t: 'walk', X, Z }, { t: 'gone' });
+  c.plan = plan; c.act = c.act && c.act.t === 'hop' ? c.act : null; c.dest = null; c.leaving = true;
+}
+function petsLeave() { for (const c of cats) if (!c.gone && !c.leaving) { c.stretchT = -1; c.happyT = 0; planExit(c); } }
+function petsReturn() {
+  cats.forEach((c, i) => {
+    if (!c.gone && !c.leaving) return;
+    if (c.gone) { c.plat = 'ground'; c.Z = 2.3; c.X = (-150 - L.vx) / SC(2.3); syncGround(c); c.face = 1; }
+    c.gone = false; c.leaving = false; c.plan = []; c.act = null;
+    later(i * 2.4, () => { if (!c.gone && !c.leaving) planTrip(c, pickSpot(c)); });
+  });
+}
+function petsRelayout() { for (const c of cats) if (!c.gone && !c.leaving && !c.plan.length && !c.act && !spotFree(c.spot)) c.roamT = Math.min(c.roamT, 0.5); }
 function spotWeight(c, name) {
+  if (!spotFree(name)) return 0;
   const other = cats.find((o) => o !== c);
   if (other && (other.spot === name || other.dest === name)) return 0;
   let w = c.pref[name] || 0.5;
@@ -1929,8 +2058,9 @@ function spotWeight(c, name) {
 }
 function pickSpot(c, force) {
   if (force) return force;
-  const names = Object.keys(L.spots), ws = names.map((n) => spotWeight(c, n));
-  let r = Math.random() * ws.reduce((a, b) => a + b, 0);
+  const names = Object.keys(L.spots), ws = names.map((n) => spotWeight(c, n)), tot = ws.reduce((a, b) => a + b, 0);
+  if (tot <= 0) return c.spot;
+  let r = Math.random() * tot;
   for (let i = 0; i < names.length; i++) { r -= ws[i]; if (r <= 0) return names[i]; }
   return names[0];
 }
@@ -1969,12 +2099,12 @@ function updateCat(c, dt, T) {
   const playing = music.np && music.np.playing;
   const other = cats.find((o) => o !== c);
   // roam on a natural schedule (sleepy cats wander less often)
-  if (!c.act && !c.plan.length && !calm.on && c.stretchT < 0) {
+  if (!c.act && !c.plan.length && !calm.on && c.stretchT < 0 && !c.leaving) {
     c.roamT -= dt * (playing ? 1.25 : 1) * (c.s > 0.5 ? 0.6 : 1);
     if (c.roamT <= 0) { c.roamT = rand(32, 75); planTrip(c, pickSpot(c)); }
   }
   // calm: finish the current hop, then settle where you are
-  if (calm.on && (c.plan.length || (c.act && c.act.t !== 'hop'))) {
+  if (calm.on && !c.leaving && (c.plan.length || (c.act && c.act.t !== 'hop'))) {
     if (!c.act || c.act.t !== 'hop') {
       c.plan = []; c.act = null;
       if (c.plat === 'ground' && !L.spots[c.spot]) c.spot = c.dest || c.spot;
@@ -2038,6 +2168,8 @@ function updateCat(c, dt, T) {
         else { c.plat = L.spots[a.dest].plat; c.spot = a.dest; }
         sLand(c);
       }
+    } else if (a.t === 'gone') {
+      c.gone = true; c.leaving = false; c.act = null; c.plan = []; c.dest = null;   // walked out of view
     } else if (a.t === 'rest') {
       const S = L.spots[a.spot];
       if (!a.init) {
@@ -2107,7 +2239,7 @@ function updateCat(c, dt, T) {
 }
 function catDepth(c) { return c.plat === 'ground' ? c.Z : c.plat === 'stool' ? 2.75 : 3.0; }
 function drawCats(g) {
-  const order = cats.slice().sort((a, b) => catDepth(b) - catDepth(a));   // draw order only; the array itself never changes
+  const order = cats.filter((c) => !c.gone).sort((a, b) => catDepth(b) - catDepth(a));   // draw order only; the array itself never changes
   for (const c of order) {
     const sw = 62 * c.k * (1 - c.air * 0.6), sa = 0.34 * (1 - c.air);
     const gr = g.createRadialGradient(c.x, c.y, 2, c.x, c.y, sw);
@@ -2197,7 +2329,7 @@ function updateParticles(dt, T, rdt = dt) {
     if (music.notesT <= 0) { music.notesT = rand(1.6, 3); notes.push({ x: L.radio.x - 30 + rand(-6, 6), y: L.radio.y - 58, t: 0, life: 3.6, k: Math.random() < 0.5 ? 1 : 2, ph: rand(0, 6) }); }
   }
   for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t += dt; n.x += Math.sin(n.t * 2 + n.ph) * 10 * dt - 6 * dt; n.y -= 16 * dt; if (n.t > n.life) notes.splice(i, 1); }
-  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= 22 * dt; h.x += Math.sin(h.t * 3 + h.ph) * 8 * dt; if (h.t > h.life) hearts.splice(i, 1); }
+  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += dt; h.y -= 9 * dt; if (h.t > h.life) hearts.splice(i, 1); }
   // cans dropping in the vending machine
   for (let i = cans.length - 1; i >= 0; i--) { const c = cans[i]; c.t += dt; if (c.t > 2.6) cans.splice(i, 1); }
 }
@@ -2232,65 +2364,40 @@ function drawParticles(g) {
     g.fillStyle = rgba(mix3(p.tint, [255, 240, 220], 0.5), a); g.strokeStyle = g.fillStyle;
     noteGlyph(g, n.x, n.y, 0.55, n.k);
   }
+  // the small sound word a stroked cat makes ("purr") — no bubbles, no icons
+  g.textAlign = 'center';
   for (const h of hearts) {
-    const k = h.t / h.life, a = Math.sin(Math.min(1, k * 4) * Math.PI * 0.5) * (1 - k);
-    g.fillStyle = `rgba(255,130,150,${a * 0.9})`; heartPath(g, h.x, h.y, h.s);
+    const a = Math.min(1, h.t / 0.35) * (1 - smooth((h.t - h.life + 0.9) / 0.9)) * 0.78;
+    if (a <= 0.01) continue;
+    g.font = `italic ${Math.round(13 * h.s)}px ${SERIF}`;
+    g.fillStyle = `rgba(14,8,10,${a * 0.5})`; g.fillText(h.word, h.x + 0.8, h.y + 1);
+    g.fillStyle = `rgba(246,236,218,${a})`; g.fillText(h.word, h.x, h.y);
   }
+  g.textAlign = 'left';
 }
 
 // ---- vending screen + radio display (live) ---------------------------------
 function drawVendScreen(g, T) {
+  // decor: the machine's backlit ad panel, steady (dimmer by day and in calm), no track UI
   const v = L.vend, s = v.scr;
-  const playing = !!(music.np && music.np.playing);
-  const dimK = (playing ? 1 : music.np ? 0.62 : music.ever ? 0.5 : 0.85) * (1 - 0.5 * calm.lv);
-  const bright = dimK * (1 + 0.05 * music.pulse * music.lv);
+  const bright = (0.74 - 0.2 * E.day) * (1 - 0.5 * calm.lv);
   const sw = smooth(music.swap);
   g.save(); g.beginPath(); g.rect(s.x, s.y, s.w, s.h); g.clip();
   g.fillStyle = '#05060a'; g.fillRect(s.x, s.y, s.w, s.h);
-  // digital-signage slide: new ad slides in from the right
+  // digital-signage slide: the next ad slides in from the right
   g.globalAlpha = clamp(bright, 0, 1);
   if (sw < 1 && prevScreenCv && prevScreenCv.width > 1) g.drawImage(prevScreenCv, s.x - sw * s.w * 0.35, s.y, s.w, s.h);
   if (screenCv.width > 1) g.drawImage(screenCv, s.x + (1 - sw) * s.w, s.y, s.w, s.h);
   g.globalAlpha = 1;
-  // idle ad: rising bubbles
-  if (!music.ever) {
-    for (let i = 0; i < 9; i++) {
-      const ph = (T * (0.12 + (i % 3) * 0.04) + i * 0.37) % 1;
-      const bx = s.x + s.w * (0.55 + 0.25 * Math.sin(i * 2.1 + T * 0.4) * 0.5 + (i % 4) * 0.06), by = s.y + s.h * (0.82 - ph * 0.75);
-      g.strokeStyle = `rgba(200,240,255,${0.5 * Math.sin(ph * Math.PI)})`; g.lineWidth = 1; g.beginPath(); g.arc(bx, by, 1.5 + (i % 3), 0, TAU); g.stroke();
-    }
-  }
-  // tasteful level meter along the bottom while playing
-  if (music.lv > 0.02 && music.ever) {
-    const n = 14, bw = s.w / n, M = LW.music;
-    for (let i = 0; i < n; i++) {
-      const f = i / (n - 1), band = f < 0.33 ? M.bass : f < 0.66 ? M.mid : M.high;
-      const h = (2 + band * 10 * (0.6 + 0.4 * Math.sin(T * (3 + i * 0.7) + i))) * music.lv * (1 - calm.lv);
-      g.fillStyle = `rgba(255,255,255,${0.22 * music.lv})`; g.fillRect(s.x + i * bw + 1.5, s.y + s.h - 3 - h, bw - 3, h);
-    }
-  }
-  // paused overlay
-  if (music.np && !playing) {
-    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(s.x, s.y, s.w, s.h);
-    g.fillStyle = 'rgba(255,255,255,0.75)'; const cx = s.x + s.w / 2, cy = s.y + s.h * 0.42;
-    rr(g, cx - 13, cy - 16, 9, 32, 2); g.fill(); rr(g, cx + 4, cy - 16, 9, 32, 2); g.fill();
-  }
-  // scanlines + glass reflection of the alley
-  g.fillStyle = 'rgba(0,0,0,0.08)'; for (let y = s.y; y < s.y + s.h; y += 3) g.fillRect(s.x, y, s.w, 1);
+  // a faint pixel grid + the alley reflected in the glass
+  g.fillStyle = 'rgba(0,0,0,0.07)'; for (let y = s.y; y < s.y + s.h; y += 3) g.fillRect(s.x, y, s.w, 1);
   const rg = g.createLinearGradient(s.x, s.y, s.x + s.w * 0.7, s.y + s.h);
-  rg.addColorStop(0, 'rgba(255,255,255,0.06)'); rg.addColorStop(0.5, 'rgba(255,255,255,0)');
+  rg.addColorStop(0, 'rgba(255,255,255,0.07)'); rg.addColorStop(0.5, 'rgba(255,255,255,0)');
   g.fillStyle = rg; g.fillRect(s.x, s.y, s.w, s.h);
   g.restore();
-  // the screen's light spills out (tinted by the artwork)
-  const p = music.pal || DEFAULT_PAL;
+  // the panel's cool light spills out onto the machine, the crates and the wet ground
   const night = 1 - E.day * 0.75;
-  drawSprite(g, GLOW_COOL, s.x + s.w / 2, s.y + s.h / 2, s.w * 1.05, 0.16 * bright * night);
-  if (tintGlow && music.ever) {
-    const tk = (0.35 + 0.65 * music.lv) * bright * night;
-    drawSprite(g, tintGlow, s.x + s.w / 2, s.y + s.h / 2, s.w * 1.25, 0.28 * tk, 'screen');
-    drawSpriteXY(g, tintGlow, (v.x0 + v.x1) / 2 - 30, v.y1 + 40, 300, 70, 0.22 * tk, 'screen');
-    drawSprite(g, tintGlow, (v.x0 + v.x1) / 2, v.y0 - 30, 130, 0.1 * tk, 'screen');
-  }
+  drawSprite(g, GLOW_COOL, s.x + s.w / 2, s.y + s.h / 2, s.w * 1.05, 0.15 * bright * night);
   // falling cans
   for (const c of cans) {
     const f = v.flap, t = c.t;
@@ -2312,8 +2419,7 @@ function drawRadio(g, T) {
   g.save(); g.beginPath(); g.rect(d.x, d.y, d.w, d.h); g.clip();
   g.fillStyle = `rgba(255,170,70,${0.16 * on})`; g.fillRect(d.x, d.y, d.w, d.h);
   let text;
-  if (stretchMsg && nowS() < stretchMsg.until) text = '  STRETCH ·  ' + stretchMsg.text.toUpperCase() + '  ';
-  else if (music.np) text = (playing ? '' : '‖ ') + (music.title || '') + (music.artist ? '  ·  ' + music.artist : '') + '     ';
+  if (music.np) text = (playing ? '' : '‖ ') + (music.title || '') + (music.artist ? '  ·  ' + music.artist : '') + '     ';
   else if (music.ever) text = 'LAST · ' + music.title + '     ';
   else { const h = Math.floor(E.hour), m = Math.floor((E.hour - h) * 60); text = String(h).padStart(2, '0') + (T % 1 < 0.5 ? ':' : ' ') + String(m).padStart(2, '0'); }
   g.font = `600 9px ${MONO}`; g.textBaseline = 'middle';
@@ -2333,12 +2439,25 @@ function drawRadio(g, T) {
     const k = (0.4 * LW.music.bass + 0.6 * music.pulse) * music.lv;
     drawSprite(g, GLOW_WARM, sx + sw / 2, R.y - R.h / 2, 24 + k * 8, 0.06 + 0.1 * k);
   }
-  // power LED
+  // power LED (tiny, beside the display)
+  const lx = R.k ? d.x + d.w + 3 : R.x + R.w / 2 - 9, ly = R.k ? d.y + 2 : R.y - R.h + 9;
   g.fillStyle = playing ? 'rgba(120,255,140,0.95)' : 'rgba(255,90,60,0.7)';
-  g.beginPath(); g.arc(R.x + R.w / 2 - 9, R.y - R.h + 9, 1.6, 0, TAU); g.fill();
+  g.beginPath(); g.arc(lx, ly, 1.3, 0, TAU); g.fill();
 }
 
 // ---- weather (live) --------------------------------------------------------
+// is (x, y) on the open, rained-on paving? Not the stall's front or the ground under its roof,
+// not the vending machine / crates / bin, not the far wall faces above the ground line
+function openGround(x, y) {
+  const s = L.stall, v = L.vend, c = L.crates;
+  if (x > s.xl - 8 && x < s.xr + 8 && y < s.gy + 6) return false;
+  if (x > v.sx - 4 && x < v.x1 + 4 && y < v.y1 + 4) return false;
+  if (x > c.x0 - 34 && x < c.x1 + 2 && y < c.gy + 4) return false;
+  // the alley floor narrows toward the vanishing point: beyond its edges is wall
+  if (y < HY + 8) return false;
+  const sc = (y - HY) / EYE;   // floor point at this screen y: its depth's scale (P(X,0,Z))
+  return x > L.vx + XL * sc && x < L.vx + XR * sc;
+}
 function inStallCover(x, y) { const s = L.stall; return x > s.fxl - 6 && x < s.fxr + 6 && y > s.fy0 - 10 && y < s.cy; }
 function updateWeather(dt, T) {
   const wind = (LW.env.wind || 0.3) + E.storm * 0.6;
@@ -2350,7 +2469,7 @@ function updateWeather(dt, T) {
     d.y += d.v * d.z * dt; d.x += wind * 160 * d.z * dt;
     const gy = HY + (H - HY) * (0.15 + 0.85 * d.z);
     if (d.y > gy) {
-      if (Math.random() < 0.25) ripples.push({ x: d.x, y: gy, t: 0, life: 0.5, r: 3 + 6 * d.z, flat: 0.25 });
+      if (Math.random() < 0.25 && openGround(d.x, gy)) ripples.push({ x: d.x, y: gy, t: 0, life: 0.5, r: 3 + 6 * d.z, flat: 0.25 });
       d.y = rand(-120, -10); d.x = rand(-80, W + 40);
     }
   }
@@ -2362,7 +2481,7 @@ function updateWeather(dt, T) {
       const a = Math.random() * TAU, rr2 = Math.sqrt(Math.random()) * 0.8;
       const X = p.X + Math.cos(a) * p.rx * rr2 * grow, Z = p.Z + Math.sin(a) * p.rz * rr2 * grow;
       const q = P(X, 0, Z), s = SC(Z);
-      ripples.push({ x: q[0], y: q[1], t: 0, life: rand(0.8, 1.3), r: 0.12 * s, flat: EYE / Z });
+      if (openGround(q[0], q[1])) ripples.push({ x: q[0], y: q[1], t: 0, life: rand(0.8, 1.3), r: 0.12 * s, flat: EYE / Z });
     }
   }
   for (let i = ripples.length - 1; i >= 0; i--) { ripples[i].t += dt; if (ripples[i].t > ripples[i].life) ripples.splice(i, 1); }
@@ -2523,24 +2642,12 @@ function drawWater(g) {
   g.restore();
   g.strokeStyle = rgba(mul([235, 245, 255], lt), 0.55); g.lineWidth = 1.2; g.stroke(glassP);
   g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x - wTop + 4, top + 5, 2.4, 42);
-  // tag on a string
-  const tx = x - 12, ty = top - 34;
-  g.strokeStyle = rgba(mul([220, 210, 190], lt.map((v) => Math.max(v, 0.5))), 0.8); g.lineWidth = 0.9; g.beginPath(); g.moveTo(x - wTop + 3, top + 4); g.quadraticCurveTo(x - 26, top - 8, tx + 4, ty + 14); g.stroke();
-  g.font = `italic 13px ${SERIF}`;
-  const tw = g.measureText(water.text).width + 24;
-  const tagIn = smooth((water.t - 1.0) / 0.8);
-  g.globalAlpha = a * tagIn;
-  g.save(); g.translate(tx - tw + 18, ty); g.rotate(0.03 + Math.sin(water.t * 1.3) * 0.02);
-  g.fillStyle = 'rgba(0,0,0,0.25)'; rr(g, 3, -7, tw, 26, 4); g.fill();
-  g.fillStyle = rgba(mul([246, 238, 222], lt.map((v) => Math.max(v, 0.62)))); rr(g, 0, -10, tw, 26, 4); g.fill();
-  g.fillStyle = 'rgba(120,90,60,0.6)'; g.beginPath(); g.arc(tw - 8, 3, 2.4, 0, TAU); g.fill();
-  g.fillStyle = 'rgba(60,40,30,0.9)'; g.fillText(water.text, 10, 7.5);
   g.restore();
-  g.restore();
+  // a soft glint on the glass (the host's reminder label carries the words)
+  drawSprite(g, GLOW_WARM, x - 4, gy - 32, 26, 0.2 * a * (0.7 + 0.3 * Math.sin(water.t * 1.6)));
 }
 function startStretch(text) {
   cats.forEach((c, i) => later(i * 0.7, () => { if (c.act && (c.act.t === 'hop' || c.act.t === 'walk' || c.act.t === 'walkp')) c.wantStretch = true; else { c.stretchT = 0; } c.lastStim = nowS(); }));
-  stretchMsg = { text: text || 'roll your shoulders', until: nowS() + 14 };
 }
 // fromLW: echo of LW's own 'calm' event. Scene-started calm (reminder / menu action) flips LW.calm
 // so lw.js shows its breathing guide too.
@@ -2778,20 +2885,22 @@ function onDown(px, py) {
   if (!L) return;
   const x = toW(px), y = toW(py), T = nowS();
   if (water && x > L.glass.x - 120 && x < L.glass.x + 40 && y > L.glass.y - 120 && y < L.glass.y + 10) { water.sip = 1; if (water.out < 0) water.out = 0; sDing(); return; }
-  for (const c of cats) if (hitCat(c, x, y)) {
+  for (const c of cats) if (!c.gone && hitCat(c, x, y)) {
     c.happyT = 2.6; c.wakeUntil = T + 20; c.lastStim = T; sPurr(2.3);
-    for (let i = 0; i < 3; i++) later(i * 0.26, () => hearts.push({ x: c.x + 30 * c.k * c.face + rand(-12, 12), y: c.y - 130 * c.k, t: 0, life: 1.8, s: rand(0.9, 1.3), ph: rand(0, 6) }));
+    if (!hearts.some((h) => h.who === c)) hearts.push({ who: c, word: Math.random() < 0.6 ? 'purr' : 'mrrp', x: c.x + 30 * c.k * c.face, y: c.y - 132 * c.k, t: 0, life: 2.2, s: 0.9 + 0.15 * c.k });
     return;
   }
   const R = L.radio;
-  if (x > R.x - R.w / 2 - 10 && x < R.x + R.w / 2 + 40 && y > R.y - R.h - 30 && y < R.y + 8) {
+  // the radio is the player: its tuning knob = next track, anywhere else on it = play/pause
+  if (R.knob && Math.hypot(x - R.knob.x, y - R.knob.y) < R.knob.r + 6) { sClick(); media('next'); return; }
+  if (x > R.x - R.w / 2 - 10 && x < R.x + R.w / 2 + 10 && y > R.y - R.h - 10 && y < R.y + 8) {
     const playing = music.intent ? music.intent.play : !!(music.np && music.np.playing);
     music.intent = { play: !playing, until: T + 3 };
     sClick(); media('playpause');
     return;
   }
   const v = L.vend;
-  if (x > v.sx - 4 && x < v.x1 + 4 && y > v.y0 - 4 && y < v.y1) { dropCan(); media('next'); return; }
+  if (x > v.sx - 4 && x < v.x1 + 4 && y > v.y0 - 4 && y < v.y1) { dropCan(); return; }   // decor: a can drops, the music is untouched
   for (const ln of L.lanterns) if (ln.cx != null && Math.hypot(x - ln.cx, y - ln.cy) < ln.bw * 0.7) { ln.om += (x < ln.cx ? 1 : -1) * 0.9; return; }
   for (const p of L.pots) if (Math.abs(x - p.x) < p.w * 0.6 && y > p.y0 - 30 && y < p.y1) { puff(p.x, p.y0, p.w * 0.3); return; }
   if (Math.abs(x - L.bowl.x) < 40 && y > L.bowl.y - 40 && y < L.bowl.y + 4) { puff(L.bowl.x, L.bowl.y - 22, 10); for (const c of cats) c.earPerk = 1; return; }
@@ -2828,6 +2937,9 @@ LW.on('reminder', (r) => {
   else if (r.kind === 'breathe') setCalm(true, 60);
 });
 LW.on('calm', (on) => setCalm(!!on, 0, true));
+let lastPets = petsOn();
+LW.on('settings', () => { if (petsOn() !== lastPets) { lastPets = petsOn(); if (lastPets) petsReturn(); else petsLeave(); } });
+LW.on('layout', () => { setTimeout(() => { rebuild(); petsRelayout(); }, 60); });
 LW.on('action', (a) => {
   if (a === 'water') startWater();
   else if (a === 'stretch') startStretch();
@@ -2866,12 +2978,14 @@ function step(dt, T) {
   music.lv = approach(music.lv, playing ? 1 : 0, playing ? 1.2 : 0.6, dt);
   music.pulse *= Math.exp(-dt * 5);
   music.swap = Math.min(1, music.swap + dt / 0.85);
+  stepAds(dt);
+  if (!moonReady && LW.moonCanvas && LW.moonCanvas(16)) { moonReady = true; artDirty = true; }
   updateLanterns(dt, T);
   updateWeather(dt, T);
   stepBreathSteam(dt);
   updateParticles(dt * calmPace(), T, dt);
   updateWater(dt);
-  for (const c of cats) updateCat(c, dt, T);
+  for (const c of cats) if (!c.gone) updateCat(c, dt, T);
   if (stretchMsg && T > stretchMsg.until) stretchMsg = null;
 }
 function render(T) {
@@ -2949,7 +3063,13 @@ function drawWeatherBack() { /* reserved: far rain layer is drawn with the main 
 // =====================================================================
 function rebuild() {
   computeLayout();
-  cats.forEach((c) => placeCat(c, c.spot && L.spots[c.spot] ? c.spot : c.home));
+  cats.forEach((c) => {
+    if (c.gone || c.leaving) return;
+    let sp = c.spot && L.spots[c.spot] ? c.spot : c.home;
+    if (!spotFree(sp)) sp = Object.keys(L.spots).find((n) => spotFree(n) && !cats.some((o) => o !== c && o.spot === n)) || sp;
+    placeCat(c, sp);
+  });
+  if (!petsOn()) for (const c of cats) c.gone = true;
   if (!E) computeTarget();
   E.amb = envAmb();
   bake(false);

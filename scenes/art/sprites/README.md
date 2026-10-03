@@ -1,7 +1,8 @@
 # Character sprites (AI-generated in Google Vids, cut out on-device with macOS Vision)
 
 All sprites face RIGHT (flip horizontally for left), transparent PNG, ~130–450 px.
-Walk = alternate walk1 / walk2 (two-frame gait) with a small vertical bob.
+Walking plays the drawn gait cycles in `cycle/` (below), chosen by distance travelled; walk1/walk2 remain the
+standing pose and the fallback two-frame gait for a set without a cycle.
 
 | Folder | Poses |
 |---|---|
@@ -34,3 +35,20 @@ falls back to the crossfade. Frame size and foot anchor are not stored in the ar
 interpolates them at load between the poses each sheet joins (the jump crouch is sized to the walking
 body length).
 
+
+## Gait cycles (`<kind>/<name>/cycle/`)
+
+`walk-1..8.png`: one full walking stride (R contact, down, passing, up, L contact, down, passing, up), frame 1 ≈ walk1.
+`run-1..6.png`: one gallop/trot stride (cats and dogs only). Facing RIGHT, tightly cropped, transparent.
+
+| set | walk | run |
+|---|---|---|
+| cats/orange, black, grey, calico, siamese | 8 | 6 |
+| dogs/golden, corgi | 8 | 6 |
+| pandas/mei, bao, cub | 8 | — |
+
+Made with Codex image generation (`art-src/cycles/run-cycles.sh`), cut with the chroma-key cutter
+`art-src/cycles/cut.py` (not `cutout.swift`, which holes dark fur on these sheets) via `art-src/cycles/install.sh`.
+Registry `LW.PET_CYCLE_HAS`, strides `LW.PET_STRIDE` (walking heights per cycle) in `scenes/pet-motion.js`.
+Size and anchor are not stored in the art: `LW.petCyclePrep` sizes the loop to walk1's height and pins every frame
+on walk1's torso point at load; `LW.petGait` / `LW.petGaitFrame` pick the frame from the distance walked.

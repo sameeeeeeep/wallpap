@@ -16,6 +16,7 @@
 <div id="hud"></div>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="moon.js"></script>
 <script>
 'use strict';
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +85,12 @@ uniform float uTime, uAspect, uHasSim;
 uniform vec3 uLight, uSky, uDeep, uShallow, uFogCol;
 uniform float uAmb, uCaust, uSpec, uFlash, uFog, uDapple, uWind, uLanternOn, uSat;
 uniform vec4 uBreath;   // calm breath rings: centre (fp space), outer radius (fp), amplitude (0 = off)
+uniform sampler2D uGlint;                 // music: koi scale glints (r = sheen, g = sparkle), from the fish pass's 2nd target
+uniform vec3 uGlintCol; uniform float uGlintOn, uCaustB;
+uniform vec4 uSwell;    // music: deep bass swell — centre (fp space), amplitude, phase
+uniform vec2 uClear;    // LW.layout.clear (0..1 of the width): the swell fades out beyond it
+uniform sampler2D uMoon; uniform vec4 uMoonP;   // night: the shared moon reflected — centre (fp), radius (fp), strength
+uniform float uPadSnow; // snow settled on the pads, 0..1
 out vec4 o;
 
 float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -174,6 +181,13 @@ void main(){
     }
     grad += bd / max(d, 1e-4) * hd * uBreath.w;
   }
+  // Music: a long, slow swell rolling out from where the koi gather (bass), fading out before the right ~28%.
+  if (uSwell.z > 1e-5) {
+    vec2 sd = fp - uSwell.xy; float sl = length(sd) + 1e-4;
+    float ph = 11.0 * sl - uSwell.w, se = exp(-sl * 1.8)
+      * (uClear.x > 0.01 ? smoothstep(uClear.x - 0.06, uClear.x + 0.12, uv.x) : 1.0) * (uClear.y < 0.99 ? smoothstep(uClear.y + 0.06, uClear.y - 0.12, uv.x) : 1.0);
+    grad += sd / sl * uSwell.z * se * (11.0 * cos(ph) - 1.8 * sin(ph));
+  }
   vec2 wp = fp*34.0;
   vec2 micro = vec2(noise(wp + uTime*vec2(1.1,0.6)) - 0.5, noise(wp.yx*1.13 - uTime*vec2(0.8,1.2)) - 0.5);
   micro += 0.5*vec2(noise(fp*9.0 + uTime*0.25) - 0.5, noise(fp.yx*9.0 - uTime*0.21) - 0.5);
@@ -200,7 +214,7 @@ void main(){
   float lit = (1.0 - dap*0.6) * (1.0 - fsh*0.75) * (1.0 - psh*0.72);
 
   vec3 col = fl * (uLight*uAmb*(0.5 + 0.5*lit) + vec3(0.02,0.03,0.035));
-  col += uLight * ca * uCaust * lit * (0.5 + 0.5*stoneMask) * 0.55;
+  col += uLight * ca * uCaust * uCaustB * lit * (0.5 + 0.5*stoneMask) * 0.55;
 
   // Lantern pool (night).
   float ld = length((uv - uLantern)*asp);
@@ -213,12 +227,14 @@ void main(){
 
   // Fish, refracted.
   vec4 f = texture(uFish, uv + refr*0.7);
-  vec3 fishLit = f.rgb * (uLight*uAmb*(0.92 - dap*0.35) + uLight*ca*uCaust*0.22*(1.0-dap) + lantern*1.4 + vec3(0.03));
+  vec3 fishLit = f.rgb * (uLight*uAmb*(0.92 - dap*0.35) + uLight*ca*uCaust*uCaustB*0.22*(1.0-dap) + lantern*1.4 + vec3(0.03));
   col = col*(1.0 - f.a) + fishLit;
   col = mix(col, uDeep*(uAmb*0.7+0.06), 0.1);
+  // Music: light catching the koi's scales (sun by day, moon by night) — added as light, refracted like the fish.
+  if (uGlintOn > 0.5) { vec4 gq = texture(uGlint, uv + refr*0.7); col += uGlintCol * (gq.r + 1.7*gq.g); }
 
   // Sky reflection + specular glints.
-  vec4 pad = texture(uSurf, uv + grad*0.012);
+  vec4 pad = texture(uSurf, uv + grad*0.004);   // rigid leaves: a slight bob, not a warp
   float slope = 1.0 - N.z;
   vec3 sky = uSky * (0.75 + 0.5*noise(fp*2.5 + vec2(uTime*0.006, 0.0) + N.xy*3.0));
   col += sky * (0.06 + min(slope, 0.04)*3.0) * (1.0 - pad.a) * (1.0 - dap*0.5);
@@ -227,9 +243,22 @@ void main(){
   vec3 Hh = normalize(L + vec3(0,0,1));
   float sp = pow(max(dot(N,Hh), 0.0), 220.0) * uSpec * (1.0 - dap*0.8);
   col += uLight * sp * 0.9 * (1.0 - pad.a);
+  // The moon on the water: the shared photoreal moon, broken up by the same ripples (pads cover it below).
+  if (uMoonP.w > 0.003) {
+    vec2 mo = fp - uMoonP.xy + N.xy * 0.085 + vec2(sin(fp.y * 260.0 + uTime * 1.7), 0.0) * 0.0012;   // ripples break it up; a faint horizontal shimmer
+    vec2 mq = vec2(mo.x, -mo.y) / (uMoonP.z * 2.0);                      // mirrored, as a reflection is
+    vec4 mt = texture(uMoon, mq + 0.5) * smoothstep(0.5, 0.485, length(mq));   // disk only (no clamped edge texels)
+    float md = length(mo) / uMoonP.z;
+    col += (mt.rgb * 0.32 + vec3(0.55, 0.62, 0.78) * 0.06 * exp(-md * md * 0.07)) * uMoonP.w;
+    col += vec3(0.72, 0.78, 0.92) * min(slope, 0.03) * 2.2 * exp(-md * md * 0.03) * uMoonP.w;   // moonlit glitter on nearby crests
+  }
 
   // Floating layer (pads, flowers, pellets, leaves) lit by the scene.
   vec3 padLit = pad.rgb * (uLight*uAmb*(0.95 - dap*0.4) + lantern*1.6 + vec3(0.025));
+  if (uPadSnow > 0.003) {   // snow settles on the leaves in drifts (not on the water — it melts there)
+    float drift = mix(0.45, 1.0, smoothstep(0.32, 0.68, fbm(fp * 11.0 + 4.0))) * smoothstep(0.0, 0.35, uPadSnow);   // an even frosting, a little deeper in drifts
+    padLit = mix(padLit, vec3(0.86, 0.89, 0.94) * pad.a * (uLight*uAmb*0.95 + lantern*1.2 + vec3(0.03)), drift * uPadSnow * 0.62);
+  }
   col = col*(1.0 - pad.a) + padLit;
 
   // Mist.
@@ -337,6 +366,8 @@ function buildSim() {
 
 const drops = [];
 function addDrop(x, y, r, s) { if (drops.length < 64) drops.push([x / W, y / H, Math.max(2.6, r / SIM_DIV), s]); }
+// Sky-borne drops (rain, melting snow): one that lands on a floating pad beads on the leaf instead of rippling the water.
+function waterDrop(x, y, r, s) { for (const p of pads) if (Math.hypot(p.x - x, p.y - y) < p.r * 0.92) return; addDrop(x, y, r, s); }
 
 const dropBuf = new Float32Array(64);
 function stepSim() {
@@ -375,13 +406,17 @@ void main(){
 }`;
 const BATCH_FS = `#version 300 es
 precision highp float;
-uniform sampler2D uAtlas, uPat; uniform float uRows;
-in vec2 vUV; in vec4 vCol; in vec4 vP; out vec4 o;
+uniform sampler2D uAtlas, uPat; uniform float uRows, uTime;
+in vec2 vUV; in vec4 vCol; in vec4 vP;
+layout(location=0) out vec4 o;
+layout(location=1) out vec4 o2;   // music glints (fish pass only; the surface pass has no 2nd target, so it's dropped)
 void main(){
   int mode = int(vP.x + 0.5);
-  if (mode == 0) { o = texture(uAtlas, vUV) * vCol; return; }
-  if (mode == 1) { o = vCol; return; }
+  if (mode == 0) { o = texture(uAtlas, vUV) * vCol; o2 = vec4(0.0); return; }
+  if (mode == 1) { o = vCol; o2 = vec4(0.0, 0.0, 0.0, vCol.a); return; }   // fins/eyes occlude glints beneath
   // Koi body: vUV = (u along spine 0..1, v across -1..1).
+  // vCol.rgb (unused by the body otherwise) carries music glimmer: r = sheen position along the body,
+  // g = sheen strength, b = sparkle strength.
   float u = clamp(vUV.x, 0.0, 1.0), v = vUV.y, av = abs(v);
   vec3 c = texture(uPat, vec2(u, (vP.y + clamp(v*0.5 + 0.5, 0.03, 0.97)) / uRows)).rgb;
   bool metal = mod(vP.w, 2.0) > 0.5, rim = vP.w > 1.5;
@@ -394,6 +429,20 @@ void main(){
   float fw = fwidth(v) * 1.3 + 1e-4;
   float a = (1.0 - smoothstep(1.0 - fw, 1.0, av)) * smoothstep(-0.02, 0.01, vUV.x) * vCol.a;
   o = vec4(c * a, a);
+  float sh = 0.0, sk = 0.0;
+  if (vCol.g > 0.001) {   // a soft chevron of light travelling head → tail along the back
+    float du = (u - vCol.r + av * 0.07) / 0.085;
+    sh = exp(-du * du) * vCol.g * (1.0 - smoothstep(0.1, 0.92, av)) * smoothstep(0.03, 0.12, u) * smoothstep(0.98, 0.8, u) * (metal ? 0.8 : 0.38);
+  }
+  if (vCol.b > 0.001) {   // metallic koi: single scales flashing like foil
+    vec2 cell = vec2(u * 50.0, (v * 0.5 + 0.5) * 7.0), ci = floor(cell), cf = fract(cell) - 0.5;
+    float h = fract(sin(dot(ci + vec2(vP.y * 13.7, vP.y * 3.1), vec2(12.9898, 78.233))) * 43758.5453), h2 = fract(h * 97.31 + 0.13);
+    float d = length((cf - (vec2(h, h2) - 0.5) * 0.4) * vec2(1.0, 1.3));
+    float tw = pow(max(0.0, sin(uTime * (2.5 + 3.5 * h2) + h * 40.0)), 14.0);
+    sk = step(0.6, h) * tw * smoothstep(0.32, 0.06, d) * vCol.b * (1.0 - smoothstep(0.25, 0.85, av)) * smoothstep(0.1, 0.2, u) * smoothstep(0.9, 0.72, u);
+  }
+  float gd = max(0.0, 1.0 - vP.z * 2.2);   // deeper fish catch less light
+  o2 = vec4(vec2(sh, sk) * gd * a, 0.0, a);
 }`;
 const batchP = (() => {
   const p = gl.createProgram();
@@ -401,7 +450,7 @@ const batchP = (() => {
   ['aPos', 'aUV', 'aCol', 'aP'].forEach((n, i) => gl.bindAttribLocation(p, i, n));
   gl.linkProgram(p);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-  const u = {}; ['uView', 'uAtlas', 'uPat', 'uRows'].forEach((n) => (u[n] = gl.getUniformLocation(p, n)));
+  const u = {}; ['uView', 'uAtlas', 'uPat', 'uRows', 'uTime'].forEach((n) => (u[n] = gl.getUniformLocation(p, n)));
   return { p, u };
 })();
 const STRIDE = 12;
@@ -445,6 +494,7 @@ function flush(rt, clear) {
     gl.activeTexture(gl.TEXTURE4); gl.bindTexture(gl.TEXTURE_2D, atlas.tex); gl.uniform1i(batchP.u.uAtlas, 4);
     gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, patAtlas.tex); gl.uniform1i(batchP.u.uPat, 5);
     gl.uniform1f(batchP.u.uRows, patAtlas.rows);
+    gl.uniform1f(batchP.u.uTime, (performance.now() / 1000) % 3600);
     gl.bindVertexArray(bvao);
     gl.bindBuffer(gl.ARRAY_BUFFER, bbuf);
     gl.bufferData(gl.ARRAY_BUFFER, vbuf.subarray(0, vn), gl.STREAM_DRAW);
@@ -754,11 +804,18 @@ const C = {
 };
 const VARIETIES = [
   ['kohaku', 3], ['sanke', 2], ['showa', 1.0], ['tancho', 1], ['ogon', 1.3], ['orenji', 1], ['platinum', 0.8], ['chagoi', 0.6], ['asagi', 0.6],
+  ['bekko', 0.8], ['shiro', 0.8], ['kujaku', 0.7], ['yamabuki', 0.8], ['goshiki', 0.6],
 ];
+// Deal varieties from a shuffled deck (weighted by duplicates) so a pond is a mix, like a real one —
+// not five kohaku in a row. The deck refills when it runs out.
+let varietyDeck = [];
 function pickVariety() {
-  const tot = VARIETIES.reduce((s, v) => s + v[1], 0); let r = rand(tot);
-  for (const [n, w] of VARIETIES) { if ((r -= w) <= 0) return n; }
-  return 'kohaku';
+  if (!varietyDeck.length) {
+    const firstPass = VARIETIES.map((v) => v[0]);                       // every kind once…
+    const extra = VARIETIES.filter((v) => v[1] >= 1).map((v) => v[0]);  // …then the common ones again
+    varietyDeck = firstPass.sort(() => Math.random() - 0.5).concat(extra.sort(() => Math.random() - 0.5));
+  }
+  return varietyDeck.shift();
 }
 // A koi marking = a cluster of overlapping ellipses along the back; the body
 // clip gives it a crisp edge where it wraps over the sides.
@@ -786,6 +843,11 @@ function makePattern(v) {
     // AI companions: Claude = terracotta with cream, Codex = white with teal.
     case 'claude': return { base: '#d97757', fin: 'rgba(240,168,138,0.5)', metal: '#f0a07f', patches: [...blobs(2, 0.25, 0.7, '#f2e3cf', 0.035, 0.06, 0.25)] };
     case 'codex': return { base: '#eef2f2', fin: 'rgba(205,236,232,0.5)', patches: [...blobs(3, 0.08, 0.75, '#3a9c91', 0.06, 0.1, 0.35), ...blobs(2, 0.2, 0.7, '#22282c', 0.015, 0.03, 0.6)] };
+    case 'bekko': return { base: C.white, fin: 'rgba(238,232,222,0.5)', patches: blobs(4 + Math.floor(rand(3)), 0.14, 0.8, C.sumi, 0.018, 0.04, 0.55) };
+    case 'shiro': return { base: C.sumi, fin: 'rgba(96,88,86,0.5)', rim: true, patches: blobs(3 + Math.floor(rand(2)), 0.05, 0.8, C.white, 0.07, 0.12, 0.65), finBase: true };
+    case 'kujaku': return { base: '#dcd6c8', fin: 'rgba(240,235,225,0.5)', metal: '#ffffff', patches: blobs(3, 0.1, 0.75, '#d0662f', 0.06, 0.1, 0.4), net: true };
+    case 'yamabuki': return { base: '#e2bf45', fin: 'rgba(240,210,120,0.45)', metal: '#fbe48c', patches: [] };
+    case 'goshiki': return { base: '#cdc6ba', fin: 'rgba(220,214,204,0.5)', patches: blobs(3, 0.12, 0.75, C.red2, 0.07, 0.11, 0.35), net: true };
     case 'asagi': return { base: C.asagi, fin: 'rgba(200,120,90,0.45)', patches: [...blobs(3, 0.15, 0.7, C.red2, 0.05, 0.08, 0.2).map((p) => ({ ...p, s: Math.sign(rand(-1, 1)) * rand(0.95, 1.15) }))], net: true };
   }
 }
@@ -801,6 +863,10 @@ class Koi {
     this.butterfly = Math.random() < 0.3;
     this.seed = rand(1000);
     this.curious = rand(0.2, 1);
+    // Personality for the group behaviours, so they never move as one ring: how strongly this koi
+    // joins the calm orbit / music circling, which way it goes, and its own radius.
+    this.orbitW = rand(0.25, 0.75); this.orbitDir = Math.random() < 0.7 ? 1 : -1; this.orbitR = rand(0.7, 1.4);
+    this.joinsMusic = Math.random() < 0.5;
     this.cruise = this.L * rand(0.22, 0.34);
     this.speed = this.cruise;
     this.ang = rand(TAU);
@@ -820,6 +886,7 @@ const pellets = [];
 function spawnFish() {
   const n = clamp(Math.round((W * H) / 160000), 6, 13);
   const companions = fish.filter((f) => f.agent);
+  varietyDeck = [];   // fresh deal per pond, so every koi differs
   fish = Array.from({ length: n }, (_, i) => new Koi(i)).sort((a, b) => b.z - a.z).concat(companions);
 }
 
@@ -897,7 +964,8 @@ const hand = { on: false, pending: false, x: 0, y: 0, sx: 0, sy: 0, downT: 0 };
 // Menu action: drop food on open water in the left/centre of the pond (the right side stays calm).
 LW.on('action', (a) => {
   if (a !== 'feed') return;
-  const x = innerWidth * (0.22 + Math.random() * 0.4), y = innerHeight * (0.3 + Math.random() * 0.4);
+  const [c0, c1] = clearBand();
+  const x = innerWidth * (c0 + (c1 - c0) * (0.3 + Math.random() * 0.55)), y = innerHeight * (0.3 + Math.random() * 0.4);
   LW.emit('down', x, y); LW.emit('up', x, y);
 });
 LW.on('down', (x, y) => {
@@ -942,7 +1010,89 @@ LW.on('reminder', (r) => {
   lastInput = performance.now() / 1000;
 });
 let bloom = null;
-function calmCenter() { return [W * 0.36, H * 0.45]; }   // centre of the breath rings (left ~70%, clear of macOS widgets)
+// The host says which side holds the user's widgets/icons: keep the pond's focal life inside LW.layout.clear.
+function clearBand() { const c = (LW.layout && LW.layout.clear) || [0, 0.72]; return [clamp(+c[0] || 0, 0, 0.6), clamp(+c[1] || 1, 0.4, 1)]; }
+function calmCenter() { const [c0, c1] = clearBand(); return [W * (c0 + (c1 - c0) * 0.5), H * 0.45]; }   // centre of the breath rings (middle of the clear band)
+
+// ─── Music: beat-sync only (no player, no track text, no artwork) ───────────
+// Koi is the one nature scene allowed to groove — barely. While a track plays:
+//   pulse   each beat drops one soft, wide ring into the *real* ripple sim at a focus point that drifts with
+//           where the koi gather (left/centre only); bass = a long slow swell; caustics lift a touch with level.
+//   glimmer each beat a chevron of light travels head→tail along every koi (delayed by its distance from the
+//           focus, so it rides out with the ring); metallic koi flash single scales. Sun-white by day, moon-silver
+//           by night (composited as light, so it reads in the dark). Pads near the ring tremble on strong kicks.
+//   motion  loose schooling round the focus, tail beats pulled toward the tempo, a small stroke on each beat.
+// Silent (never makes a sound), ~40% for lw.js's synthetic pulse (no live analysis), near zero in calm,
+// settles within a few seconds of pause. Beats are only queued here and handled in tick(), so nothing piles up
+// while the governor has frames stopped.
+const MU = { on: 0, lvl: 0, bass: 0, hm: 0, kick: 0, kickS: 0, pend: 0, pendT: 0, lastBeat: -1e9, ivs: [], bps: 100 / 60, clk: 0,
+  fx: 0, fy: 0, init: false, swell: 0 };
+LW.on('beat', (s) => { if (s > 0) { MU.pend = Math.max(MU.pend, Math.min(1, s)); MU.pendT = performance.now() / 1000; } });
+function musicPlaying() {
+  const M = LW.music, np = LW.nowPlaying;
+  if (np) return !!np.playing;   // the player's own play/pause wins
+  return M.live && performance.now() - M.lastLive < 1500 && M.level > 0.04;   // live audio with no player info
+}
+function pondBeat(e, t) {
+  const iv = t - MU.lastBeat;
+  if (iv > 0.28 && iv < 1.6) {   // tempo = median of recent beat gaps
+    MU.ivs.push(iv); if (MU.ivs.length > 8) MU.ivs.shift();
+    const s = MU.ivs.slice().sort((a, b) => a - b); MU.bps = clamp(1 / s[s.length >> 1], 0.8, 3);
+  }
+  MU.lastBeat = t;
+  MU.clk += (Math.round(MU.clk) - MU.clk) * 0.5;   // pull the free-running beat clock onto the beat
+  const o = MU.on, k = e * o;
+  if (o < 0.02) return;
+  MU.kick = Math.max(MU.kick, k);
+  // Pulse: one soft, wide ring from where the koi gather (the breath rings own the water in calm).
+  const calmQ = (1 - calmFade) * (1 - calmFade);
+  const jx = rand(-1, 1) * Math.min(W, H) * 0.03, jy = rand(-1, 1) * Math.min(W, H) * 0.03;
+  if (calmQ > 0.05) addDrop(MU.fx + jx, MU.fy + jy, 15 + 6 * e, -Math.min(0.22, 0.06 + 0.16 * e) * o * calmQ);
+  // Glimmer: a sheen down every koi, timed to reach it with the ring.
+  const bi = iv < 1.6 ? iv : 1 / MU.bps, gk = k * (0.55 + 0.45 * clamp(MU.hm * 2.5, 0, 1)), dur = clamp(bi * 0.6, 0.3, 0.55);
+  for (const f of fish) {
+    const d = Math.hypot(f.x - MU.fx, f.y - MU.fy);
+    f.gT = t + Math.min(bi * 0.3, d / 1400) + rand(0.04); f.gK = gk; f.gDur = dur;   // delay + sweep fit inside one beat
+    if (f.flee <= 0) f.speed += f.L * 0.05 * k;   // a small stroke on the beat
+  }
+  // Strong kicks: pads the ring reaches tremble, very slightly.
+  if (k > 0.45) for (const p of pads) {
+    const d = Math.hypot(p.x - MU.fx, p.y - MU.fy);
+    p.trT = t + Math.min(0.7, d / 650); p.trK = Math.min(1, (k - 0.35) * 1.6) * Math.exp(-d / (Math.min(W, H) * 0.75));
+  }
+}
+function stepMusic(dt, t) {
+  const M = LW.music;
+  const playing = musicPlaying();
+  // Present only while something is actually playing (a beat in the last few seconds or audible level).
+  const alive = playing && (t - MU.lastBeat < 4 || M.level > 0.05);
+  const target = alive ? (M.live ? 1 : 0.4) * (1 - 0.94 * calmFade) : 0;
+  MU.on += (target - MU.on) * (1 - Math.exp(-dt * (target > MU.on ? 0.7 : 1.3)));
+  if (MU.on < 0.003 && !alive) { MU.on = 0; MU.init = false; }
+  const o = MU.on;
+  MU.lvl = lerp(MU.lvl, M.level * o, 1 - Math.exp(-dt * 3));
+  MU.bass = lerp(MU.bass, M.bass * o, 1 - Math.exp(-dt * 0.9));          // slow, deep
+  MU.hm = lerp(MU.hm, (0.65 * M.high + 0.35 * M.mid) * o, 1 - Math.exp(-dt * 4));
+  MU.kick *= Math.exp(-dt * 2.2);
+  MU.kickS = lerp(MU.kickS, MU.kick, 1 - Math.exp(-dt * 14));             // soft attack: never a hard flash
+  MU.clk += dt * MU.bps;
+  MU.swell += dt * TAU * MU.bps / 8;                                     // one swell per two bars
+  if (MU.pend) {
+    const s = MU.pend; MU.pend = 0;
+    if (playing && t - MU.pendT < 0.25 && t - MU.lastBeat > 0.24) pondBeat(M.live ? s : 0.7, t);
+  }
+  if (o <= 0) return;
+  // Focus: wanders the left/centre, pulled toward where the koi there are gathered.
+  let sx = 0, sy = 0, sw = 0;
+  const [c0, c1] = clearBand(), cw = c1 - c0;
+  for (const f of fish) { if (f.agent || f.x > W * c1 || f.x < W * c0) continue; const w = 1 - f.z * 0.5; sx += f.x * w; sy += f.y * w; sw += w; }
+  let tx = W * (c0 + cw * (0.53 + 0.21 * noise1(t * 0.025 + 11))), ty = H * (0.5 + 0.17 * noise1(t * 0.021 + 37));
+  if (sw > 0.5) { tx = lerp(tx, sx / sw, 0.55); ty = lerp(ty, sy / sw, 0.55); }
+  tx = clamp(tx, W * (c0 + cw * 0.22), W * (c1 - cw * 0.17)); ty = clamp(ty, H * 0.22, H * 0.78);
+  if (!MU.init) { MU.fx = tx; MU.fy = ty; MU.init = true; }
+  const a = 1 - Math.exp(-dt * 0.35);
+  MU.fx = lerp(MU.fx, tx, a); MU.fy = lerp(MU.fy, ty, a);
+}
 
 function updateFish(dt, t) {
   const calmK = calmFade;
@@ -970,6 +1120,18 @@ function updateFish(dt, t) {
       if (d < f.L * 2.2) { ax += Math.cos(o.ang); ay += Math.sin(o.ang); }
     }
     dx += ax * 0.08; dy += ay * 0.08;
+    // Music: loose schooling — align with neighbours and drift in round the pulse's focus.
+    const mo = MU.on;
+    if (mo > 0.01) {
+      const al = Math.hypot(ax, ay);
+      if (al > 0.01) { dx += (ax / al) * 0.55 * mo; dy += (ay / al) * 0.55 * mo; }
+      const fdx = MU.fx - f.x, fdy = MU.fy - f.y, fd = Math.hypot(fdx, fdy) || 1, R0 = Math.min(W, H) * 0.3;
+      const pull = mo * smooth(R0, R0 * 2.6, fd);
+      dx += (fdx / fd) * pull * 0.6; dy += (fdy / fd) * pull * 0.6;
+      // a lazy circling — only some koi, each its own way, and only while they're not gliding straight
+      const glide = noise1(f.seed * 7 + t * 0.07) > 0.35;
+      if (fd < R0 * 1.4 && f.joinsMusic && !glide) { const sg = f.orbitDir; dx += (-fdy / fd) * sg * 0.25 * mo; dy += (fdx / fd) * sg * 0.25 * mo; }
+    }
 
     let targetSpeed = f.cruise * (1 + 0.25 * noise1(f.seed * 3 + t * 0.2));
     let turn = 1.3;
@@ -1023,10 +1185,14 @@ function updateFish(dt, t) {
     // Calm mode: slow, loose orbit around the breath rings, radius swelling with the in-breath.
     if (calmK > 0.01) {
       const rx = f.x - ccx, ry = f.y - ccy, d = Math.hypot(rx, ry) || 1;
-      const R = Math.min(W, H) * (0.19 + 0.11 * lv) + f.z * 60;
+      const R = Math.min(W, H) * (0.19 + 0.11 * lv) * f.orbitR + f.z * 60;
       const radial = (R - d) / R;
-      const tx = -ry / d + (rx / d) * radial * 3.2, ty = rx / d + (ry / d) * radial * 3.2;
-      dx = lerp(dx, tx * 2, calmK * 0.85); dy = lerp(dy, ty * 2, calmK * 0.85);
+      const tx = (-ry / d) * f.orbitDir + (rx / d) * radial * 2.2, ty = (rx / d) * f.orbitDir + (ry / d) * radial * 2.2;
+      // Each koi drifts near the rings in its own way and now and then breaks off for a straight glide,
+      // so the pond never becomes one synchronised ring of curved bodies.
+      const glide = noise1(f.seed * 5 + t * 0.05) > 0.3 ? 0.35 : 1;
+      const w = calmK * f.orbitW * glide;
+      dx = lerp(dx, tx * 1.6, w); dy = lerp(dy, ty * 1.6, w);
       targetSpeed = lerp(targetSpeed, f.cruise * (0.62 - 0.3 * calmStill), calmK);
     }
     // Reminder: gather round the lotus.
@@ -1057,7 +1223,16 @@ function updateFish(dt, t) {
       b[0] = a[0] + Math.cos(ang) * seg; b[1] = a[1] + Math.sin(ang) * seg;
       prevA = ang;
     }
-    f.phase += dt * (2.2 + (f.speed / f.L) * 7);
+    let rate = 2.2 + (f.speed / f.L) * 7;
+    if (MU.on > 0.01 && f.flee <= 0) {
+      // Tail beats drift toward the tempo (1, ½ or ¼ of it — whichever is nearest this koi's own stroke) and
+      // loosely phase-lock to the beat clock, each koi with its own offset so it's a groove, not a drill.
+      const base = TAU * MU.bps, off = (n) => Math.abs(Math.log(base / n / rate));
+      if (!f.gN || off(f.gN) > 0.6) f.gN = [1, 2, 4].reduce((b, n) => (off(n) < off(b) ? n : b), 4);
+      if (f.gOff === undefined) f.gOff = rand(-0.7, 0.7);
+      rate = lerp(rate, base / f.gN, 0.55 * MU.on) + 1.4 * MU.on * Math.sin(TAU * MU.clk / f.gN + f.gOff - f.phase);
+    }
+    f.phase += dt * Math.max(0.5, rate);
     // Wake: shallow fish leave a whisper on the surface.
     if (f.z < 0.45 && t - f.lastWake > 0.22) {
       f.lastWake = t;
@@ -1212,6 +1387,15 @@ function emitKoi(f, t) {
   for (let u = 0.12; u < 0.999; u += 0.05) us.push(u);
   us.push(1);
   const row = f.row || 0, z = f.z * 0.32, flags = (f.pat.metal ? 1 : 0) + (f.pat.rim ? 2 : 0);
+  // Music glimmer → spare vertex colour channels (see BATCH_FS): sheen position, sheen strength, sparkle.
+  let gU = -1, gS = 0, gP = 0;
+  if (f.gK > 0.002) {
+    const since = t - f.gT, e = since / (f.gDur || 0.5);
+    if (e > 0 && e < 1) { gU = -0.2 + 1.4 * e; gS = f.gK * smooth(0, 0.2, e) * smooth(1, 0.7, e); }
+    if (since > 0 && f.pat.metal) gP = f.gK * Math.exp(-since * 2.4);
+    if (since > 4) f.gK = 0;
+  }
+  if (f.pat.metal && MU.on > 0.01) gP = Math.max(gP, MU.hm * 0.3);   // bright highs: a few scales keep catching light
   let prev = null;
   for (const u of us) {
     const P = at(Math.max(0, u));
@@ -1220,7 +1404,7 @@ function emitKoi(f, t) {
     else if (u < 0.03) hw = Math.max(hw, Lf * lerp(0.03, 0.06, u / 0.03));
     const Lp = [x + P.nx * hw, y + P.ny * hw, u, 1], Rp = [x - P.nx * hw, y - P.ny * hw, u, -1];
     if (prev) {
-      for (const V of [prev[0], prev[1], Lp, prev[1], Rp, Lp]) vtx(V[0], V[1], V[2], V[3], 1, 1, 1, depthA, 2, row, z, flags);
+      for (const V of [prev[0], prev[1], Lp, prev[1], Rp, Lp]) vtx(V[0], V[1], V[2], V[3], gU, gS, gP, depthA, 2, row, z, flags);
     }
     prev = [Lp, Rp];
   }
@@ -1418,12 +1602,14 @@ function makeMiscSprites() {
 
 function emitSurface(t) {
   for (const p of pads) {
-    const R = p.rot + Math.sin(t * 0.4 + p.bob) * 0.02;
-    const dip = 1 - 0.05 * (p.dip || 0) * Math.cos((p.dipT || 0) * 9);
+    let tr = 0;   // music: a strong kick's ring reaching the pad → a tiny damped tremble
+    if (p.trK) { const e = t - p.trT; if (e > 1.4) p.trK = 0; else if (e > 0) tr = p.trK * Math.exp(-e * 4) * Math.sin(e * 23); }
+    const R = p.rot + Math.sin(t * 0.4 + p.bob) * 0.02 + tr * 0.012;
+    const dip = 1 - 0.05 * (p.dip || 0) * Math.cos((p.dipT || 0) * 9) - 0.008 * tr;
     quad(p.x, p.y, p.sp.s * dip, p.sp.s * dip, R, p.sp.uv, 1);
     if (p.flower) {
       const [ox, oy] = rot(p.fdx, p.fdy, R);
-      quad(p.x + ox, p.y + oy, p.flower.s, p.flower.s, R - p.rot * 0.5, p.flower.uv, 1);
+      quad(p.x + ox, p.y + oy, p.flower.s, p.flower.s, R - p.rot * 0.5 + tr * 0.03, p.flower.uv, 1);
     }
   }
   for (const l of leaves) {
@@ -1464,9 +1650,13 @@ function frogJump(scared) {
   Object.assign(frog, { state: 'jump', t: 0, fx: frog.x, fy: frog.y, tx, ty, to, ang });
   if (frog.pad) { frog.pad.dip = 0.6; addDrop(frog.pad.x, frog.pad.y, frog.pad.r, -0.4); }
 }
+// Frogs (and dragonflies) don't sit out in snow or cold: they've gone to ground until it warms.
+function pondCold() { return LW.env.weather === 'snow' || (Number.isFinite(LW.env.temp) && LW.env.temp < 7); }
 function updateFrog(dt, t) {
   if (!pads.length) return;
+  if (frog.state === 'sit' && pondCold() && Math.random() < dt / 4) frogJump(true);
   if (frog.state === 'gone') {
+    if (pondCold()) { frog.back = Math.max(frog.back, 5); return; }
     frog.back -= dt;
     if (frog.back <= 0) {
       const bare = pads.filter((q) => !q.flower && q.r > Math.min(W, H) * 0.04);
@@ -1501,7 +1691,7 @@ function updateFrog(dt, t) {
 }
 
 const fly = { state: 'gone', x: -200, y: -200, vx: 0, vy: 0, head: 0, tx: 0, ty: 0, t: 0, pad: null, speed: 260 };
-function flyActive() { return L.night < 0.35 && ['clear', 'cloudy'].includes(LW.env.weather); }
+function flyActive() { return L.night < 0.35 && ['clear', 'cloudy'].includes(LW.env.weather) && !pondCold(); }
 function flyPick() {
   const r = Math.random();
   if (r < 0.25 && pads.length) { const p = pads[Math.floor(rand(pads.length))]; const a = rand(TAU); Object.assign(fly, { tx: p.x + Math.cos(a) * p.r * 0.85, ty: p.y + Math.sin(a) * p.r * 0.85, goal: 'perch', pad: p }); }
@@ -1612,7 +1802,7 @@ function drawOverlay(dt, t) {
     f.x += (8 + noise1(i + t * 0.3) * 14) * dt * f.z; f.y += 16 * dt * f.z;
     // Flakes shrink as they fall toward the water, then melt with a tiny ripple.
     const k = 1 - f.age / f.life;
-    if (k <= 0) { addDrop(f.x, f.y, 3, -0.25); flakes.splice(i, 1); continue; }
+    if (k <= 0) { waterDrop(f.x, f.y, 3, -0.25); flakes.splice(i, 1); continue; }
     c.globalAlpha = Math.min(1, f.age * 2) * (0.35 + 0.6 * k);
     c.beginPath(); c.arc(f.x, f.y, (0.8 + 2.2 * f.z) * (0.4 + 0.6 * k), 0, TAU); c.fill();
   }
@@ -1654,6 +1844,31 @@ function drawOverlay(dt, t) {
   }
 }
 
+// ─── Night: the moon on the water; snow on the pads ─────────────────────────
+// Uses the shared photoreal moon (moon.js, real phase); re-uploaded only when LW.moonKey changes.
+const MOON = { tex: null, key: '', k: 0, check: 0 };
+const PADSNOW = { k: 0 };
+function moonAst() { return LW.env && LW.env.astronomy && LW.env.astronomy.moon; }
+function stepNightSky(dt, t) {
+  const env = LW.env, w = env.weather, it = clamp(0.5 + env.intensity * 0.6, 0.5, 1.1), m = moonAst();
+  const sky = w === 'clear' ? 1 : w === 'cloudy' ? lerp(0.45, 0.15, it - 0.5) : w === 'fog' ? 0.1 : w === 'snow' ? 0.12 : w === 'rain' ? 0.08 : 0;
+  const want = smooth(0.55, 0.9, L.night) * sky * (m ? m.visibility : 1) * (1 - L.fog);
+  MOON.k = lerp(MOON.k, want, 1 - Math.exp(-dt * 0.5));
+  if (MOON.k > 0.003 && LW.moonCanvas && t > MOON.check) {
+    MOON.check = t + 2;
+    const opts = { alt: m ? m.altitude : 0.6 }, key = LW.moonKey(opts);
+    if (key !== MOON.key) { const cv = LW.moonCanvas(256, opts); if (cv) { if (MOON.tex) gl.deleteTexture(MOON.tex); MOON.tex = uploadOnce(cv); MOON.key = key; } }
+  }
+  // Snow builds up on the pads over a few minutes of snowfall and melts away afterwards (faster in sun).
+  if (w === 'snow') PADSNOW.k = Math.min(1, PADSNOW.k + dt * (0.4 + 0.6 * env.intensity) / 150);
+  else PADSNOW.k = Math.max(0, PADSNOW.k - dt / (L.night > 0.5 ? 240 : 110));
+}
+function moonPlace() {   // upper part of the clear band; drifts along it with the moon's azimuth
+  const [c0, c1] = clearBand(), m = moonAst();
+  const f = m && Number.isFinite(m.azimuth) ? 0.2 + 0.45 * clamp((m.azimuth + Math.PI) / TAU, 0, 1) : 0.3;
+  return [W * (c0 + (c1 - c0) * f), H * 0.22];
+}
+
 // ─── Main loop ──────────────────────────────────────────────────────────────
 let lastInput = 0;
 function resize() {
@@ -1662,8 +1877,15 @@ function resize() {
   GLS = Math.min(DPR, Math.sqrt(1.7e6 / (W * H)));   // water is soft: ~1x is plenty, and M1 + Low Power Mode needs the headroom
   glc.width = Math.round(W * GLS); glc.height = Math.round(H * GLS);
   over.width = Math.round(W * DPR); over.height = Math.round(H * DPR);
-  [fishRT, surfRT].forEach((rt) => { if (rt) { gl.deleteTexture(rt.tex); gl.deleteFramebuffer(rt.fbo); } });
+  [fishRT, surfRT].forEach((rt) => { if (rt) { gl.deleteTexture(rt.tex); gl.deleteFramebuffer(rt.fbo); if (rt.glint) gl.deleteTexture(rt.glint); } });
   fishRT = target(glc.width, glc.height); surfRT = target(glc.width, glc.height);
+  // Music glints ride along with the koi draw as a 2nd colour target (same geometry, no extra pass).
+  fishRT.glint = tex(glc.width, glc.height);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glc.width, glc.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fishRT.fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, fishRT.glint, 0);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   buildSim();
   if (floorTex) { gl.deleteTexture(floorTex); gl.deleteFramebuffer(floorFbo); floorTex = null; }
   floorKey = null;
@@ -1703,9 +1925,11 @@ function tick() {
   // Weather drops.
   const w = LW.env.weather, it = LW.env.intensity;
   const rate = w === 'rain' ? 30 + it * 70 : w === 'storm' ? 90 + it * 90 : 0;
-  let n = rate * dt; while (n > 0) { if (Math.random() < n) addDrop(rand(W), rand(H), rand(4, 7), -rand(0.15, 0.4)); n -= 1; }
+  let n = rate * dt; while (n > 0) { if (Math.random() < n) waterDrop(rand(W), rand(H), rand(4, 7), -rand(0.15, 0.4)); n -= 1; }
   if (w === 'storm') { nextFlash -= dt; if (nextFlash <= 0) { L.flash = rand(0.6, 1.2); nextFlash = rand(7, 22); thunder(); } }
 
+  stepMusic(dt, t);
+  stepNightSky(dt, t);
   if (hand.pending && !hand.on && now - hand.downT > 0.45) hand.on = true;
   if (hand.on) { lastInput = now; if (Math.random() < dt * 2.5) addDrop(hand.x + rand(-3, 3), hand.y + rand(-3, 3), 5, -0.3); if (now - hand.downT > 45) hand.on = false; }
   updateFish(dt * (1 - 0.35 * calmFade) * (1 - 0.5 * calmStill * calmFade), t);
@@ -1741,6 +1965,24 @@ function tick() {
   gl.uniform3fv(u.uFogCol, [lerp(0.55, 0.2, L.night), lerp(0.6, 0.24, L.night), lerp(0.62, 0.32, L.night)]);
   gl.uniform1f(u.uAmb, L.amb);
   gl.uniform1f(u.uCaust, L.caust);
+  gl.uniform1f(u.uCaustB, 1 + 0.3 * MU.lvl + 0.16 * MU.kickS);
+  gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, fishRT.glint); gl.uniform1i(u.uGlint, 6);
+  gl.uniform1f(u.uGlintOn, MU.on > 0.003 ? 1 : 0);
+  {
+    const wx = WEATHER[LW.env.weather] || WEATHER.clear, wit = LW.env.weather === 'clear' ? 1 : clamp(0.5 + LW.env.intensity * 0.6, 0.5, 1.1);
+    const gw = clamp(0.4 + 0.6 * lerp(1, wx.spec, wit), 0.4, 1), n = L.night;   // overcast still glints, just softer
+    const gi = lerp(0.7, 0.85, n) * gw;   // moonlit scales stand out more against the dark water
+    gl.uniform3f(u.uGlintCol, lerp(1, 0.7, n) * gi, lerp(0.94, 0.8, n) * gi, lerp(0.82, 1, n) * gi);
+  }
+  { const [c0, c1] = clearBand(); gl.uniform2f(u.uClear, c0, c1); }
+  gl.uniform1f(u.uPadSnow, PADSNOW.k);
+  if (MOON.tex && MOON.k > 0.003) {
+    const [mx, my] = moonPlace();
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, MOON.tex); gl.uniform1i(u.uMoon, 7);
+    gl.uniform4f(u.uMoonP, mx / H, my / H, Math.min(W, H) * 0.03 / H, MOON.k);
+  } else gl.uniform4f(u.uMoonP, 0, 0, 1, 0);
+  if (MU.bass > 0.002) { gl.uniform4f(u.uSwell, MU.fx / H, MU.fy / H, 0.0016 * MU.bass, MU.swell % (TAU * 64)); }
+  else gl.uniform4f(u.uSwell, 0, 0, 0, 0);
   gl.uniform1f(u.uSpec, L.spec);
   gl.uniform1f(u.uWind, L.wind);
   gl.uniform1f(u.uFog, L.fog);

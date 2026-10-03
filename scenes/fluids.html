@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluids</title>
+<!--
+  wallpap scene: Fluids, a family of music-driven fluid installations.
+  Skins (LW.settings.skin):
+    'ferro'  Magnet Bloom (default, free): a black mirror pool of ferrofluid in a slate dish that grows
+             a crown of spikes only when the music earns it (the Rosensweig normal-field instability).
+
+  Magnet Bloom, physically:
+    A magnet sits under the dish. Below a critical field Bc the fluid only gathers into a low dome;
+    past Bc a hexagonal lattice of spikes erupts (with hysteresis: it holds until the field falls
+    clearly below Bc). At a higher field the lattice switches hexagons → squares (a real second
+    threshold). When the field drops the spikes slump back viscously (~1.5 s) into a mirror.
+  Music (all via music.js / LW.mx):
+    loudness (energy)            → field B (threshold + hysteresis: quiet passages stay a mirror)
+    kick                         → field pulse: spikes jolt and a capillary ring runs outward
+    chord root (circle of fifths) → where the magnet sits under the dish; chord change → it glides
+                                   (motor-limited) and the crown slides across the pool
+    key                          → lattice orientation + the tonal palette (rim light colour)
+    brightness                   → spike sharpness; very high field → hexagon → square lattice
+    build (tension)              → the magnet slowly rises (B baseline creeps up)
+    drop                         → full crown (B boost that relaxes over ~8 s)
+    silence / paused             → magnet withdraws; mirror pool with a faint meniscus shimmer;
+                                   now and then a small resting bloom (the installation's idle)
+    calm                         → a soft sub-threshold dome swells on the in-breath, flattens on
+                                   the out-breath; never spikes
+  Never strobes: beats move the fluid, the light only follows slow arcs.
+
+  Render (WebGL2, no 2D canvas is ever uploaded):
+    1. height pass: 512² heightfield (fluid + dish + table) from analytic terms
+    2. view pass: perspective heightfield ray-march (22 steps + 5 refinements, ≤1150 px wide), GGX-ish black
+       dielectric under an analytic studio (one softbox + an accent rim strip), slate + table
+    3. dual-filter bloom (quarter res) → ACES → alpha vignette into the canvas2D backdrop
+  Layers: #bg canvas2D backdrop (baked on time-of-day/palette change), #gl the dish, #cap caption.
+  Layout: the dish sits inside LW.layout.clear (right ~28% stays backdrop); follows LW.on('layout').
+  Dev keys (browser): n fake track (lw.js + music.js synthetic frames), p play/pause demo,
+    . next, k kick, s stretch, r water (lw.js), b calm (lw.js), t +3h (lw.js)
+  Debug: window.__fx.bench(120) → ms/frame incl. GPU sync.
+  Art slots: none (procedural).
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #06070a; }
+  canvas { position: fixed; display: block; }
+  #bg { left: 0; top: 0; width: 100vw; height: 100vh; }
+  #gl, #cap { pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="gl"></canvas>
+<canvas id="cap"></canvas>
+<script src="lw.js"></script>
+<script src="music.js"></script>
+<script>
+'use strict';
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const approach = (v, t, tau, dt) => v + (t - v) * (1 - Math.exp(-dt / Math.max(1e-4, tau)));
+const smooth01 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const nowS = () => performance.now() / 1000;
+const qs = new URLSearchParams(location.search);
+const DEV = !LW.isHost;
+const SERIF = 'ui-serif, "New York", "Iowan Old Style", Georgia, serif';
+const SANS = '-apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
+const mix3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
+const toLin = (c) => c.map((v) => Math.pow(clamp(v / 255, 0, 1), 2.2));
+const MX = LW.mx;
+const CAP = clamp(+(qs.get('cap') || 1150), 512, 2600);   // max internal render width (px)
+const HSIDE = 512;                                       // heightfield resolution
+const ASPECT = 1.5;                                      // GL canvas width / height
+
+// =====================================================================
+//  WebGL2 helpers
+// =====================================================================
+const glCv = document.getElementById('gl');
+let gl = null;
+try {
+  gl = glCv.getContext('webgl2', { antialias: false, alpha: true, premultipliedAlpha: true, depth: false, stencil: false, preserveDrawingBuffer: false });
+  if (gl && !gl.getExtension('EXT_color_buffer_float')) { console.warn('fluids: EXT_color_buffer_float missing'); gl = null; }
+} catch (e) { gl = null; }
+if (gl) gl.bindVertexArray(gl.createVertexArray());
+const FULLSCREEN_VS = `#version 300 es
+out vec2 vUv;
+void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vUv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+function makeSetter(info, loc) {
+  const arr = info.size > 1;
+  switch (info.type) {
+    case gl.FLOAT: return arr ? (v) => gl.uniform1fv(loc, v) : (v) => gl.uniform1f(loc, v);
+    case gl.FLOAT_VEC2: return (v) => gl.uniform2fv(loc, v);
+    case gl.FLOAT_VEC3: return (v) => gl.uniform3fv(loc, v);
+    case gl.FLOAT_VEC4: return (v) => gl.uniform4fv(loc, v);
+    case gl.INT: case gl.BOOL: case gl.SAMPLER_2D: return arr ? (v) => gl.uniform1iv(loc, v) : (v) => gl.uniform1i(loc, v);
+    default: return () => {};
+  }
+}
+function program(vsSrc, fsSrc) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vsSrc], [gl.FRAGMENT_SHADER, fsSrc]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const setters = {};
+  const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); setters[info.name.replace(/\[0\]$/, '')] = makeSetter(info, gl.getUniformLocation(p, info.name)); }
+  return { use(u = {}) { gl.useProgram(p); for (const k in u) if (setters[k]) setters[k](u[k]); } };
+}
+function target(w, h, { internal = gl.RGBA16F, type = gl.HALF_FLOAT, filter = gl.LINEAR } = {}) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, gl.RGBA, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fbo, w, h, dispose() { gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); } };
+}
+function bindTarget(t) { gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fbo : null); gl.viewport(0, 0, t ? t.w : gl.drawingBufferWidth, t ? t.h : gl.drawingBufferHeight); }
+function bindTex(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex); }
+
+// =====================================================================
+//  Shaders
+// =====================================================================
+// World: z up, dish centred at the origin, radius 1. Camera on −y looking toward +y and down.
+const GEOM = `
+const float E = 1.3;          // heightfield half-extent
+const float RF = 0.82;        // fluid radius (inner wall of the dish)
+const float RD = 1.0;         // dish outer radius
+const float ZRIM = 0.035;     // dish rim height
+const float ZTAB = -0.11;     // table
+const float ZMAX = 0.30;      // tallest spike tip`;
+
+const HEIGHT_FS = `#version 300 es
+precision highp float;
+${GEOM}
+uniform vec2 uMag;            // magnet position (dish units)
+uniform float uSig, uDome, uSpk, uK, uRot, uSq, uSharp, uTime, uShim;
+uniform vec4 uRip[4];         // x, y, age, strength
+in vec2 vUv; out vec4 o;
+float latticeHex(vec2 q) {
+  const vec2 e1 = vec2(1.0, 0.0), e2 = vec2(-0.5, 0.8660254), e3 = vec2(-0.5, -0.8660254);
+  return (cos(dot(q, e1)) + cos(dot(q, e2)) + cos(dot(q, e3))) / 3.0;   // -0.5 .. 1 (1 on lattice points)
+}
+void main() {
+  vec2 p = (vUv * 2.0 - 1.0) * E;
+  float r = length(p);
+  float h;
+  if (r < RF) {
+    vec2 d = p - uMag;
+    float rm = length(d);
+    float wall = smoothstep(RF, RF - 0.16, r);
+    float env = exp(-rm * rm / (uSig * uSig)) * wall;
+    // dome: the fluid heaps over the magnet even below threshold
+    h = uDome * env;
+    // spikes: lattice anchored on the magnet, conical peaks (pow of the cosine sum)
+    float c = cos(uRot), s = sin(uRot);
+    vec2 q = mat2(c, -s, s, c) * d * uK;
+    float hex = clamp((latticeHex(q) + 0.5) / 1.5, 0.0, 1.0);
+    float sq = clamp((cos(q.x) + cos(q.y) + 2.0) / 4.0, 0.0, 1.0);
+    float lat = pow(mix(hex, sq, uSq), uSharp);
+    h += uSpk * 0.22 * pow(env, 0.5) * lat * smoothstep(0.02, 0.25, env);
+    // capillary rings from kicks
+    for (int i = 0; i < 4; i++) {
+      vec4 R = uRip[i];
+      if (R.w <= 0.0) continue;
+      float x = length(p - R.xy) - R.z * 0.55;
+      h += R.w * 0.0028 * exp(-x * x * 500.0) * sin(x * 95.0) * exp(-R.z * 1.6) * wall;
+    }
+    // meniscus shimmer + the fluid climbing the wall
+    h += uShim * 0.00035 * (sin(p.x * 13.0 + uTime * 0.6) * sin(p.y * 11.0 - uTime * 0.45) + 0.5 * sin((p.x - p.y) * 19.0 + uTime * 0.8)) * wall;
+    h += 0.016 * smoothstep(RF - 0.07, RF, r);
+    h -= 0.004;
+  } else if (r < RD) {
+    // rim: flat top with a rounded outer edge and a short inner wall
+    float inner = smoothstep(RF, RF + 0.012, r);
+    float outer = 1.0 - smoothstep(RD - 0.03, RD, r);
+    h = mix(0.012, ZRIM, inner) - (1.0 - outer) * 0.02 * (r - RD + 0.03) / 0.03;
+  } else {
+    h = mix(ZRIM - 0.02, ZTAB, smoothstep(RD, RD + 0.02, r));
+  }
+  o = vec4(h, 0.0, 0.0, 1.0);
+}`;
+
+const VIEW_FS = `#version 300 es
+precision highp float;
+${GEOM}
+uniform sampler2D uH;
+uniform vec3 uCam, uF, uR, uU;
+uniform vec2 uTan;
+uniform vec3 uKey, uRim, uRim2, uAmb, uTable;
+uniform float uTime;
+in vec2 vUv; out vec4 o;
+float H(vec2 p) {
+  vec2 uv = p / (2.0 * E) + 0.5;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return ZTAB;
+  return texture(uH, uv).r;
+}
+vec3 normalAt(vec2 p) {
+  float e = 2.0 * E / ${HSIDE}.0;
+  float hx = H(p + vec2(e, 0)) - H(p - vec2(e, 0));
+  float hy = H(p + vec2(0, e)) - H(p - vec2(0, e));
+  return normalize(vec3(-hx, -hy, 2.0 * e));
+}
+// studio: one big softbox behind/above the dish, an accent strip to the right, a dim neutral strip left
+vec3 env(vec3 r, float rough) {
+  float el = asin(clamp(r.z, -1.0, 1.0));
+  float az = atan(r.x, r.y);
+  vec3 c = uAmb * (0.25 + 0.75 * smoothstep(-0.2, 0.9, r.z));
+  float soft = 0.05 + rough * 0.9;
+  vec2 b = vec2(abs(az) / 0.13, abs(el - 0.5) / 0.085);
+  float box = pow(pow(b.x, 5.0) + pow(b.y, 5.0), 1.0 / 5.0);
+  float edgeLit = 0.7 + 0.3 * (1.0 - b.x * b.x);                  // diffuser: brighter in the middle
+  c += uKey * smoothstep(1.0 + soft, 1.0 - soft, box) * edgeLit;
+  c += uKey * 0.012 * exp(-box * box * 0.6);                      // the box's spill
+  vec2 s1 = vec2(abs(az - 1.5) / 0.22, abs(el - 0.4) / 0.32);
+  c += uRim * smoothstep(1.0 + soft * 2.0, 1.0 - soft * 2.0, max(s1.x, s1.y));
+  vec2 s2 = vec2(abs(az + 1.95) / 0.07, abs(el - 0.22) / 0.22);
+  c += uRim2 * smoothstep(1.0 + soft * 2.0, 1.0 - soft * 2.0, max(s2.x, s2.y));
+  return c;
+}
+float h12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h12(i), h12(i + vec2(1, 0)), f.x), mix(h12(i + vec2(0, 1)), h12(i + vec2(1, 1)), f.x), f.y);
+}
+void main() {
+  vec2 sc = vUv * 2.0 - 1.0;
+  vec3 d = normalize(uF + sc.x * uTan.x * uR + sc.y * uTan.y * uU);
+  vec3 ro = uCam;
+  float t0 = (ZMAX - ro.z) / d.z, t1 = (ZTAB - ro.z) / d.z;
+  vec3 pT = ro + d * t1;
+  float t = t1;
+  // only march where the ray passes over the dish
+  vec2 a0 = (ro + d * t0).xy;
+  vec2 ab = pT.xy - a0;
+  float tc = clamp(-dot(a0, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+  bool over = length(a0 + ab * tc) < RD + 0.05;
+  if (over) {
+    const int N = 22;
+    float tp = t0;
+    bool hit = false;
+    for (int i = 1; i <= N; i++) {
+      float ti = mix(t0, t1, float(i) / float(N));
+      vec3 p = ro + d * ti;
+      if (p.z < H(p.xy)) { t = ti; hit = true; break; }
+      tp = ti;
+    }
+    if (hit) {
+      float lo = tp, hi = t;
+      for (int k = 0; k < 5; k++) { float m = 0.5 * (lo + hi); vec3 p = ro + d * m; if (p.z < H(p.xy)) hi = m; else lo = m; }
+      t = hi;
+    }
+  }
+  vec3 p = ro + d * t;
+  float r = length(p.xy);
+  vec3 col;
+  vec3 keyDir = normalize(vec3(0.0, 0.62, 0.78));
+  if (r < RF + 0.004) {
+    // ferrofluid: black dielectric, very glossy
+    vec3 n = normalAt(p.xy);
+    vec3 rf = reflect(d, n);
+    float cosv = clamp(dot(-d, n), 0.0, 1.0);
+    float F = 0.065 + 0.935 * pow(1.0 - cosv, 5.0);
+    col = env(rf, 0.04) * F + vec3(0.0025) * max(dot(n, keyDir), 0.0) * uKey;
+  } else if (r < RD + 0.012) {
+    // slate: honed dark stone, fine mottling
+    vec3 n = normalAt(p.xy);
+    float m = vnoise(p.xy * 38.0) * 0.6 + vnoise(p.xy * 110.0) * 0.4;
+    vec3 alb = vec3(0.045, 0.047, 0.05) * (0.8 + 0.4 * m);
+    float dif = max(dot(n, keyDir), 0.0) * 0.55 + 0.25;
+    vec3 rf = reflect(d, n);
+    float cosv = clamp(dot(-d, n), 0.0, 1.0);
+    float F = 0.04 + 0.96 * pow(1.0 - cosv, 5.0);
+    col = alb * dif * (uKey * 0.12 + uAmb * 3.0) + env(rf, 0.45) * F * 0.22;
+  } else {
+    // table: near-black, a soft pool of light and the dish's contact shadow
+    float pool = exp(-dot(p.xy - vec2(0.0, 0.25), p.xy - vec2(0.0, 0.25)) * 0.35);
+    float sh = mix(0.25, 1.0, smoothstep(RD, RD + 0.35, length(p.xy - vec2(0.0, -0.06))));
+    col = uTable * (0.35 + 0.65 * pool) * sh;
+  }
+  // alpha: fade the table into the backdrop toward the canvas edges
+  float vig = smoothstep(1.0, 0.72, length(sc * vec2(0.92, 1.0)));
+  float a = r < RD + 0.02 ? 1.0 : vig;
+  o = vec4(col * a, a);
+}`;
+
+const DOWN_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uThreshold, uSpread; uniform int uPrefilter;
+in vec2 vUv; out vec4 o;
+vec3 pre(vec3 c) {
+  if (uPrefilter == 0) return c;
+  float b = max(c.r, max(c.g, c.b));
+  float soft = clamp(b - uThreshold + 0.5, 0.0, 1.0); soft = soft * soft * 0.5;
+  return c * max(soft, b - uThreshold) / max(b, 1e-4);
+}
+void main() {
+  vec2 h = uTexel * uSpread;
+  vec3 c = pre(texture(uSrc, vUv).rgb) * (uPrefilter == 0 ? 4.0 : 0.0);
+  c += pre(texture(uSrc, vUv - h).rgb) + pre(texture(uSrc, vUv + h).rgb);
+  c += pre(texture(uSrc, vUv + vec2(h.x, -h.y)).rgb) + pre(texture(uSrc, vUv - vec2(h.x, -h.y)).rgb);
+  o = vec4(c / (uPrefilter == 0 ? 8.0 : 4.0), 1.0);
+}`;
+const UP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc; uniform vec2 uTexel;
+in vec2 vUv; out vec4 o;
+vec3 t(vec2 d) { return texture(uSrc, vUv + d * uTexel).rgb; }
+void main() {
+  vec3 c = t(vec2(-2, 0)) + t(vec2(2, 0)) + t(vec2(0, -2)) + t(vec2(0, 2));
+  c += 2.0 * (t(vec2(-1, -1)) + t(vec2(1, -1)) + t(vec2(-1, 1)) + t(vec2(1, 1)));
+  o = vec4(c / 12.0, 1.0);
+}`;
+const COMP_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uScene, uBloom;
+uniform float uBloomAmt, uExposure;
+in vec2 vUv; out vec4 o;
+vec3 aces(vec3 x) { const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main() {
+  vec4 s = texture(uScene, vUv);
+  vec2 q = vUv * 2.0 - 1.0;
+  float edge = smoothstep(1.0, 0.75, max(abs(q.x), abs(q.y)));
+  vec3 hdr = s.rgb + texture(uBloom, vUv).rgb * uBloomAmt * mix(edge, 1.0, s.a);
+  vec3 col = pow(aces(hdr * uExposure), vec3(1.0 / 2.2));
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+  float a = max(s.a, max(col.r, max(col.g, col.b)));
+  o = vec4(clamp(col, 0.0, a), a);
+}`;
+
+const GPU = { w: 0, h: 0 };
+function initGL() {
+  GPU.height = program(FULLSCREEN_VS, HEIGHT_FS);
+  GPU.view = program(FULLSCREEN_VS, VIEW_FS);
+  GPU.down = program(FULLSCREEN_VS, DOWN_FS);
+  GPU.up = program(FULLSCREEN_VS, UP_FS);
+  GPU.comp = program(FULLSCREEN_VS, COMP_FS);
+  GPU.H = target(HSIDE, HSIDE);
+  GPU.mips = [];
+}
+function resizeGL(w, h) {
+  if (w === GPU.w && h === GPU.h) return;
+  GPU.w = w; GPU.h = h;
+  if (GPU.scene) GPU.scene.dispose();
+  GPU.mips.forEach((m) => m.dispose()); GPU.mips = [];
+  GPU.scene = target(w, h);
+  let sw = w >> 2, sh = h >> 2;
+  for (let i = 0; i < 4 && sw >= 8 && sh >= 8; i++, sw >>= 1, sh >>= 1) GPU.mips.push(target(sw, sh));
+}
+
+// =====================================================================
+//  Layout: the dish in the clear band (LW.layout), right side stays backdrop
+// =====================================================================
+const L = { W: 0, H: 0, dpr: 1, cw: 0, ch: 0, cx: 0, cy: 0, x0: 0, x1: 0, pw: 0, ph: 0 };
+function layout() {
+  const W = innerWidth, H = innerHeight;
+  const cl = (LW.layout && LW.layout.clear) || [0, 0.72];
+  L.W = W; L.H = H; L.dpr = Math.min(2, devicePixelRatio || 1);
+  L.x0 = cl[0] * W; L.x1 = cl[1] * W;
+  const zone = L.x1 - L.x0;
+  L.cw = Math.round(Math.min(zone * 0.9, H * 0.86 * ASPECT));
+  L.ch = Math.round(L.cw / ASPECT);
+  L.cx = Math.round(L.x0 + zone * 0.52);
+  L.cy = Math.round(H * 0.45);
+  glCv.style.width = L.cw + 'px'; glCv.style.height = L.ch + 'px';
+  glCv.style.left = (L.cx - L.cw / 2) + 'px'; glCv.style.top = (L.cy - L.ch / 2) + 'px';
+  L.pw = Math.min(CAP, Math.round(L.cw * L.dpr * 0.7)); L.ph = Math.round(L.pw / ASPECT);
+  if (gl) { if (glCv.width !== L.pw || glCv.height !== L.ph) { glCv.width = L.pw; glCv.height = L.ph; } resizeGL(L.pw, L.ph); }
+  layoutCaption();
+  // calm label: in the quiet strip beside the dish if there is room, else above it
+  const right = L.cx + L.cw * 0.47, room = L.x1 - right;
+  LW.breathLabelAt = room > 170 ? [(right + room / 2) / W, L.cy / H] : [L.cx / W, Math.max(0.05, (L.cy - L.ch * 0.42) / H)];
+  bg.dirty = true;
+}
+
+// =====================================================================
+//  Backdrop: dark studio, faint pool of light, time-of-day tint (baked, half res)
+// =====================================================================
+const bgCv = document.getElementById('bg'), bgx = bgCv.getContext('2d');
+const bg = { dirty: true, at: -1, key: '', noise: null };
+// hour → [base, pool, key light] (sRGB)
+const TOD = [
+  [0, [5, 6, 10], [18, 20, 30], [185, 200, 235]],
+  [5.5, [6, 6, 10], [22, 22, 32], [200, 200, 230]],
+  [7.2, [10, 8, 10], [36, 28, 30], [255, 220, 205]],
+  [10, [9, 9, 10], [32, 32, 34], [245, 242, 236]],
+  [16.5, [9, 9, 10], [32, 31, 30], [248, 238, 224]],
+  [18.6, [11, 8, 7], [40, 28, 22], [255, 208, 170]],
+  [20.6, [6, 7, 10], [20, 21, 30], [205, 210, 235]],
+  [24, [5, 6, 10], [18, 20, 30], [185, 200, 235]],
+];
+function todAt(h) {
+  h = ((h % 24) + 24) % 24;
+  for (let i = 0; i < TOD.length - 1; i++) {
+    const a = TOD[i], b = TOD[i + 1];
+    if (h >= a[0] && h <= b[0]) { const t = (h - a[0]) / (b[0] - a[0]), e = t * t * (3 - 2 * t); return { base: mix3(a[1], b[1], e), pool: mix3(a[2], b[2], e), light: mix3(a[3], b[3], e) }; }
+  }
+  return { base: TOD[0][1], pool: TOD[0][2], light: TOD[0][3] };
+}
+const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+function makeNoise() {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), d = g.createImageData(128, 128);
+  for (let i = 0; i < d.data.length; i += 4) { const v = Math.random() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0); return c;
+}
+function bakeBg() {
+  const s = 0.5, w = Math.max(2, Math.round(L.W * s)), h = Math.max(2, Math.round(L.H * s));
+  if (bgCv.width !== w || bgCv.height !== h) { bgCv.width = w; bgCv.height = h; }
+  const g = bgx, base = V.bgBase, pool = V.bgPool;
+  g.setTransform(s, 0, 0, s, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  g.fillStyle = rgb(base); g.fillRect(0, 0, L.W, L.H);
+  const R = L.cw * 0.75;
+  let gr = g.createRadialGradient(L.cx, L.cy + L.ch * 0.05, 0, L.cx, L.cy + L.ch * 0.05, R);
+  gr.addColorStop(0, rgb(pool)); gr.addColorStop(0.5, rgb(mix3(pool, base, 0.55))); gr.addColorStop(1, rgb(base, 0));
+  g.fillStyle = gr; g.fillRect(0, 0, L.W, L.H);
+  gr = g.createLinearGradient(0, 0, 0, L.H);
+  gr.addColorStop(0, rgb(mix3(base, pool, 0.15))); gr.addColorStop(0.6, rgb(base, 0)); gr.addColorStop(1, 'rgba(0,0,0,0.4)');
+  g.fillStyle = gr; g.fillRect(0, 0, L.W, L.H);
+  if (!bg.noise) bg.noise = makeNoise();
+  g.globalAlpha = 0.03; g.globalCompositeOperation = 'overlay';
+  g.fillStyle = g.createPattern(bg.noise, 'repeat'); g.fillRect(0, 0, L.W, L.H);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+}
+
+// =====================================================================
+//  The physics director: music → magnet field, position, lattice
+// =====================================================================
+const F = {
+  B: 0.2, on: false, spk: 0, dome: 0.01, sig: 0.32, sq: 0, sharp: 4, rot: 0, rotT: 0,
+  mag: [0.1, 0.05], magT: [0.1, 0.05], vel: [0, 0], jolt: 0, dropBoost: 0, ripples: [],
+  idleT: 0, idleBloom: 0, shim: 1, time: 0,
+};
+const V = { key: [1, 0.97, 0.93], rim: [0.9, 0.5, 0.3], rim2: [0.5, 0.55, 0.6], amb: [0.004, 0.004, 0.005], table: [0.01, 0.01, 0.011], bgBase: [6, 7, 10], bgPool: [20, 21, 30], expo: 0.9, bgA: 1 };
+function magnetFor(pos) {   // circle of fifths → angle under the dish (C at the top, sharps clockwise)
+  const a = Math.PI / 2 - pos * TAU / 12;
+  return [Math.cos(a) * 0.2, Math.sin(a) * 0.2 * 0.85 + 0.03];
+}
+MX.on('chord', () => { if (MX.playing) F.magT = magnetFor(MX.rootPos); });
+MX.on('kick', (s) => {
+  if (calm.lv > 0.5) return;
+  F.jolt = Math.max(F.jolt, s);
+  F.ripples.push({ x: F.mag[0], y: F.mag[1], age: 0, str: 0.4 + 0.6 * s });
+  if (F.ripples.length > 4) F.ripples.shift();
+});
+MX.on('drop', () => { F.dropBoost = 1; });
+MX.on('track', () => { F.magT = magnetFor(MX.rootPos); });
+
+function direct(dt, T) {
+  const playing = MX.playing, cl = calm.lv;
+  const sounding = playing && MX.silentFor < 1.5;
+  F.time += dt;
+  // field: loudness (with a gentle curve), the build creeping up, the drop's boost, a kick pulse
+  F.dropBoost *= Math.exp(-dt / 8);
+  F.jolt *= Math.exp(-dt / 0.18);
+  let Bt;
+  if (sounding) Bt = 0.22 + 0.85 * Math.pow(MX.energy, 1.15) + 0.22 * MX.tension + 0.35 * F.dropBoost;
+  else {
+    // idle choreography: a small, slow bloom every ~40 s, otherwise a quiet mirror
+    F.idleT += dt;
+    const per = 42, ph = (F.idleT % per) / per;
+    F.idleBloom = ph > 0.55 && ph < 0.8 ? Math.sin((ph - 0.55) / 0.25 * Math.PI) : 0;
+    Bt = 0.18 + 0.58 * F.idleBloom;
+  }
+  Bt = lerp(Bt, 0.1, cl);
+  F.B = approach(F.B, Bt, Bt > F.B ? 0.35 : 0.9, dt);
+  const B = F.B + 0.18 * F.jolt * (sounding ? 1 : 0);
+  // threshold with hysteresis
+  if (!F.on && B > 0.6) F.on = true;
+  else if (F.on && B < 0.48) F.on = false;
+  const spkT = F.on && cl < 0.5 ? 0.25 + 0.75 * smooth01(0.48, 1.15, B) : 0;
+  F.spk = approach(F.spk, spkT, spkT > F.spk ? 0.22 : 1.5, dt);   // erupt quickly, slump viscously
+  // dome: sub-threshold heap; in calm it is the breath
+  const breath = cl > 0.01 ? calm.br.level : 0;
+  const domeT = lerp(0.006 + 0.03 * clamp(B, 0, 1.2), 0.006 + 0.05 * breath, cl);
+  F.dome = approach(F.dome, domeT, lerp(0.5, 0.35, cl), dt);
+  F.sig = approach(F.sig, 0.17 + 0.13 * clamp(B, 0, 1.4), 0.8, dt);
+  F.sharp = approach(F.sharp, 2.6 + 4.2 * MX.bright, 1.5, dt);
+  F.sq = approach(F.sq, smooth01(1.05, 1.28, B), 1.2, dt);
+  F.rotT = MX.keyPos * (Math.PI / 3) / 12 + 0.12;
+  F.rot = approach(F.rot, F.rotT, 4, dt);
+  F.shim = approach(F.shim, 1 - clamp(F.spk * 2, 0, 1), 1, dt);
+  // magnet: motor-limited glide toward the chord's place (idle: a slow orbit)
+  if (!sounding) { const a = F.time * 0.05; F.magT = [Math.cos(a) * 0.12, Math.sin(a) * 0.1 + 0.03]; }
+  if (cl > 0.3) F.magT = [0, 0.04];
+  for (let i = 0; i < 2; i++) {
+    const want = (F.magT[i] - F.mag[i]) * 2.2;                 // velocity toward target
+    const vmax = 0.16, amax = 0.5;
+    const v = clamp(want, -vmax, vmax);
+    F.vel[i] += clamp(v - F.vel[i], -amax * dt, amax * dt);
+    F.mag[i] += F.vel[i] * dt;
+  }
+  F.ripples.forEach((r) => { r.age += dt; });
+  F.ripples = F.ripples.filter((r) => r.age < 2.4);
+
+  // light: steady while playing; dimmer when paused/idle/calm (never on the beat)
+  const expoT = (playing ? 1 : MX.ever ? 0.82 : 0.9) * lerp(1, 0.5 + 0.25 * breath, cl);
+  V.expo = approach(V.expo, expoT, lerp(1.6, 0.6, cl), dt);
+  V.bgA = approach(V.bgA, lerp(playing ? 1 : 0.9, 0.62 + 0.12 * breath, cl), 1.2, dt);
+}
+
+function updatePalette(dt) {
+  const tod = todAt(LW.env.hour || 0);
+  const w = MX.np ? (MX.playing ? 1 : 0.6) : 0;
+  let key = toLin(tod.light).map((v) => v * 12);
+  let rim = MX.pal.accent.map((v) => v * 6);
+  let rim2 = toLin(tod.light).map((v) => v * 0.9);
+  let pool = tod.pool, base = tod.base;
+  const art = MX.art;
+  if (art && art.acc && w > 0) {
+    const a = toLin(art.acc), am = Math.max(a[0], a[1], a[2], 1e-3);
+    rim = mix3(rim, a.map((v) => v / am * 5), 0.55 * w);
+    const t = toLin(art.tint), tm = Math.max(t[0], t[1], t[2], 1e-3);
+    key = mix3(key, t.map((v) => (v / tm * 0.35 + 0.65) * 12), 0.25 * w);
+    const pl = (pool[0] + pool[1] + pool[2]) / 3, tl = (art.tint[0] + art.tint[1] + art.tint[2]) / 3 || 1;
+    pool = mix3(pool, art.tint.map((v) => v * pl / tl), 0.25 * w);
+  }
+  // weather: overcast/rain soften the key light a little
+  const wx = LW.env.weather;
+  if (wx === 'cloudy' || wx === 'fog' || wx === 'rain' || wx === 'storm') key = key.map((v) => v * 0.85);
+  const k = LW.envBlend ? LW.envBlend(dt, 2.5) : 1 - Math.exp(-dt / 2.5);
+  const glide = (cur, tgt) => { for (let i = 0; i < 3; i++) cur[i] += (tgt[i] - cur[i]) * k; };
+  glide(V.key, key); glide(V.rim, rim); glide(V.rim2, rim2); glide(V.bgPool, pool); glide(V.bgBase, base);
+  const tb = toLin(V.bgPool); V.table = tb.map((v) => v * 0.9 + 0.002); V.amb = tb.map((v) => v * 0.25 + 0.0015);
+  const kk = V.bgBase.concat(V.bgPool).map((v) => Math.round(v)).join(',');
+  if (kk !== bg.key) { bg.key = kk; bg.dirty = true; }
+}
+
+// =====================================================================
+//  Calm + reminders
+// =====================================================================
+const calm = { on: false, lv: 0, auto: 0, t: 0, br: { level: 0 } };
+LW.breathDiegetic = true;   // the pool itself breathes; lw.js keeps only a quiet phase label
+const BR = { t0: nowS(), off: -1e9 };
+function setCalm(on, auto = 0) {
+  if (on && !calm.on && nowS() - BR.off > 3) BR.t0 = nowS();
+  if (!on && calm.on) BR.off = nowS();
+  calm.on = on; calm.auto = on ? auto : 0; calm.t = 0; cap.dirty = true;
+}
+let tag = null;
+function showTag(kind, text) { tag = { kind, text, t: 0 }; cap.dirty = true; if (kind === 'stretch') F.jolt = 1; }
+
+// =====================================================================
+//  Caption (under the dish, inside the clear band)
+// =====================================================================
+const capCv = document.getElementById('cap'), capx = capCv.getContext('2d');
+const cap = { dirty: true, x: 0, y: 0, w: 0, h: 0, a: 0, shownKey: '', key: '' };
+function layoutCaption() {
+  cap.w = Math.round(Math.min(L.cw * 0.78, L.x1 - L.x0 - 40)); cap.x = Math.round(L.cx - cap.w / 2);
+  cap.y = Math.round(L.cy + L.ch * 0.44); cap.h = Math.max(20, Math.min(Math.round(L.H * 0.12), Math.round(L.H - cap.y - 8)));
+  capCv.style.left = cap.x + 'px'; capCv.style.top = cap.y + 'px'; capCv.style.width = cap.w + 'px'; capCv.style.height = cap.h + 'px';
+  const w = Math.round(cap.w * L.dpr), h = Math.round(cap.h * L.dpr);
+  if (capCv.width !== w || capCv.height !== h) { capCv.width = w; capCv.height = h; }
+  cap.dirty = true;
+}
+function ellipsize(g, s, maxW) {
+  if (g.measureText(s).width <= maxW) return s;
+  while (s.length > 1 && g.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s.trimEnd() + '…';
+}
+function stateLabel() {
+  if (calm.lv > 0.5) return 'resting field';
+  if (!MX.playing) return 'mirror · B < Bc';
+  return MX.keyName().toLowerCase() + '  ·  ' + (F.on ? (F.sq > 0.5 ? 'square lattice' : 'hexagonal crown') : 'B < Bc');
+}
+function drawCaption(dt) {
+  const np = MX.np, want = np ? 'np|' + MX.trackKey : 'idle';
+  if (want !== cap.shownKey) { cap.a = approach(cap.a, 0, 0.25, dt); if (cap.a < 0.02) { cap.shownKey = want; cap.dirty = true; } }
+  else cap.a = approach(cap.a, 1, 0.6, dt);
+  if (tag) { tag.t += dt; if (tag.t > 12) tag = null; }
+  const fadeOn = Math.abs(cap.a - (want === cap.shownKey ? 1 : 0)) > 0.004;
+  const lab = stateLabel();
+  const key = cap.shownKey + '|' + lab + '|' + (MX.playing ? 1 : 0) + '|' + (MX.art ? 1 : 0) + '|' + Math.round(calm.lv * 40);
+  if (!cap.dirty && !fadeOn && !tag && key === cap.key) return;
+  cap.key = key; cap.dirty = false;
+  const g = capx, d = L.dpr, H = L.H, w = cap.w, h = cap.h;
+  g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  const A = cap.a * (1 - 0.55 * calm.lv) * (MX.playing || !np ? 1 : 0.7);
+  const fsT = clamp(Math.round(H * 0.019), 13, 30), fsA = clamp(Math.round(H * 0.0118), 10, 18);
+  const top = clamp(H * 0.006, 2, 12);
+  let x = 0;
+  g.textBaseline = 'top'; g.textAlign = 'left';
+  const shown = cap.shownKey.startsWith('np|') ? np : null;
+  if (shown) {
+    const th = Math.round(fsT * 1.25 + fsA * 1.5 + 6);
+    if (MX.art && MX.art.img) {
+      g.globalAlpha = A * 0.9; g.save(); g.beginPath(); g.roundRect(0, top, th, th, 3); g.clip(); g.drawImage(MX.art.img, 0, top, th, th); g.restore();
+      g.globalAlpha = A * 0.25; g.strokeStyle = '#fff'; g.lineWidth = 0.5; g.beginPath(); g.roundRect(0.25, top + 0.25, th - 0.5, th - 0.5, 3); g.stroke();
+      x = th + Math.round(fsT * 0.8);
+    }
+    g.globalAlpha = A * 0.86; g.fillStyle = '#f1ece6'; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText(ellipsize(g, shown.title || '', w * 0.6 - x), x, top);
+    g.globalAlpha = A * 0.5; g.fillStyle = '#e2dcd4'; g.font = `500 ${fsA}px ${SANS}`;
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0.14em';
+    g.fillText(ellipsize(g, (shown.artist || '').toUpperCase() + (shown.playing ? '' : '  ·  PAUSED'), w * 0.6 - x), x, top + fsT * 1.3 + 4);
+    if (g.letterSpacing !== undefined) g.letterSpacing = '0px';
+  } else {
+    g.globalAlpha = A * 0.55; g.fillStyle = '#ece6de'; g.font = `italic 400 ${fsT}px ${SERIF}`;
+    g.fillText('Magnet Bloom', 0, top);
+    g.globalAlpha = A * 0.3; g.font = `400 ${fsA}px ${SANS}`;
+    g.fillText('a ferrofluid crown · play some music', 0, top + fsT * 1.3 + 4);
+  }
+  g.textAlign = 'right';
+  if (tag) {
+    const k = clamp(tag.t / 1.5, 0, 1) * clamp((12 - tag.t) / 2, 0, 1), ee = k * k * (3 - 2 * k);
+    g.globalAlpha = 0.75 * ee * (1 - 0.3 * calm.lv); g.fillStyle = '#f1ece6'; g.font = `italic 400 ${fsT * 0.92}px ${SERIF}`;
+    const tw = g.measureText(tag.text).width;
+    g.fillText(tag.text, w, top + 1);
+    if (tag.kind === 'water') {
+      const gx = w - tw - fsT * 1.0, gy = top + 1, gh = fsT * 0.95, gw = gh * 0.62;
+      g.strokeStyle = '#f1ece6'; g.lineWidth = 1; g.globalAlpha *= 0.8;
+      g.beginPath(); g.moveTo(gx, gy); g.lineTo(gx + gw * 0.12, gy + gh); g.lineTo(gx + gw * 0.88, gy + gh); g.lineTo(gx + gw, gy); g.stroke();
+      g.globalAlpha *= 0.5; g.beginPath(); g.moveTo(gx + gw * 0.06, gy + gh * 0.42); g.lineTo(gx + gw * 0.94, gy + gh * 0.42); g.stroke();
+    }
+  } else {
+    g.globalAlpha = A * 0.28 + 0.06; g.fillStyle = '#e2dcd4'; g.font = `400 ${fsA}px ${MONO}`;
+    g.fillText(lab, w, top + 3);
+  }
+  g.globalAlpha = 1;
+}
+
+// =====================================================================
+//  Frame
+// =====================================================================
+const CAM = (() => {
+  const el = 0.64, dist = 3.9, look = [0, 0.02, -0.03];
+  const cam = [look[0], look[1] - Math.cos(el) * dist, look[2] + Math.sin(el) * dist];
+  const f = [look[0] - cam[0], look[1] - cam[1], look[2] - cam[2]], fl = Math.hypot(...f);
+  const F3 = f.map((v) => v / fl), R = [1, 0, 0];
+  const U = [R[1] * F3[2] - R[2] * F3[1], R[2] * F3[0] - R[0] * F3[2], R[0] * F3[1] - R[1] * F3[0]];
+  const tx = 0.335;
+  return { cam, F: F3, R, U, tan: [tx, tx / ASPECT] };
+})();
+const ripBuf = new Float32Array(16);
+function render(dt, T) {
+  gl.disable(gl.BLEND);
+  // 1. heightfield
+  bindTarget(GPU.H);
+  ripBuf.fill(0);
+  F.ripples.forEach((r, i) => ripBuf.set([r.x, r.y, r.age, r.str], i * 4));
+  GPU.height.use({
+    uMag: F.mag, uSig: F.sig, uDome: F.dome * (1 + 0.25 * F.jolt), uSpk: F.spk * (1 + 0.3 * F.jolt), uK: 50, uRot: F.rot, uSq: F.sq, uSharp: F.sharp,
+    uTime: F.time, uShim: F.shim, uRip: ripBuf,
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // 2. view
+  bindTarget(GPU.scene); bindTex(0, GPU.H.tex);
+  GPU.view.use({
+    uH: 0, uCam: CAM.cam, uF: CAM.F, uR: CAM.R, uU: CAM.U, uTan: CAM.tan,
+    uKey: V.key, uRim: V.rim, uRim2: V.rim2, uAmb: V.amb, uTable: V.table, uTime: F.time,
+  });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // 3. bloom
+  let src = GPU.scene;
+  GPU.mips.forEach((m, i) => {
+    bindTarget(m); bindTex(0, src.tex);
+    GPU.down.use({ uSrc: 0, uTexel: [1 / src.w, 1 / src.h], uThreshold: 0.9, uPrefilter: i === 0 ? 1 : 0, uSpread: i === 0 ? 1 : 0.5 });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    src = m;
+  });
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  for (let i = GPU.mips.length - 1; i > 0; i--) {
+    const from = GPU.mips[i], to = GPU.mips[i - 1];
+    bindTarget(to); bindTex(0, from.tex);
+    GPU.up.use({ uSrc: 0, uTexel: [1 / from.w, 1 / from.h] });
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  gl.disable(gl.BLEND);
+  bindTarget(null);
+  bindTex(0, GPU.scene.tex); bindTex(1, GPU.mips[0].tex);
+  GPU.comp.use({ uScene: 0, uBloom: 1, uBloomAmt: 0.6 / GPU.mips.length, uExposure: V.expo });
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+const rnow = LW.virtual ? () => new Event('x').timeStamp : () => performance.now();
+let tPrev = nowS(), bgOpacity = -1;
+function frame() {
+  requestAnimationFrame(frame);
+  const T = nowS(), dt = Math.min(0.1, Math.max(0, T - tPrev));
+  tPrev = T;
+  tick(dt, T);
+}
+function tick(dt, T) {
+  MX.update(dt);
+  if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
+  calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 1.2 : 1.6, dt);
+  calm.br = calm.lv > 0.01 ? LW.breathState(LW.breathTime() > 0 ? LW.breathTime() : nowS() - BR.t0) : { level: 0 };
+  direct(dt, T);
+  updatePalette(dt);
+  if (bg.dirty && T - bg.at > 0.5) { bg.dirty = false; bg.at = T; bakeBg(); }
+  const op = Math.round(V.bgA * 200) / 200;
+  if (op !== bgOpacity) { bgOpacity = op; bgCv.style.opacity = op; }
+  if (gl) render(dt, T);
+  drawCaption(dt);
+}
+
+// =====================================================================
+//  Wiring
+// =====================================================================
+function inDish(x, y) {
+  const dx = (x - L.cx) / (L.cw * 0.36), dy = (y - L.cy) / (L.ch * 0.36);
+  return dx * dx + dy * dy < 1;
+}
+LW.on('down', (x, y) => {
+  if (inDish(x, y)) { F.jolt = Math.max(F.jolt, 0.8); MX.media('playpause'); }
+  else if (x >= cap.x && x <= cap.x + cap.w * 0.6 && y >= cap.y && y <= cap.y + cap.h && MX.np) MX.media('next');
+});
+LW.on('nowplaying', () => { cap.dirty = true; });
+MX.on('art', () => { cap.dirty = true; });
+LW.on('env', () => { bg.dirty = true; });
+LW.on('layout', layout);
+LW.on('reminder', (r) => {
+  if (!r) return;
+  if (r.kind === 'water') showTag('water', r.text || 'a sip of water?');
+  else if (r.kind === 'stretch') showTag('stretch', r.text || 'roll your shoulders, unclench your jaw');
+  else if (r.kind === 'breathe') setCalm(true, 60);
+});
+LW.on('calm', (on) => setCalm(!!on));
+LW.on('action', (a) => {
+  if (a === 'water') showTag('water', 'a sip of water?');
+  else if (a === 'stretch') showTag('stretch', 'roll your shoulders, unclench your jaw');
+  else if (a === 'calm' || a === 'breathe') setCalm(!calm.on, a === 'breathe' ? 60 : 0);
+  else if (a === 'playpause' || a === 'next' || a === 'previous') MX.media(a);
+});
+if (DEV) addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey) return;
+  if (e.key === 'p') MX.media('playpause');
+  if (e.key === '.') MX.media('next');
+  if (e.key === 'k') { F.jolt = 1; F.ripples.push({ x: F.mag[0], y: F.mag[1], age: 0, str: 1 }); }
+  if (e.key === 's') showTag('stretch', 'roll your shoulders, unclench your jaw');
+});
+addEventListener('resize', layout);
+
+if (gl) { try { initGL(); } catch (e) { console.error('fluids GL init failed', e); gl = null; } }
+layout();
+if (LW.calm) setCalm(true);
+requestAnimationFrame(frame);
+
+window.__fx = {
+  F, V, L, calm, MX,
+  bench(n = 120) {
+    const realNow = () => new Event('x').timeStamp, px = new Uint8Array(4);
+    let T = nowS(); const t0 = realNow();
+    for (let i = 0; i < n; i++) { T += 1 / 30; tick(1 / 30, T); if (gl) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+    return { msPerFrameSynced: +((realNow() - t0) / n).toFixed(2), renderPx: [GPU.w, GPU.h], dpr: L.dpr, view: [L.W, L.H] };
+  },
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Sky &amp; Kites</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#24405e}</style>
+</head>
+<body>
+<script src="astronomy.js"></script>
+<script src="kit.js"></script>
+<script src="lw.js"></script>
+<script src="moon.js"></script>
+<script>
+'use strict';
+// Sky & Kites — lying in the grass, looking up. The kit's sky does the gradient, sunlit clouds, sun/moon/stars;
+// this file flies three kites on long sagging strings (verlet ropes) from the bottom-left, tails streaming in the
+// wind field, swooping in gusts; birds cross; drag a kite to steer it. Breath: wind rises on the in-breath, kites climb.
+const { rand, clamp, lerp, smooth, ease, angDiff, pick, noise1, TAU } = Kit.math;
+const KITES = [
+  { kind: 'diamond', size: 92, len: 0.92, panels: [[0.78, 0.1, 0.09], [0.94, 0.92, 0.88], [0.94, 0.92, 0.88], [0.78, 0.1, 0.09]], tail: [[0.78, 0.1, 0.09], [0.96, 0.94, 0.9]], anchor: [-0.04, 1.06], theta: 0.95 },
+  { kind: 'delta', size: 128, len: 0.78, panels: [[0.05, 0.47, 0.55], [0.98, 0.75, 0.12], [0.93, 0.38, 0.1], [0.05, 0.47, 0.55]], tail: [[0.98, 0.75, 0.12], [0.93, 0.38, 0.1]], anchor: [0.02, 1.1], theta: 0.72 },
+  { kind: 'diamond', size: 70, len: 1.04, panels: [[0.12, 0.2, 0.55], [0.98, 0.8, 0.15], [0.12, 0.2, 0.55], [0.98, 0.8, 0.15]], tail: [[0.12, 0.2, 0.55], [0.98, 0.8, 0.15]], anchor: [-0.08, 1.03], theta: 1.18 },
+];
+// kite outlines in kite space (nose at −y); panels are fans around the spar crossing
+const SHAPES = {
+  diamond: { pts: [[0, -1], [0.66, -0.28], [0, 1.15], [-0.66, -0.28]], c: [0, -0.28], tail: [0, 1.15], spars: [[[0, -1], [0, 1.15]], [[-0.66, -0.28], [0.66, -0.28]]] },
+  delta:   { pts: [[0, -0.9], [1.05, 0.42], [0, 0.22], [-1.05, 0.42]], c: [0, 0.05], tail: [0, 0.22], spars: [[[0, -0.9], [0, 0.22]], [[-0.62, 0.05], [0.62, 0.05]]] },
+};
+let kites = [], flocks = [], grass, u = 1, grabbed = null, birdWait = 6;
+
+function setupKites(k) {
+  u = Math.min(k.W, k.H) / 1000;
+  const diag = Math.hypot(k.W, k.H);
+  kites = KITES.map((d, i) => {
+    const kt = { ...d, i, ax: k.mx(d.anchor[0] * k.W), ay: d.anchor[1] * k.H, sx: k.layout.mirror ? -1 : 1, L: d.len * diag * 0.62, theta: d.theta, omega: 0, yaw: 0, seed: rand(99), x: 0, y: 0, rot: 0 };
+    place(kt);
+    kt.string = Kit.rope(30, 1, kt.ax, kt.ay); kt.string.place(kt.ax, kt.ay, kt.x, kt.y, 40);
+    kt.tailR = Kit.rope(16, 11 * u * d.size / 92, kt.x, kt.y);
+    return kt;
+  });
+}
+function place(kt) { kt.x = kt.ax + kt.sx * Math.cos(kt.theta) * kt.L; kt.y = kt.ay - Math.sin(kt.theta) * kt.L; }   // flyer's hand: bottom corner on the clear side
+// kite-space → screen
+function K(kt, x, y, s = kt.size * u) { const c = Math.cos(kt.rot), sn = Math.sin(kt.rot); return [kt.x + (x * c - y * sn) * s * 0.5, kt.y + (x * sn + y * c) * s * 0.5 * (1 - Math.abs(kt.yaw) * 0.25)]; }
+
+function updateKites(dt, t, k) {
+  const wx = LW.env.weather, low = wx === 'rain' || wx === 'storm' ? 0.25 : 0;
+  for (const kt of kites) {
+    const w = k.wind.at(kt.x, kt.y);
+    // more wind → higher on the string arc; gusts and slow noise make it swoop
+    let target = lerp(0.52, 1.1, smooth(0.15, 1.3, w)) - low + noise1(kt.seed + t * 0.18) * 0.16 + noise1(kt.seed * 2 + t * 0.6) * 0.05 * (1 + k.wind.gust);
+    const B = k.breath; if (B.fade > 0.01) target = lerp(target, lerp(0.58, 1.02, B.level) - kt.i * 0.05 + noise1(kt.seed + t * 0.1) * 0.03, B.fade);   // calm: climb with the in-breath
+    if (grabbed === kt) target = clamp(Math.atan2(kt.ay - k.cursor.y, kt.sx * (k.cursor.x - kt.ax)), 0.2, 1.45);
+    const stiff = grabbed === kt ? 9 : 2.2;
+    kt.omega += ((target - kt.theta) * stiff - kt.omega * (grabbed === kt ? 5 : 1.4)) * dt;
+    kt.theta += kt.omega * dt;
+    kt.L = ease(kt.L, KITES[kt.i].len * Math.hypot(k.W, k.H) * 0.62 * lerp(0.93, 1.02, smooth(0.2, 1.2, w)), 0.5, dt);
+    place(kt);
+    // the kite leans into its swoops and yaws in the gusts
+    kt.yaw = ease(kt.yaw, clamp(-kt.omega * 1.6 + noise1(kt.seed * 3 + t * 0.9) * 0.25 * (0.5 + w), -0.9, 0.9), 4, dt);
+    const out = Math.atan2(kt.y - kt.ay, kt.x - kt.ax);
+    kt.rot = lerp(out + Math.PI / 2, 0, 0.45) + kt.yaw * 0.5;
+    // string: verlet rope from the flyer's hand (off-screen) to the bridle, slack ≈ 1.5%
+    const S = SHAPES[kt.kind], [bx, by] = K(kt, S.c[0], S.c[1] + 0.25), d = Math.hypot(bx - kt.ax, by - kt.ay);
+    kt.string.seg = d * 1.012 / (kt.string.n - 1);
+    kt.string.step(dt, { pinA: [kt.ax, kt.ay], pinB: [bx, by], gravity: 260, damping: 0.97, iters: 14, wind: [k.wind.dir[0] * w * 40, 0] });
+    // tail: streams downwind, flutters
+    const [tx, ty] = K(kt, S.tail[0], S.tail[1]);
+    const ox = Math.cos(out), oy = Math.sin(out);
+    kt.tailR.step(dt, { pinA: [tx, ty], gravity: 230, damping: 0.95, iters: 3,
+      wind: (x, y, i) => { const fl = Math.sin(t * 6.5 - i * 0.65 + kt.seed) * (160 + w * 220) * (0.3 + i / 16); return [ox * (40 + w * 90) + k.wind.dir[0] * w * 60 - oy * fl, Math.max(0, oy * (40 + w * 90)) + ox * fl]; } });
+  }
+}
+
+function drawKite(b, kt, k) {
+  const L = k.L, S = SHAPES[kt.kind], night = smooth(0.55, 0.9, L.night);
+  // seen from below: fabric glows where the sun shines through it, otherwise takes the sky's light
+  const sky = k.layer('sky').sun || { x: 0, y: 0, vis: 0 };
+  const back = clamp(1 - Math.hypot(sky.x - kt.x, sky.y - kt.y) / (k.H * 0.9), 0, 1) * sky.vis;
+  const lightK = L.light.map((v, i) => (v * L.amb * (0.42 + 0.5 * back) + L.zenith[i] * 0.35 + 0.03) * (1 - night * 0.8));
+  // string + tail first (the kite sits on top)
+  const sp = Array.from(kt.string.p), strC = L.light.map((v, i) => v * L.amb * 0.75 + L.zenith[i] * 0.4 + 0.08);
+  b.strip(sp, () => 0.9, (i, t) => [...strC, lerp(0.25, 0.7, t) * (1 - night * 0.5)]);
+  const tp = Array.from(kt.tailR.p), tc = kt.tail, tw = 6 * u * kt.size / 92;
+  b.strip(tp, (i, t) => tw * (1 - t * 0.6), (i, t) => [...tc[0].map((v, j) => v * lightK[j] * (0.9 + 0.2 * Math.sin(i * 1.3 + k.t * 5))), 0.95]);
+  for (let i = 2; i < kt.tailR.n; i += 3) { const [x, y] = kt.tailR.pt(i), [x2, y2] = kt.tailR.pt(i - 1), a = Math.atan2(y - y2, x - x2) + Math.PI / 2, bw = tw * 1.6, c2 = tc[1].map((v, j) => v * lightK[j]);   // bows
+    b.tri(x, y, x + Math.cos(a) * bw - Math.sin(a) * bw * 0.4, y + Math.sin(a) * bw + Math.cos(a) * bw * 0.4, x + Math.cos(a) * bw + Math.sin(a) * bw * 0.4, y + Math.sin(a) * bw - Math.cos(a) * bw * 0.4, c2);
+    b.tri(x, y, x - Math.cos(a) * bw - Math.sin(a) * bw * 0.4, y - Math.sin(a) * bw + Math.cos(a) * bw * 0.4, x - Math.cos(a) * bw + Math.sin(a) * bw * 0.4, y - Math.sin(a) * bw - Math.cos(a) * bw * 0.4, c2); }
+  // panels (fan around the spar crossing), each shaded by how it faces
+  const C = K(kt, S.c[0], S.c[1]), P = S.pts.map(([x, y]) => K(kt, x, y));
+  for (let i = 0; i < 4; i++) {
+    const a = P[i], c = P[(i + 1) % 4], face = 0.86 + 0.14 * Math.sin(kt.yaw * 2 + i * 1.7), col = kt.panels[i].map((v, j) => v * lightK[j] * face);
+    if (kt.kind === 'delta') { const bands = 3; for (let q = 0; q < bands; q++) { const t0 = q / bands, t1 = (q + 1) / bands, pa = [lerp(C[0], a[0], t0), lerp(C[1], a[1], t0)], pb = [lerp(C[0], c[0], t0), lerp(C[1], c[1], t0)], pa1 = [lerp(C[0], a[0], t1), lerp(C[1], a[1], t1)], pb1 = [lerp(C[0], c[0], t1), lerp(C[1], c[1], t1)], cc = kt.panels[(i + q) % 4].map((v, j) => v * lightK[j] * face); const g0 = 1.15 - t0 * 0.3, g1 = 1.15 - t1 * 0.3; b.tri(pa[0], pa[1], pa1[0], pa1[1], pb1[0], pb1[1], cc.map((v) => v * g0), 1, cc.map((v) => v * g1), cc.map((v) => v * g1)); b.tri(pa[0], pa[1], pb1[0], pb1[1], pb[0], pb[1], cc.map((v) => v * g0), 1, cc.map((v) => v * g1), cc.map((v) => v * g0)); } }
+    else b.tri(C[0], C[1], a[0], a[1], c[0], c[1], col.map((v) => v * 1.18), 1, col.map((v) => v * 0.82), col.map((v) => v * 0.82));
+  }
+  // hem + spars show through the backlit fabric
+  const dark = [0.05, 0.05, 0.06];
+  for (let i = 0; i < 4; i++) b.line(P[i][0], P[i][1], P[(i + 1) % 4][0], P[(i + 1) % 4][1], 1.4, dark, 0.35);
+  for (const [p0, p1] of S.spars) { const a = K(kt, ...p0), c = K(kt, ...p1); b.line(a[0], a[1], c[0], c[1], 2.2 * u + 0.6, dark, 0.32 + 0.3 * back); }
+  b.glow(C[0], C[1], kt.size * u * 0.55, L.light, back * 0.12 * (1 - night), 1, 2.5);
+  // night: a few LEDs along the edges and down the tail
+  if (night > 0.02) {
+    const led = [[1, 0.85, 0.6], [0.6, 0.85, 1], [1, 0.5, 0.45]][kt.i];
+    for (const p of P) b.glow(p[0], p[1], 9 * u + 3, led, night * 0.9, 1, 3);
+    for (let i = 3; i < kt.tailR.n; i += 3) { const [x, y] = kt.tailR.pt(i); b.glow(x, y, 7 * u + 2, led, night * 0.7 * (0.6 + 0.4 * Math.sin(k.t * 3 + i)), 1, 3); }
+  }
+}
+
+// ── Birds: a loose skein crosses now and then (silhouettes from below) ──
+function updateBirds(dt, t, k) {
+  const L = k.L, ok = L.night < 0.6 && !['storm', 'snow'].includes(LW.env.weather);
+  birdWait -= dt;
+  if (ok && birdWait <= 0) {
+    birdWait = rand(25, 60); const dir = Math.random() < 0.5 ? 1 : -1, n = Math.random() < 0.3 ? 1 : Math.round(rand(3, 9)), far = rand(0.5, 1);
+    const fl = { x: dir > 0 ? -80 : k.W + 80, y: rand(0.08, 0.55) * k.H, vx: dir * rand(55, 95) * far, vy: rand(-8, 8), size: (n === 1 ? 26 : 18) * far * u + 6, birds: [] };
+    for (let i = 0; i < n; i++) { const row = Math.ceil(i / 2), side = i % 2 ? 1 : -1; fl.birds.push({ dx: -dir * row * 34 * far * u + rand(-6, 6), dy: side * row * 22 * far * u + rand(-5, 5), ph: rand(TAU), rate: rand(5.5, 7) }); }
+    flocks.push(fl);
+  }
+  for (let i = flocks.length - 1; i >= 0; i--) { const f = flocks[i]; f.x += f.vx * dt; f.y += f.vy * dt; f.vy += noise1(f.size + t * 0.2) * 6 * dt; if (f.x < -400 || f.x > k.W + 400) flocks.splice(i, 1); }
+}
+function drawBirds(b, k, t) {
+  const L = k.L, sil = L.zenith.map((v, i) => v * 0.25 + 0.02);
+  for (const f of flocks) for (const bd of f.birds) {
+    const x = f.x + bd.dx, y = f.y + bd.dy + Math.sin(t * 0.8 + bd.ph) * 3, s = f.size, dir = Math.sign(f.vx);
+    const flap = Math.sin(t * bd.rate + bd.ph), glide = Math.sin(t * 0.5 + bd.ph) > 0.4 ? 0.15 : 1, span = s * (0.75 + 0.25 * flap * glide);
+    for (const side of [-1, 1]) b.tri(x + dir * s * 0.12, y, x - dir * s * 0.1, y, x - dir * s * 0.16, y + side * span * 0.55, sil, 0.85);
+    b.line(x - dir * s * 0.32, y, x + dir * s * 0.28, y, s * 0.13, sil, 0.85);
+  }
+}
+
+Kit.scene({
+  setup(k) { grass = k.sheet({ a: Kit.paint.grassTuft(256, [60, 80, 40], 34, 11), b: Kit.paint.grassTuft(256, [70, 86, 44], 28, 12) }); },
+  resize(k) { setupKites(k); },
+  layers: [
+    Kit.sky({ place: (k, elev, az) => [k.mx(k.W * (0.4 + Math.sin(az) * 0.3)), k.H * (1.02 - (elev + 0.02) * 1.15)] }),
+    Kit.sprites((b, k, t) => drawBirds(b, k, t), 'birds'),
+    Kit.sprites((b, k) => { for (const kt of kites.slice().sort((p, q) => q.L - p.L)) drawKite(b, kt, k); }, 'kites'),
+    // foreground: out-of-focus grass blades at the bottom edge (we're lying in the meadow)
+    Kit.meadow({ ground: false, dof: 0, shadow: 0, push: 40, plants: (k) => {
+      const list = []; const s = Math.min(k.W, k.H) / 1000;
+      for (let x = -60; x < k.W + 60; x += rand(26, 60) * s) { const f = grass.f[pick(['a', 'b'])], h = rand(180, 340) * s * (k.restOK(x, k.H * 0.8, 0) ? 1 : 0.7); list.push({ f, x, y: k.H + rand(30, 80) * s, w: h * 0.9, h, rot: rand(-0.2, 0.2), pivot: 0.95, sway: 16, blur: rand(2.4, 3.4), tint: [0.26, 0.3, 0.24] }); }
+      return { sheet: grass, list };
+    } }),
+    Kit.particles({ fireflies: 0 }),
+    Kit.light({ glow: 0.55, threshold: 0.72, vignette: 0.3 }),
+  ],
+  update(dt, t, k) { updateKites(dt, t, k); updateBirds(dt, t, k); },
+  surfaceAt: () => null,   // looking up: rain streaks only, nothing to splash on
+  onDown(x, y, k) { grabbed = kites.find((kt) => Math.hypot(kt.x - x, kt.y - y) < kt.size * u * 0.9) || null; if (!grabbed) k.wind.puff(0.8); },
+  onUp() { grabbed = null; },
+  // Calm: wind rises with the in-breath (kites climb), settles on the out-breath, holds on the holds.
+  breathe(level, phase, k) { k.wind.puffs = lerp(k.wind.puffs, level * 1.4, Math.min(1, k.breath.fade * 3) * 0.2); },
+  music(m, k) { k.wind.puffs = Math.max(k.wind.puffs, m.beat * 0.25); },
+  ambience: {
+    windLevel: 0.03,
+    tick(A, k, at, ctx) {
+      if (k.L.night < 0.4 && Math.random() < 0.03) A.bird(ctx, A.out, at, 0.004);
+      if (k.wind.gust > 0.5 && Math.random() < 0.15) A.burst(ctx, A.out, at, 0.25, 600 + Math.random() * 500, 0.8, 0.012 * k.wind.gust);   // fabric flutter
+    },
+  },
+});
+</script>
+</body>
+</html>

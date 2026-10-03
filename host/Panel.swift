@@ -24,7 +24,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         popover.contentViewController = vc
         popover.contentSize = web.frame.size
         popover.behavior = .transient
-        popover.appearance = NSAppearance(named: .aqua)   // the panel's palette is light, like the site
+        // Follows the system Light/Dark appearance; menu.html switches palettes via prefers-color-scheme.
     }
 
     var pageURL: URL { app.scenesDir.appendingPathComponent("menu.html") }
@@ -34,6 +34,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         if web.url == nil { ready = false; web.loadFileURL(pageURL, allowingReadAccessTo: app.scenesDir) }
         else { push() }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        app.setEngaged(true); app.checkEngagement()   // the scene keeps running under the panel
         NSApp.activate(ignoringOtherApps: true)   // so the transient popover closes on an outside click
     }
 
@@ -50,7 +51,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         "pickScene:", "pickSetting:", "runAction:", "pickTimeView:", "pickWeather:", "togglePreciseLocation",
         "toggleMute", "toggleMusicMode", "toggleBeatSync", "openAutomationSettings", "pickSoundscape:",
         "pickSoundscapeVolume:", "toggleAudioCat:", "pickAudioVol:", "toggleCalm", "pickBreath:", "pickReminder:",
-        "remindNow", "pickCompanions:", "togglePause", "pickFps:", "togglePauseWhenIdle", "togglePauseOnBattery",
+        "remindNow", "pickCompanions:", "togglePause", "pickFps:", "pickEnergy:", "pickAway:", "pickLayoutMode:", "toggleAvoidIcons", "pickBreathReminder:", "toggleRemindersOverApps", "previewReminderCard", "pickSceneCycle:", "pickSceneCycleScope:", "toggleSceneCycleShuffle", "nextSceneNow", "shareApp", "openSubmitScene", "deactivateLicense", "openScenesFolder",
         "toggleLogin", "reloadScene", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
     ]
 
@@ -90,6 +91,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
 private var panelHostStorage: PanelHost?
 
 extension App {
+    var panelHostIfLoaded: PanelHost? { panelHostStorage }
     var panelHost: PanelHost {
         if let p = panelHostStorage { return p }
         let p = PanelHost(app: self)
@@ -115,6 +117,7 @@ extension App {
     }
 
     func openNativeMenu() {
+        setEngaged(true); lastDesktopActivity = CACurrentMediaTime()   // don't pause under our own menu
         status.menu = panelHost.nativeMenu
         status.button?.performClick(nil)   // tracks the menu until it closes
         status.menu = nil
@@ -143,12 +146,17 @@ extension App {
         return [
             "pro": isPro, "scene": sceneID, "categories": categories,
             "scenes": avail.map { s -> [String: Any] in
-                var d: [String: Any] = ["id": s.id, "title": s.title, "cat": s.category, "pro": s.pro]
+                var d: [String: Any] = ["id": s.id, "title": s.title, "cat": s.category, "pro": s.pro, "music": s.music,
+                                        "author": s.author, "custom": s.custom]
                 if !builtin.contains(s.id) { d["thumb"] = addonThumb(s.id) ?? "" }
                 return d
             },
-            "offers": catalogOffers().map { ["id": $0.id, "title": $0.title, "cat": $0.category, "pro": $0.pro,
-                                             "thumb": $0.thumb?.absoluteString ?? "", "busy": installingScenes.contains($0.id)] },
+            "offers": catalogOffers().sorted { ($0.featured ? 0 : 1, $0.isNew ? 0 : 1) < ($1.featured ? 0 : 1, $1.isNew ? 0 : 1) }
+                .map { ["id": $0.id, "title": $0.title, "cat": $0.category, "pro": $0.pro, "author": $0.author, "blurb": $0.blurb,
+                        "featured": $0.featured, "new": $0.isNew,
+                        "thumb": $0.thumb?.absoluteString ?? "", "busy": installingScenes.contains($0.id)] },
+            "cycle": sceneCycleMinutes, "cycleScope": sceneCycleScope, "cycleShuffle": sceneCycleShuffle,
+            "licensed": licensed,
             "sceneCtl": sceneCtl,
             "timeView": timeView, "weather": weatherOverride ?? "", "precise": preciseLocation,
             "liveWeather": isPro ? (coord == nil ? "Live · locating…" : "Live — \(live)\(temp)\(place)") : "",
@@ -157,7 +165,11 @@ extension App {
             "soundscape": soundscape, "ssVol": soundscapeVolume,
             "music": musicMode, "musicDenied": musicPermissionDenied, "beat": beatSyncOn,
             "companions": companionStyle, "calm": calm, "breath": breathPattern, "water": waterMinutes,
-            "paused": paused, "userPaused": userPaused, "pob": pauseOnBattery, "idle": pauseWhenIdle, "fps": fps,
+            "paused": paused, "userPaused": userPaused, "fps": fps,
+            "breathEvery": breathMinutes, "overApps": remindersOverApps,
+            "layoutMode": layoutMode, "layoutSummary": layoutSummary(), "avoidIcons": avoidIcons,
+            "energy": energyMode, "away": awaySeconds, "awayRec": App.awayRecommended, "onBattery": onBattery,
+            "awayChoices": App.awayChoices.map { [$0.1, $0.0] },
             "login": login,
         ]
     }

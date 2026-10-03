@@ -9,6 +9,14 @@
      Opened standalone in a browser it renders a mock state so it can be designed in isolation. -->
 <style>
 :root{--ink:#20382d;--ink-2:#556158;--ink-3:#6c746b;--line:#d7dcd1;--card:#e9ede3;--card-2:#dfe6d8;--accent:#335c41;--bg:rgba(246,244,236,.9);--ease:cubic-bezier(.22,.8,.24,1)}
+:root{--knob:#fff;--sel:#fff;--sel-ink:var(--ink);--solid:var(--ink);--solid-ink:#fff}
+/* Dark: same green-ink identity, inverted — follows the macOS appearance */
+@media (prefers-color-scheme: dark){
+  :root{--ink:#e7ede4;--ink-2:#b6c1b6;--ink-3:#8d988e;--line:rgba(255,255,255,.12);--card:rgba(255,255,255,.07);--card-2:rgba(255,255,255,.12);
+        --accent:#86b896;--bg:rgba(24,30,26,.86);--knob:#f4f6f1;--sel:rgba(255,255,255,.18);--sel-ink:#fff;--solid:#e7ede4;--solid-ink:#18201b}
+  .now::after{background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.78))}
+  .tile i{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:transparent;color:var(--ink);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
 body{width:340px;background:var(--bg)}
@@ -19,7 +27,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .logo svg{width:22px;height:10px}
 .pill{border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600}
 .pill.pro{background:var(--card-2);color:var(--accent)}
-.pill.unlock{background:var(--ink);color:#fff}
+.pill.unlock{background:var(--solid);color:var(--solid-ink)}
 /* now showing */
 .now{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:2.25/1;background:#2b3a31 center/cover no-repeat}
 .now::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,20,14,.72))}
@@ -29,7 +37,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .acts button{background:var(--card);border-radius:7px;padding:5px 9px;font-size:11.5px;font-weight:500;transition:background .15s}
 .acts button:hover{background:var(--card-2)}
-.acts button:active{background:var(--ink);color:#fff}
+.acts button:active{background:var(--solid);color:var(--solid-ink)}
 .ctl{margin-top:8px;display:flex;flex-direction:column;gap:5px}
 .ctl .row+.row{margin-top:0}
 .ctl .pick{width:212px;flex:none}
@@ -47,7 +55,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .tile span{display:block;margin-top:3px;font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile[aria-current=true] span{color:var(--ink);font-weight:600}
 .tile.offer i{position:relative;opacity:.85}
-.tile.offer i b{position:absolute;right:4px;bottom:4px;background:var(--ink);color:#fff;font-size:9.5px;font-weight:600;border-radius:5px;padding:1px 6px}
+.tile.offer i b{position:absolute;right:4px;bottom:4px;background:var(--solid);color:var(--solid-ink);font-size:9.5px;font-weight:600;border-radius:5px;padding:1px 6px}
+.ico{width:11px;height:11px;vertical-align:-1px;margin-left:3px;color:var(--accent)}
+.perks{list-style:none;display:grid;gap:3px;margin:0 0 2px}
+.perks li{font-size:11.5px}
+.perks .ico{margin:0 4px 0 0}
+.pill.big{padding:6px 12px;font-size:12px}
+.by{display:block;font-size:9.5px;color:var(--ink-3);margin-top:1px}
+.count{font-style:normal;font-size:9.5px;background:var(--solid);color:var(--solid-ink);border-radius:99px;padding:0 5px;margin-left:2px}
+.mus{font-style:normal;color:var(--accent);margin-left:4px;font-size:10px}
 .lock{font-size:9px;font-weight:700;color:var(--accent);margin-left:3px}
 /* sections */
 section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
@@ -59,9 +75,9 @@ h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
 .chips.grid4{display:grid;grid-template-columns:repeat(4,1fr)}
 .chips button{flex:1;border-radius:5px;padding:3px 4px;color:var(--ink-2);font-size:11px;white-space:nowrap}
 .chips button:hover{color:var(--ink)}
-.chips button[aria-pressed=true]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(32,56,45,.15)}
+.chips button[aria-pressed=true]{background:var(--sel);color:var(--sel-ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .sw{width:28px;height:16px;border-radius:99px;background:var(--line);position:relative;flex:none;transition:background .2s}
-.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s var(--ease)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--knob);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s var(--ease)}
 .sw[aria-checked=true]{background:var(--accent)}
 .sw[aria-checked=true]::after{transform:translateX(12px)}
 .sub{padding-left:12px;color:var(--ink-2)}
@@ -72,8 +88,8 @@ h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
 .tl:hover{background:var(--card-2)}
 .tl b{font-size:12px;font-weight:600}
 .tl span{font-size:10.5px;color:var(--ink-3)}
-.tl[aria-pressed=true]{background:var(--ink);color:#fff}
-.tl[aria-pressed=true] span{color:#cfd8cf}
+.tl[aria-pressed=true]{background:var(--solid);color:var(--solid-ink)}
+.tl[aria-pressed=true] span{color:var(--solid-ink);opacity:.75}
 details summary{list-style:none;cursor:pointer}
 details summary::-webkit-details-marker{display:none}
 details summary h2 small{margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
@@ -97,11 +113,18 @@ const send = (a, v, tag) => host ? host.postMessage({ a, v: v === undefined ? nu
 let S = null, tab = null;
 
 const WEATHER = [['', 'Live'], ['clear', 'Clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Storm'], ['snow', 'Snow'], ['fog', 'Fog']];
-const VIEWS = [['auto', 'Auto'], ['sunrise', 'Sunrise'], ['day', 'Day'], ['sunset', 'Sunset'], ['evening', 'Evening'], ['night', 'Night']];
+const CLOCKS = [['auto', 'Live'], ['slow', 'Slow cycle'], ['fast', 'Fast cycle']];
+const VIEWS = [['sunrise', 'Sunrise'], ['day', 'Day'], ['sunset', 'Sunset'], ['evening', 'Evening'], ['night', 'Night']];
 const SCAPES = [['off', 'Off'], ['white', 'White'], ['pink', 'Pink'], ['brown', 'Brown'], ['rain', 'Rain'], ['ocean', 'Ocean'], ['fire', 'Fire'], ['stream', 'Stream']];
 const BREATHS = [['box', 'Box 4-4-4-4'], ['calm', 'Calm 4·6'], ['478', 'Relax 4-7-8']];
 const WATER = [[0, 'Off'], [30, '30m'], [45, '45m'], [60, '1h'], [90, '90m']];
 const FPS = [[20, '20 fps'], [30, '30 fps'], [60, '60 fps']];
+const ENERGY = [['always', 'Always on'], ['away', 'Pause when away'], ['battery', 'Pause on battery']];
+const ENERGY_NOTE = {
+  always: 'Animates all the time. Uses the most battery.',
+  away: 'Pauses when you\u2019re away from the desktop. The scene stays as it is \u2014 click it to resume.',
+  battery: 'Always on when plugged in; on battery it pauses after a minute away. Click to resume.',
+};
 const COMP = [['off', 'Off'], ['native', 'In the scene'], ['characters', 'Characters']];
 const LEVELS = [['fx', 'Interactions'], ['ambience', 'Ambience'], ['weather', 'Weather']];
 const VOLS = [[0.4, 'Quiet'], [0.7, 'Medium'], [1, 'Full']];
@@ -114,12 +137,36 @@ const pro = (locked) => (locked ? '<span class="lock">PRO</span>' : '');
 // Bundled scenes ship a thumbnail in art/thumbs; add-ons and catalog offers carry their own.
 const thumb = (id, src) => `url('${src || `art/thumbs/${id}.jpg`}')`;
 
+
+// One scene tile (installed). Locked tiles open the Pro page.
+const tile = (s) => `<button class="tile" aria-current="${s.id === S.scene}" data-a="${s.pro && !S.pro ? 'openPro' : 'pickScene'}" data-v='${esc(JSON.stringify(s.id))}'><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}${s.music ? ICON.note : ''}${pro(s.pro && !S.pro)}</span></button>`;
+// Discover: catalog scenes not installed yet — featured first, with author credit.
+function discover(offers, locked) {
+  if (!offers.length) return `<p class="note" style="margin:4px 0 2px">You have every scene. New ones arrive here without updating the app.</p>`;
+  return `<div class="grid">${offers.map((o) => `<button class="tile offer" data-a="${o.busy ? '' : 'installScene:'}" data-v='${esc(JSON.stringify(o.id))}' title="${esc(o.blurb || '')}"><i style="background-image:${thumb(o.id, o.thumb)}"><b>${o.busy ? 'Adding…' : o.featured ? 'Featured' : o.new ? 'New' : 'Add'}</b></i><span>${esc(o.title)}${pro(o.pro && locked)}</span><small class="by">by ${esc(o.author || 'wallpap')}</small></button>`).join('')}</div>`;
+}
+// Custom: the user's own scene folders (Pro).
+function customTab(locked) {
+  const mine = S.scenes.filter((s) => s.custom);
+  if (locked) return `<p class="note" style="margin:4px 0 6px">Run your own scenes — or ones friends made — with Pro.</p><button class="pill unlock" data-a="openPro">Get Pro — $5</button>`;
+  return `${mine.length ? `<div class="grid">${mine.map(tile).join('')}</div>` : '<p class="note" style="margin:4px 0">No custom scenes yet.</p>'}
+    <div class="row" style="margin-top:6px"><button class="note" data-a="openSubmitScene" style="text-decoration:underline">How to make a scene</button><span style="display:flex;gap:10px"><button class="note" data-a="openScenesFolder" style="text-decoration:underline">Open folder</button><button class="note" data-a="addSceneFolder" style="text-decoration:underline">Add a scene folder…</button></span></div>`;
+}
+const CYCLE = [[0, 'Off'], [15, '15m'], [30, '30m'], [60, '1h'], [120, '2h']];
+// Custom icons (no emoji): small strokes in currentColor.
+const ICON = {
+  note: '<svg class="ico" viewBox="0 0 12 12" aria-label="Plays your music"><path d="M4.5 9.2V2.6l5-1v6.1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.3" cy="9.3" r="1.3" fill="currentColor"/><circle cx="8.3" cy="7.8" r="1.3" fill="currentColor"/></svg>',
+  check: '<svg class="ico" viewBox="0 0 12 12"><path d="M2.5 6.4l2.2 2.1 4.8-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  share: '<svg class="ico" viewBox="0 0 12 12"><path d="M6 1.5v6.2M3.6 3.8L6 1.5l2.4 2.3M2.5 6.5v3.2h7V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const PERKS = ['Every look of every scene', 'Music Mode — your songs in the scene', 'Breathing inside the scene', 'Water & breathe reminders', 'Live weather, real sun and moon', 'Soundscapes · your own scenes'];
+
 function render(state) {
   S = state;
   const cur = S.scenes.find((s) => s.id === S.scene) || S.scenes[0] || { id: '', title: '', cat: '' };
-  if (!tab || !S.categories.includes(tab)) tab = cur.cat;
+  if (!tab || !(S.categories.includes(tab) || tab === 'Discover' || tab === 'Custom')) tab = cur.cat;
   const offers = S.offers || [];
-  const cats = S.categories.filter((c) => S.scenes.some((s) => s.cat === c) || offers.some((o) => o.cat === c));
+  const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
   const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
     ? `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`
@@ -135,28 +182,34 @@ function render(state) {
   </div>
 
   <div class="now" style="background-image:${thumb(cur.id, cur.thumb)}">
-    <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${S.paused ? ' · paused' : ''}</span></div>
+    <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${cur.author && cur.author !== 'wallpap' ? ' · by ' + esc(cur.author) : ''}${S.paused ? ' · paused' : ''}</span></div>
   </div>
   ${sceneActs ? `<div class="acts">${sceneActs}</div>` : ''}
   ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
 
-  ${sec('scenes', 'Scenes', esc(cur.title), `
-    <div class="tabs">${cats.map((c) => `<button aria-pressed="${c === tab}" data-tab="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-    <div class="grid">${S.scenes.filter((s) => s.cat === tab).map((s) =>
-      `<button class="tile" aria-current="${s.id === S.scene}" data-a="${s.pro && locked ? 'openPro' : 'pickScene'}" data-v='${esc(JSON.stringify(s.id))}'><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}${pro(s.pro && locked)}</span></button>`).join('')}${offers.filter((o) => o.cat === tab).map((o) =>
-      `<button class="tile offer" data-a="${o.busy ? '' : 'installScene:'}" data-v='${esc(JSON.stringify(o.id))}'><i style="background-image:${thumb(o.id, o.thumb)}"><b>${o.busy ? 'Downloading…' : 'Get'}</b></i><span>${esc(o.title)}${pro(o.pro && locked)}</span></button>`).join('')}</div>
-    <div class="row" style="margin-top:6px"><span class="note">${offers.length ? `${offers.length} new scene${offers.length > 1 ? 's' : ''} to download` : ''}</span><button class="note" data-a="addSceneFolder" style="text-decoration:underline">Add your own…</button></div>`)}
+  ${sec('scenes', 'Scenes', esc(cur.title) + (S.cycle ? ` · changes every ${esc(label(CYCLE, S.cycle))}` : ''), `
+    <div class="tabs">${cats.map((c) => `<button aria-pressed="${c === tab}" data-tab="${esc(c)}">${esc(c)}</button>`).join('')}<button aria-pressed="${tab === 'Discover'}" data-tab="Discover">Discover${offers.length ? ` <em class="count">${offers.length}</em>` : ''}</button>${S.scenes.some((x) => x.custom) || S.pro ? '' : ''}<button aria-pressed="${tab === 'Custom'}" data-tab="Custom">Custom</button></div>
+    ${tab === 'Discover' ? discover(offers, locked) : tab === 'Custom' ? customTab(locked) : `<div class="grid">${S.scenes.filter((s) => s.cat === tab).map(tile).join('')}</div>`}
+    <div class="row" style="margin-top:9px"><span class="note">Change scene</span>${S.cycle ? '<button class="note" data-a="nextSceneNow" style="text-decoration:underline">Next scene now</button>' : ''}</div>
+    ${chips(CYCLE, S.cycle, 'pickSceneCycle', { tag: true })}
+    ${S.cycle ? `<div class="row"><div style="width:190px">${chips([['all', 'All scenes'], ['category', 'This category']], S.cycleScope, 'pickSceneCycleScope')}</div><span>Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}`)}
 
-  ${sec('env', 'Environment', `${esc(label(VIEWS, S.timeView))} · ${esc(label(WEATHER, S.weather))}`, `
-    <div class="lbl note" style="margin-bottom:4px">Time of day</div>
-    ${chips(VIEWS, S.timeView, 'pickTimeView', { seg: true })}
+  ${sec('env', 'Environment', `${esc(label(CLOCKS.concat(VIEWS), S.timeView).toLowerCase())} time · ${S.weather ? esc(label(WEATHER, S.weather).toLowerCase()) : 'live weather'}`, `
+    <div class="lbl note" style="margin-bottom:4px">Time</div>
+    ${chips(CLOCKS, S.timeView, 'pickTimeView')}
+    <div class="lbl note" style="margin:6px 0 4px">or hold a moment</div>
+    ${chips(VIEWS, S.timeView, 'pickTimeView')}
     <div class="row" style="margin-top:9px"><span class="note">Weather</span><span class="note">${esc(S.liveWeather || '')}</span></div>
     ${chips(WEATHER.map(([v, l]) => [v, v === '' && locked ? 'Live ·Pro' : l]), S.weather, 'pickWeather')}
-    <div class="row"><span>Use my precise location</span>${sw(S.precise, 'togglePreciseLocation')}</div>`)}
+    <div class="row"><span>Use my precise location</span>${sw(S.precise, 'togglePreciseLocation')}</div>
+    <div class="row" style="margin-top:9px"><span class="note">Keep clear for widgets</span><span class="note">${esc(S.layoutSummary || '')}</span></div>
+    ${chips([['auto', 'Auto'], ['right', 'Right'], ['left', 'Left'], ['off', 'Off']], S.layoutMode || 'auto', 'pickLayoutMode')}
+    <div class="row"><span>Also avoid my desktop icons</span>${sw(S.avoidIcons, 'toggleAvoidIcons')}</div>`)}
 
   ${sec('sound', 'Sound &amp; Music', [S.muted ? 'muted' : 'sound on', S.music && 'music mode', S.soundscape !== 'off' && label(SCAPES, S.soundscape).toLowerCase()].filter(Boolean).join(' · '), `
     <div class="row"><span>Sound</span>${sw(!S.muted, 'toggleMute')}</div>
     <div class="row"><span>Music Mode${pro(locked)} <span class="note">Music · Spotify</span></span>${sw(S.music, locked ? 'openPro' : 'toggleMusicMode')}</div>
+    ${S.music && !cur.music ? `<p class="note">This scene has no music player. Music Mode shows in scenes marked with a note (${esc(S.scenes.filter((x) => x.music).map((x) => x.title).slice(0, 4).join(', '))}…).</p>` : ''}
     ${S.music && S.musicDenied ? '<button class="warn" data-a="openAutomationSettings">Allow wallpap to control Music/Spotify…</button>' : ''}
     ${S.music ? `<div class="row sub"><span>Beat Sync <span class="note">moves with the beat</span></span>${sw(S.beat, 'toggleBeatSync')}</div>` : ''}
     <div class="row" style="margin-top:9px"><span class="note">Soundscape${pro(locked)}</span></div>
@@ -173,15 +226,29 @@ function render(state) {
     </div>
     ${S.calm ? `<div style="margin-top:6px">${chips(BREATHS, S.breath, 'pickBreath', { seg: true })}</div>` : ''}
     ${S.water ? `<div class="row"><span class="note">Remind every</span>${chips(WATER, S.water, 'pickReminder', { seg: true, tag: true })}</div><div class="row"><span></span><button class="note" data-a="remindNow" style="text-decoration:underline">Remind me now</button></div>` : ''}
+    <div class="row" style="margin-top:8px"><span class="note">Breathe reminder</span></div>
+    ${chips([[0, 'Off'], [60, '1h'], [90, '90m'], [120, '2h']], S.breathEvery || 0, locked ? 'openPro' : 'pickBreathReminder', { tag: true })}
+    <div class="row"><span>Show reminders over my apps <span class="note">small card under the menu bar</span></span>${sw(S.overApps, locked ? 'openPro' : 'toggleRemindersOverApps')}</div>
+    ${S.overApps ? '<div class="row"><span></span><button class="note" data-a="previewReminderCard" style="text-decoration:underline">Preview the card</button></div>' : ''}
     <div class="row" style="margin-top:8px"><span class="note">AI companions${pro(locked)}</span></div>
     ${chips(COMP, S.companions, locked ? 'openPro' : 'pickCompanions', { seg: true })}`)}
 
-  ${sec('perf', 'Performance', `${S.paused ? 'paused · ' : ''}${S.fps} fps${S.idle ? ' · rests when idle' : ''}`, `
-    <div class="row"><span>${S.paused && !S.userPaused ? 'Paused (on battery)' : 'Pause animation'}</span>${sw(S.paused, 'togglePause')}</div>
-    <div class="row"><span>Frame rate</span>${chips(FPS, S.fps, 'pickFps', { seg: true, tag: true })}</div>
-    <div class="row"><span>Rest when not in use</span>${sw(S.idle, 'togglePauseWhenIdle')}</div>
-    <div class="row"><span>Pause on battery</span>${sw(S.pob, 'togglePauseOnBattery')}</div>
+  ${sec('perf', 'Energy', `${S.paused ? 'paused · ' : ''}${label(ENERGY, S.energy).toLowerCase()}${S.energy === 'away' ? ' ' + label(S.awayChoices, S.away) : ''} · ${S.fps} fps`, `
+    ${chips(ENERGY, S.energy, 'pickEnergy')}
+    <p class="note" style="margin:5px 0 2px">${ENERGY_NOTE[S.energy] || ''}</p>
+    ${S.energy === 'away' ? `<div class="row"><span class="note">Pause after</span></div>${chips(S.awayChoices, S.away, 'pickAway', { tag: true })}<p class="note" style="margin-top:3px">${S.away === S.awayRec ? 'Recommended — a good balance of battery and life on screen.' : `Recommended: ${esc(label(S.awayChoices, S.awayRec))}.`}</p>` : ''}
+    <div class="row" style="margin-top:8px"><span>Frame rate</span><div style="width:190px">${chips(FPS, S.fps, 'pickFps', { tag: true })}</div></div>
+    <div class="row"><span>Pause animation now</span>${sw(S.paused, 'togglePause')}</div>
     <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>`)}
+
+  ${sec('acct', S.pro ? 'wallpap Pro' : 'Free plan', S.pro ? 'all looks and features' : 'every scene, default looks', S.pro ? `
+    <div class="row"><span>${ICON.check} Pro is active on this Mac</span>${S.licensed ? '<button class="note" data-a="deactivateLicense" style="text-decoration:underline">Move to another Mac</button>' : ''}</div>
+    <div class="row"><button class="note" data-a="shareApp" style="text-decoration:underline">${ICON.share} Share wallpap</button><button class="note" data-a="openSubmitScene" style="text-decoration:underline">Make a scene</button></div>` : `
+    <p class="note" style="margin-bottom:6px">You have every scene in its default look. Pro adds:</p>
+    <ul class="perks">${PERKS.map((p) => `<li>${ICON.check} ${esc(p)}</li>`).join('')}</ul>
+    <div class="row" style="margin-top:8px"><button class="pill unlock big" data-a="openPro">Get Pro — $5 once</button><button class="note" data-a="enterLicense" style="text-decoration:underline">Have a key?</button></div>
+    <p class="note" style="margin-top:6px">One purchase, up to 3 Macs. No subscription.</p>
+    <div class="row"><button class="note" data-a="shareApp" style="text-decoration:underline">${ICON.share} Share wallpap</button><button class="note" data-a="openSubmitScene" style="text-decoration:underline">Make a scene</button></div>`)}
 
   <div class="foot">
     <button data-a="reloadScene">Reload</button>
@@ -193,7 +260,7 @@ function render(state) {
 
 // Collapsible sections: each remembers open/closed (per viewer); the summary line shows
 // the current settings while collapsed, so a closed panel still reads at a glance.
-const SEC_DEFAULT = { scenes: true, env: true, sound: false, well: false, perf: false };
+const SEC_DEFAULT = { scenes: true, env: true, sound: false, well: false, perf: false, acct: true };
 const secOpen = (() => { try { return JSON.parse(localStorage.getItem('panel.sec') || '{}'); } catch (e) { return {}; } })();
 const isOpen = (k) => (k in secOpen ? secOpen[k] : SEC_DEFAULT[k]);
 const label = (list, v) => ((list.find((x) => String(x[0]) === String(v)) || list[0])[1]);
@@ -227,12 +294,12 @@ function reportHeight() {
 if (host) send('ready');
 else render({ // standalone design preview
   pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
-  scenes: [['koi', 'Koi Pond', 'Nature'], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Night Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Night Train', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful', 1]].map(([id, title, cat, p]) => ({ id, title, cat, pro: !!p })),
+  scenes: [['koi', 'Koi Pond', 'Nature', 1], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Corner Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Train Journey', 'Journeys', 1], ['drive', 'Night Drive', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful'], ['cymatics', 'Cymatics', 'Music', 1], ['kinetic', 'Kinetic', 'Music', 1], ['fluids', 'Fluids', 'Music', 1], ['skies', 'Skies', 'Music', 1]].map(([id, title, cat, m]) => ({ id, title, cat, pro: false, music: !!m, author: 'wallpap' })),
   sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }],
   timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24° (Bengaluru)', precise: false, muted: false,
   audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
   soundscape: 'off', ssVol: 0.35, music: true, musicDenied: false, beat: true, companions: 'native',
-  calm: false, breath: 'box', water: 45, paused: false, userPaused: false, pob: false, idle: true, fps: 30, login: true,
+  calm: false, breath: 'box', water: 45, paused: false, userPaused: false, fps: 30, breathEvery: 0, overApps: true, cycle: 0, cycleScope: 'all', cycleShuffle: true, licensed: false, offers: [{ id: 'butterfly-garden', title: 'Butterfly Garden', cat: 'Nature', pro: true, author: 'wallpap', featured: true, thumb: 'art/thumbs/grass.jpg' }, { id: 'beach', title: 'Beach', cat: 'Nature', pro: true, author: 'Mira K.', new: true, thumb: 'art/thumbs/koi.jpg' }], layoutMode: 'auto', layoutSummary: '4 widgets on the right', avoidIcons: false, login: true, energy: 'away', away: 120, awayRec: 120, onBattery: false, awayChoices: [[30, '30 sec'], [60, '1 min'], [120, '2 min'], [300, '5 min'], [600, '10 min'], [1800, '30 min']],
 });
 </script>
 </body>

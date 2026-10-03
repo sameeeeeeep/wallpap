@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>wallpap capture stage</title>
+<!-- Capture stage for marketing clips. render.py drives it headless:
+       await STAGE.init('koi')      → loads the clip's scenes (virtual clock), pre-rolls, returns meta
+       await STAGE.frame(i)         → steps every visible scene 1/30 s and updates cursor / mock UI
+     Open it in a normal browser to preview:  /marketing/tools/stage/stage.html?clip=koi&play=1 -->
+<link rel="stylesheet" href="stage.css">
+</head>
+<body>
+<div id="stage">
+  <div id="scenes"></div>
+  <div id="mock"></div>
+  <div id="still"></div>
+  <div id="cursor"><svg viewBox="0 0 28 40" width="28" height="40"><path d="M3 2 L3 31 L10 24.5 L14.6 35.4 L19.6 33.3 L15 22.6 L24.5 22.6 Z" fill="#111" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg></div>
+</div>
+<script src="../clips.js"></script>
+<script src="stage.js"></script>
+</body>
+</html>

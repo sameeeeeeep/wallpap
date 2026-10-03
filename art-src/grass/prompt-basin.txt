@@ -1,0 +1,11 @@
+Use your image generation tool to create a NEW image and save it as a PNG at exactly this path:
+/Users/sameeprehlan/Documents/Projects/visuals/livewall/art-src/grass/basin-raw.png
+Size 1024x1024.
+
+One object, centred, for a painted live-wallpaper meadow (the second attached image is the scene; the first is a painted panda that drinks from it — match its soft hand-painted storybook style: gentle gouache texture, soft shading, no hard outlines):
+- A small, low, round hand-carved granite water basin (Japanese tsukubai) sitting in grass: about twice as wide as it is tall, softly weathered grey stone with patches of green moss low on its sides, a thick rounded rim, filled almost to the brim with still water (the water surface visible as a calm ellipse, reflecting a soft pale sky blue), seen from a low eye level slightly above (about 15 degrees down), so the top ellipse is fairly thin.
+- To its RIGHT, a bamboo water spout (kakehi): one upright green bamboo post a little taller than the basin, and a horizontal bamboo pipe from the top of the post reaching left so its open cut end sits just above the right part of the basin's water. NO water pouring (the stream is animated separately): the spout end is dry and open.
+- A few short grass tufts at the very bottom are OK only if they are small; the basin's base sits on a flat line at about 80% of the canvas height. The whole object (basin + post) spans about 70% of the canvas width.
+- Neutral soft daylight from the upper left, soft shading, a very soft shadow on the ground under it is fine.
+- Background: one pure flat colour #ff00ff (magenta keying background), everywhere around the object, no gradient, no floor plane, no sky.
+- No people, animals, text, signatures or frames.

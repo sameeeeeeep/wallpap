@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Plate demo (airport)</title></head>
+<body>
+<script src="astronomy.js"></script><script src="kit.js"></script><script src="lw.js"></script>
+<script>
+'use strict';
+// Kit.plate validation on the art-src/airport input: 4 plates crossfaded by lighting, live sky through a sky mask,
+// auto emissive (night − day), occluders from layout.json, an A320 rolling out along layout.paths.rollout at the
+// layout's metric scale, rain only where exposed.
+const plateL = Kit.plate({ layoutUrl: 'layout.json', base: 'art/', masks: { sky: '../sky.png', exposed: '../exposed.png' } });
+let sheet, u = 0;
+Kit.scene({
+  assets: { a320: 'art/sprites/a320-side.png' },
+  setup(k) { sheet = k.sheet({ a320: k.assets.a320 }); },
+  layers: [
+    Kit.sky({ elev: [0.5, -0.91], place: (k, e, az) => [k.mx(k.W * (0.5 + Math.sin(az) * 0.45)), k.H * (0.355 - e / 0.5 * 0.355)] }),
+    plateL,
+    Kit.sprites((b, k, t) => {
+      const P = plateL.path('rollout'), [x, y] = P.at(u), [nx, ny] = plateL.fromScreen(x, y);
+      const ppm = plateL.pxPerMetre(nx, ny), w = 37.6 * ppm, f = sheet.f.a320, h = w * f.aspect;
+      const dir = k.layout.mirror ? -1 : 1;   // sprite faces left; rollout runs left→right (mirrored layouts flip it)
+      b.use(sheet).shadow(f, x, y - h * 0.04, w * 0.84, h * 0.25, 0, 0.27, 2, 0.5, 0.5);
+      b.quad4(f, [[x + dir * w / 2, y - h], [x - dir * w / 2, y - h], [x - dir * w / 2, y], [x + dir * w / 2, y]], k.L.tint.map((v) => v * 1.1), 1);
+      plateL.occlude(y, [x - w / 2, y - h, x + w / 2, y]);
+      // a parked A320 at stand S5: nose at the stop bar, body toward the lead-in; mast D must stand in front of it
+      const S5 = plateL.layout.stands.find((s) => s.id === (window.STAND || 'S4')), [px, py] = plateL.toScreen(...S5.nose), [ex] = plateL.toScreen(...S5.entry);
+      const pw = 37.6 * plateL.pxPerMetre(...S5.nose), ph = pw * f.aspect, cx = px + Math.sign(ex - px) * pw * 0.42;
+      b.use(sheet).quad4(f, [[cx - pw / 2, py - ph], [cx + pw / 2, py - ph], [cx + pw / 2, py], [cx - pw / 2, py]], k.L.tint.map((v) => v * 1.1), 1);
+      plateL.occlude(py, [cx - pw / 2, py - ph, cx + pw / 2, py]);
+    }),
+    Kit.particles(),
+    Kit.light({ glow: 0.5 }),
+  ],
+  update(dt) { u = (u + dt / 22) % 1; },
+});
+</script></body></html>

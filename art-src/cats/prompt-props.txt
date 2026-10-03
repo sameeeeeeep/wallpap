@@ -1,0 +1,13 @@
+Use your image generation tool to EDIT the first attached image (cats-ref-props.png, 1536x1024) and save the result as a PNG at exactly this path:
+/Users/sameeprehlan/Documents/Projects/visuals/livewall/art-src/cats/props-raw.png
+
+The first image shows the props of a Santorini rooftop terrace on a flat green keying background: a whitewashed built-in bench with a blue-and-white striped cushion, a simple white fabric sun canopy with a scalloped edge held on two slim wooden poles, two small black iron Moroccan-style lanterns (unlit, frosted glass), a terracotta food bowl and a blue glazed water bowl for cats (both empty), a round woven rug (terracotta, cream and blue rings with a little fringe), and a terracotta pot of red geraniums.
+
+Repaint every prop as a rich hand-painted storybook illustration (soft gouache / painterly lo-fi animation), in the same style as the second attached image (a painted cat sprite that will sit on these props): gentle brush texture, warm colour variation, believable materials (lime-washed plaster bench, soft cotton cushion, linen canopy, aged wood poles, black iron with frosted glass, glazed and unglazed clay, hand-woven cotton rug with visible weave, geranium leaves and flowers).
+
+STRICT RULES:
+- Preserve ALL geometry exactly: every prop stays exactly where it is with exactly the same outline, size and position (bench seat, legs and cushion edges; canopy edge and poles; each lantern; each bowl rim; the rug ellipse; the pot and plant). The image must line up pixel-for-pixel with the original. Same canvas size 1536x1024.
+- Everything else stays pure flat #00ff00 (keying background). Keep the small soft contact shadows under the bowls, pot and bench legs as soft dark shadows.
+- Bowls stay EMPTY (food and water are drawn live). Lantern glass stays unlit pale frosted glass.
+- Lighting: neutral soft daylight from the upper left, soft shading only (the scene re-lights for dusk/night).
+- No people, no animals, no text, no lettering, no extra objects.

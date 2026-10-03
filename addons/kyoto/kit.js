@@ -1089,14 +1089,29 @@ function sky(o = {}) {
     vec2 px = kitPx(), uv = px / uView;
     vec4 s = texture(uSky, uv);
     vec3 col = s.rgb; float clear = 1.0 - s.a;
-    // stars
+    // stars: two sparse grids (many faint, a few bright). Every star has its own size, brightness, tint and
+    // scintillation (independent rate + phase from separate hashes, two incommensurate sines) — most barely
+    // shimmer, roughly one in eight sparkles. Soft round points never narrower than ~1.4 render px (FWHM), so a
+    // low-res scene (k.res < 1 on big displays) never shows them as square dots.
     if (uStars > 0.01) {
-      vec2 cell = floor(px / 22.0), f = fract(px / 22.0); float h = hash(cell);
-      if (h > 0.86) {
-        vec2 c = hash2(cell + 3.1) * 0.8 + 0.1; float r = length(f - c) * 22.0;
-        float b = pow((h - 0.86) / 0.14, 3.0) * (0.55 + 0.45 * sin(uTime * (1.0 + h * 3.0) + h * 40.0));
-        col += vec3(0.85, 0.9, 1.0) * b * exp(-r * r * 0.9) * uStars * clear * (1.0 - 0.6 * pow(uv.y, 2.0));
+      float rp = uView.x / uRes.x;   // CSS px per render px
+      vec3 sc = vec3(0.0);
+      for (int l = 0; l < 2; l++) {
+        float fl = float(l), cs = l == 0 ? 19.0 : 53.0, th = l == 0 ? 0.85 : 0.82;
+        vec2 cell = floor(px / cs), f = fract(px / cs); float h = hash(cell + fl * 71.3);
+        if (h > th) {
+          float k = (h - th) / (1.0 - th);
+          vec2 c = hash2(cell + 3.1 + fl * 17.0) * 0.6 + 0.2; float d = length(f - c) * cs;
+          float mag = l == 0 ? 0.12 + 0.5 * k * k : 0.45 + 0.75 * k * k * k;
+          float sig = max((l == 0 ? 0.5 : 0.75) + 0.4 * hash(cell + 5.7 + fl), 0.62 * rp);
+          float rate = 0.4 + 1.8 * hash(cell + 11.3 + fl), ph = 6.2832 * hash(cell + 23.9 + fl);
+          float amp = 0.06 + 0.5 * smoothstep(0.86, 1.0, hash(cell + 41.7 + fl));
+          float tw = 1.0 + amp * (0.62 * sin(uTime * rate + ph) + 0.38 * sin(uTime * rate * 2.37 + ph * 1.7 + 1.3));
+          vec3 tint = mix(vec3(1.0, 0.88, 0.76), vec3(0.8, 0.88, 1.0), smoothstep(0.12, 0.8, hash(cell + 61.1 + fl)));
+          sc += tint * mag * tw * exp(-d * d / (2.0 * sig * sig));
+        }
       }
+      col += sc * uStars * clear * (1.0 - 0.6 * pow(uv.y, 2.0));
     }
     // sun disc (HDR: blooms in the grade)
     float ds = length(px - uSunPos) / uView.y;

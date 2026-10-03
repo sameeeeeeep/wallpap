@@ -674,3 +674,84 @@ errors, zero teleports, maximum step 2.6. The noon sample mostly rested, so dept
 comes from the forced-walk matrix rather than that natural sample. `natural-overview.jpg` and
 `natural.log` retain that check. `node --test tests/*.cjs`: **43 passed, 0 failed** (`tests.log`).
 No wallpaper-app rebuild, replacement, relaunch, release or push was performed.
+
+
+## 2026-10-03 — Santorini Cats jumps from every view (Codex)
+
+Owner request: front/back jumps as well as left/right side jumps, matching the directional
+walks; fix the floating paw shadow; verify every coat/view/mirror in day and night without
+touching the installed app.
+
+Generated ten new five-frame jump strips with the built-in imagegen tool. Each call used
+that coat's `cat-<coat>-jump-reference.jpg` montage: existing side jump plus the newly authored
+front/back walk sheets. Exact prompts and generation provenance are in
+`art-src/cycles/jumps-prompts.json`. Prompt: same markings, palette, fine outline, soft shading,
+head/body proportions; fixed three-quarter FRONT toward viewer/screen-right or BACK away/
+screen-right; one evenly spaced row of five poses (crouch, hind-leg push-off, airborne stretch,
+foreleg reach, soft landing); constant anatomical scale; complete paws/tails; flat #e6e6e6;
+no text, shadows or props. Original outputs are retained as
+`art-src/cycles/cat-<coat>-jump-{f,b}-original.png`; source sheets without the original suffix
+are prepared masters with five evenly spaced cells on an exact #e6e6e6 backdrop. The generator
+returned a mix of opaque grey and transparent sheets; the original outputs remain unmodified.
+
+`python3 art-src/cycles/cut-jumps.py` reproduces the fifty runtime cutouts under
+`scenes/art/sprites/cats/<coat>/t/jump-{f,b}-1..5.png`. It uses original alpha where available,
+the existing flood-connected grey keyer otherwise, drops detached speckles and registers all
+five frames to a common paw baseline. A single scale per strip puts the compressed landing
+stance at 88% of its matching walk height; no per-frame rescaling. Per-frame torso anchors
+and common scale/padding are in `jumps-layout.json`, mirrored in `LW.PET_JUMP_LAYOUT` and
+checked by regression test. `shots/cats-jumps/art-contact.jpg` compares every cut with its
+matching walking view. All ten generated strips and all fifty cuts were visually inspected.
+
+Jump view uses the same `LW.petDirection` classifier as walking, sampled at takeoff and
+locked through flight and landing. Ground depth comes from supporting ledge bases, excluding
+ledge elevation, so a lateral hop upwards does not accidentally become a rear-facing jump.
+Horizontal sign controls mirroring; pure-depth jumps retain the last horizontal facing. A
+view becomes available only after all five frames load; incomplete views use the side jump.
+Landing resets distance-gait phase and planting offsets to contact frame 1 while retaining
+view/facing. Both surface jumps and the toy-stalk pounce path call the same preparation.
+The ordinary ledge approach now starts 65 ground units in front with 20–45 lateral units,
+so rear-facing bench/wall hops occur naturally; existing wall descent candidates include
+front-facing jumps.
+
+Contact shadows measure the lowest opaque paw band, excluding transparent padding, and
+apply the same anchor, mirroring, transform and two-axis planting displacement as the cat.
+Initial motion review exposed a shadow changing shape as airborne paws tucked/reached:
+flight now interpolates takeoff/landing footprints beneath the body instead. Height controls
+shrink and opacity. Grounded walking/landing retain the measured paw contact.
+
+Concurrent owner-side work advanced this checkout through `ddaf733` and `2cc85c2` during this
+pass (steeper walk paths, 16°/10° view thresholds, single-silhouette pose transitions). Those
+changes were preserved. The threshold/pose tests from the follow-up `0b0d677` commit were preserved; jumps continue to share the walking classifier rather than duplicating
+thresholds. No edits were made to `../livewall-quality`.
+
+Verification used the real `./tools/wkshot` with `WKSHOT_FRAMES`: 60 sequences (five coats ×
+side/front/back × left/right × noon/midnight), sixteen samples each from crouch through
+landing and subsequent walk. Every matrix frame was visually reviewed in the paired
+`review-<coat>-<day|night>-{0,1}.jpg` sheets. Front/back markings and scale remain consistent
+with the walks; landing retains view/facing, reaches the ground, and restarts on walk contact
+frame 1. The opaque paw band stays seated on its shadow in the reviewed front/back walk
+frames. Air shadows remain under the moving body and fade/shrink with height. Night cutout
+edges have no conspicuous grey fringe; all five coats remain readable.
+
+Nine additional sequences cover actual `jumpDown` wall descents, `goLedge` bench ascents,
+and toy-stalk pounces in both lighting states, plus a deliberately missing rear-jump frame,
+a pure-depth jump, and a mirrored terrace at night. The failed image disables the whole rear
+set and correctly uses side frames. The real toy path now shows its directional crouch
+before pushing off. Surface depth classification is front on descent and back on ascent.
+
+All **69 sequences / 1,104 frames** completed with **zero browser errors**. The audit checks
+all five jump poses, matching first walking contact, the common cutout baseline, storage,
+and absence of raw capture PNGs. Initial captures used a 1600×1000 viewport; concurrent
+screenshot load caused WebKit's 60-second harness timeout on some cases. Those incomplete
+cases were retried serially at 1200×750 (identical 1600×1000 logical layout). Both sizes are
+downscaled into JPEG contact sheets. No incomplete sequence is counted. Evidence and
+reproduction scripts: `shots/cats-jumps/README.md`; machine results: `summary.json`.
+
+`node --test tests/*.cjs`: **48 passed, 0 failed** (`shots/cats-jumps/tests.log`). New regressions
+cover shared direction/hysteresis, mirroring, fallback, landing contact reset, fifty assets
+and geometry parity, planted shadow transforms, and stable airborne footprints. Re-cutting
+from the originals reproduced all fifty runtime assets byte for byte. `git diff --check`
+passed. Final evidence is approximately **36 MiB**, with raw PNG captures deleted. `df -h /`
+was checked throughout; free storage stayed above the 3 GiB stop threshold (about 11 GiB
+at final audit). No app rebuild, installation, relaunch, push, or release was performed.

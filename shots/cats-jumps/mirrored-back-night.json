@@ -1,0 +1,452 @@
+[
+  {
+    "errors": [],
+    "report": {
+      "x": 650,
+      "y": 840,
+      "z": 0,
+      "k": 1.28736,
+      "state": "jumpPrep",
+      "frame": "jump-b-1",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 650,
+      "y": 840,
+      "z": 0,
+      "k": 1.28736,
+      "state": "jumpPrep",
+      "frame": "jump-b-1",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 653.7285607755406,
+      "y": 833.6614466815809,
+      "z": 16.893733515507304,
+      "k": 1.2802608202833707,
+      "state": "jump",
+      "frame": "jump-b-2",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 661.185682326622,
+      "y": 820.9843400447427,
+      "z": 42.51340029728393,
+      "k": 1.2660624608501119,
+      "state": "jump",
+      "frame": "jump-b-2",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 668.6428038777033,
+      "y": 808.3072334079045,
+      "z": 57.24266674674316,
+      "k": 1.251864101416853,
+      "state": "jump",
+      "frame": "jump-b-3",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 676.0999254287846,
+      "y": 795.6301267710663,
+      "z": 61.08153286388501,
+      "k": 1.2376657419835941,
+      "state": "jump",
+      "frame": "jump-b-3",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683.5570469798657,
+      "y": 782.9530201342282,
+      "z": 54.02999864870953,
+      "k": 1.2234673825503355,
+      "state": "jump",
+      "frame": "jump-b-4",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 691.014168530947,
+      "y": 770.27591349739,
+      "z": 36.0880641012167,
+      "k": 1.2092690231170768,
+      "state": "jump",
+      "frame": "jump-b-4",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 700,
+      "y": 755,
+      "z": 0,
+      "k": 1.1921599999999999,
+      "state": "land",
+      "frame": "jump-b-5",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 700,
+      "y": 755,
+      "z": 0,
+      "k": 1.1921599999999999,
+      "state": "land",
+      "frame": "jump-b-5",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": 50,
+        "vy": -85
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 701.2256517476872,
+      "y": 754.325891538772,
+      "z": 0,
+      "k": 1.1914049985234247,
+      "state": "move",
+      "frame": "walk-b-1",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 704.9646286858081,
+      "y": 752.2694542228055,
+      "z": 0,
+      "k": 1.1891017887295423,
+      "state": "move",
+      "frame": "walk-b-1",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 708.9793636272531,
+      "y": 750.0613500050108,
+      "z": 0,
+      "k": 1.1866287120056123,
+      "state": "move",
+      "frame": "walk-b-2",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 718.6645241600744,
+      "y": 744.734511711959,
+      "z": 0,
+      "k": 1.1806626531173943,
+      "state": "move",
+      "frame": "walk-b-4",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 730.993924173151,
+      "y": 737.953341704767,
+      "z": 0,
+      "k": 1.1730677427093392,
+      "state": "move",
+      "frame": "walk-b-7",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 741.9239168937004,
+      "y": 731.9418457084648,
+      "z": 0,
+      "k": 1.1663348671934808,
+      "state": "move",
+      "frame": "walk-b-1",
+      "view": {
+        "view": "b",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": true
+    }
+  }
+]

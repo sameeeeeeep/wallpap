@@ -1191,7 +1191,7 @@ const SPR_DIR = 'art/sprites/cats/';
 const SPR_COAT = ['orange', 'black', 'grey', 'calico', 'siamese'];   // COATS[i] → folder
 const SPR_POSES = ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch'];
 const SPR_HAS = { orange: SPR_POSES, black: SPR_POSES };   // others: walk1 walk2 sit sleep (see art/sprites/README.md)
-const SPR_SEQ_HAS = Object.fromEntries(SPR_COAT.map((f) => [f, LW.PET_SEQ_HAS['cats/' + f] || []]));   // drawn in-between sheets in <coat>/t/ (registry: pet-motion.js)
+const SPR_SEQ_HAS = Object.fromEntries(SPR_COAT.map((f) => [f, [...(LW.PET_SEQ_HAS['cats/' + f] || []), ...Object.keys(LW.PET_JUMP_LAYOUT['cats/' + f] || {})]]));   // drawn in-between sheets in <coat>/t/ (registry: pet-motion.js)
 const SPR_H = 78;                                                     // walking height (local units, before depth scale)
 const POSE_K = { walk1: 1, walk2: 1, sit: .8, loaf: .88, sleep: .72, stretch: .92 };
 const POSE_HEAD = { walk1: [0.86, 0.26], walk2: [0.86, 0.26], sit: [0.48, 0.24], loaf: [0.63, 0.32], sleep: [0.24, 0.5], stretch: [0.9, 0.55] };
@@ -1232,8 +1232,9 @@ const SPR = SPR_COAT.map((folder) => {
 const SEQ_END = { 'stand-sit': ['walk1', 'sit'], 'sit-sleep': ['sit', 'sleep'], turn: ['walk1', 'walk1'], jump: ['walk1', 'walk1'] };
 const SEQ_FA = { walk1: 0.555, sit: 0.5, sleep: 0.5 };
 function sprSeqPrep(s) {
-  for (const q of ['stand-sit', 'sit-sleep', 'turn', 'jump']) {
-    const ims = s.seqRaw[q], [a, b] = SEQ_END[q];
+  for (const q of Object.keys(s.seqRaw)) {
+    const ims = s.seqRaw[q], [a, b] = SEQ_END[q] || SEQ_END.jump;
+    const geometry=(LW.PET_JUMP_LAYOUT['cats/'+s.folder]||{})[q];
     if (!ims || !s.ok[a] || !s.ok[b]) continue;
     delete s.seqRaw[q];
     const n = ims.length, H = (p) => s.img[p].height * LW.petPoseScale('cat', p, s.img.walk1, s.img[p]);
@@ -1245,6 +1246,11 @@ function sprSeqPrep(s) {
       const u = i / (n - 1), p = q + '-' + (i + 1);
       s.img[p] = defringe(im); s.ok[p] = true;
       s.fk[p] = k0 + (k1 - k0) * u; s.fa[p] = a0 + (a1 - a0) * u; s.fe[p] = u < 0.5 ? a : b;
+      if(geometry){
+        const ref=LW.petCycleMeasure(s.img.walk1),k=(ref.bot-ref.top+1)/geometry.height;
+        s.fk[p]=k;s.fa[p]=(geometry.centers[i]+((s.img.walk1.width-s.d)-ref.cx)/k)/im.naturalWidth;
+        s.img[p].petFootPad=geometry.pad;
+      }
       if (q === 'turn') {   // mirrored copy: drawn under a left-facing flip it reads unflipped
         const m = p + '~m', src = s.img[p], cv = document.createElement('canvas');
         cv.width = src.width; cv.height = src.height;
@@ -1305,6 +1311,7 @@ const sprAnchor = (s, p, w) => (s.img[p] && s.img[p].petCycle ? w * s.img[p].pet
 function spriteDesc(c, s, T) {
   const st = c.state;
   const d = { p: 'sit', sx: 1, sy: 1, rot: 0, piv: 0, ox: 0, oy: 0, nod: 0, bob: 0, br: 0 };
+  const jumpKey = c.j && c.j.key || LW.petJumpKey(c._petDirection?.view||'side',q=>s.seq[q]);
   const walkP = () => c.gaitF || (Math.floor(c.wf || 0) & 1 ? 'walk2' : 'walk1');
   const sitP = () => { d.p = 'sit'; d.br = 1; };
   const crouch = (k) => { d.p = 'walk1'; d.sy = k; d.sx = 1 + (1 - k) * 0.45; };
@@ -1326,11 +1333,11 @@ function spriteDesc(c, s, T) {
     case 'sleep': d.p = 'sleep'; d.br = 1; break;
     case 'stretch': { d.p = 'stretch'; const p = smooth(Math.min(1, c.t / 0.6)); d.sx = 0.93 + 0.09 * p; d.sy = 1.04 - 0.06 * p; break; }
     case 'stretch2': { d.p = 'walk2'; const p = smooth(Math.min(1, c.t / 0.5)); d.sx = 1 + 0.08 * p; d.sy = 1 - 0.05 * p; d.rot = -0.035 * p; break; }
-    case 'jumpPrep': if (s.seq.jump) { d.p = 'jump-1'; break; } crouch(lerp(0.97, 0.82, smooth(c.t / Math.max(0.01, c.dur)))); break;
-    case 'land': if (s.seq.jump) { d.p = 'jump-5'; break; } { d.p = 'walk2'; const p = smooth(clamp(c.t / c.dur, 0, 1)); d.sy = 0.86 + 0.14 * p; d.sx = 1.07 - 0.07 * p; break; }
+    case 'jumpPrep': if (jumpKey) { d.p = jumpKey+'-1'; break; } crouch(lerp(0.97, 0.82, smooth(c.t / Math.max(0.01, c.dur)))); break;
+    case 'land': if (jumpKey) { d.p = jumpKey+'-5'; break; } { d.p = 'walk2'; const p = smooth(clamp(c.t / c.dur, 0, 1)); d.sy = 0.86 + 0.14 * p; d.sx = 1.07 - 0.07 * p; break; }
     case 'crouchWatch': case 'batWait': crouch(0.86); break;
     case 'stalk': crouch(0.82); if (c.t > c.dur * 0.35) d.ox = Math.sin(c.t * 22) * 2.4; break;
-    case 'jump': if (s.seq.jump) { const p = c.j ? c.t / c.j.dur : 0.5; d.p = p < 0.36 ? 'jump-2' : p < 0.64 ? 'jump-3' : 'jump-4'; break; } d.p = 'walk2'; d.piv = 1; d.rot = clamp((c.vyAir || 0) / 900, -0.36, 0.36); d.sx = 1.05; d.sy = 0.97; break;
+    case 'jump': if (jumpKey) { const p = c.j ? c.t / c.j.dur : 0.5; d.p = jumpKey+(p < 0.36 ? '-2' : p < 0.64 ? '-3' : '-4'); break; } d.p = 'walk2'; d.piv = 1; d.rot = clamp((c.vyAir || 0) / 900, -0.36, 0.36); d.sx = 1.05; d.sy = 0.97; break;
     case 'bat': { d.p = 'walk2'; const p = Math.sin(clamp(c.t / 0.32, 0, 1) * Math.PI); d.rot = -0.13 * p; d.piv = 0.4; d.oy = -4 * p; break; }
     case 'sniff': d.p = 'walk1'; d.nod = 0.45 + 0.12 * Math.sin(T * 9); break;
     case 'eat': d.p = 'walk1'; d.nod = 0.85 + 0.15 * Math.abs(Math.sin(c.t * 7)); break;
@@ -1468,6 +1475,39 @@ function drawSpriteCat(g, c, s) {
   g.save();g.translate(c.x+(v.ox*c.dir+shift[0])*c.k,c.y-c.z+(v.oy+(c.spBob||0)+shift[1])*c.k);
   g.scale(c.sx*v.sx,v.sy);g.rotate(v.rot);
   LW.petComposite(g,c,frames);g.restore();
+}
+// Lowest opaque paw band, measured once after cutout/defringe. Transparent padding
+// and the 2D stance correction must never displace the shadow from the planted paw.
+function sprContact(im) {
+  if(im.petContact)return im.petContact;
+  const m=LW.petCycleMeasure(im),g=im.getContext&&im.getContext('2d');
+  if(!g)return {x:m.cx,y:m.bot,span:im.width*.5};
+  const a=g.getImageData(0,0,im.width,im.height).data,pts=[];
+  for(let x=0;x<im.width;x++)for(let y=m.bot;y>=m.bot-(m.bot-m.top)*.12;y--){
+    if(a[(y*im.width+x)*4+3]>127){pts.push([x,y]);break;}
+  }
+  if(!pts.length)return {x:m.cx,y:m.bot,span:im.width*.5};
+  return im.petContact={x:pts.reduce((a,p)=>a+p[0],0)/pts.length,y:pts.reduce((a,p)=>a+p[1],0)/pts.length,span:pts[pts.length-1][0]-pts[0][0]};
+}
+function spriteShadow(c,s) {
+  let layers=LW.poseFrame(c.spPrev&&c.spPrev.p,c.spP,(c.spFadeT||0)/(c.spFadeDur||.36)).layers;
+  // In flight the shadow follows the body, not the lowest swinging paw. Interpolate
+  // the takeoff/landing footprint; altitude alone supplies the shrink/fade below.
+  if(c.state==='jump'&&c.j&&c.j.key){
+    const t=clamp(c.t/c.j.dur,0,1);
+    layers=[{pose:c.j.key+'-1',alpha:1-t},{pose:c.j.key+'-5',alpha:t}];
+  }
+  let x=0,y=0,width=0;
+  for(const layer of layers){
+    const p=s.ok[layer.pose]?layer.pose:c.spP,im=s.img[p],f=sprContact(im);
+    const sc=c.k*s.px*sprK(s,p),v=c.sv;
+    const fx=(f.x-sprAnchor(s,p,im.width))*sc,fy=(f.y-(im.height-1-(im.petFootPad||0)))*sc;
+    x+=layer.alpha*(fx*Math.cos(v.rot)-fy*Math.sin(v.rot))*c.sx*v.sx;
+    y+=layer.alpha*(fx*Math.sin(v.rot)+fy*Math.cos(v.rot))*v.sy;
+    width+=layer.alpha*Math.max(12*c.k,f.span*sc*.6);
+  }
+  const shift=isCyc(c.spP)&&c._gait&&c._gait.shift||[0,0];
+  return {x:c.x+x+(c.sv.ox*c.dir+shift[0])*c.k,y:c.y+y+(c.sv.oy+(c.spBob||0)+shift[1])*c.k,width};
 }
 // soft contact shadow, stamped from one pre-rendered blob
 const SHADOW = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(40,28,40,1)'); gr.addColorStop(0.5, 'rgba(40,28,40,0.55)'); gr.addColorStop(1, 'rgba(40,28,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c; })();
@@ -1725,14 +1765,24 @@ function wander(c, gait = 'walk') {
 }
 
 function jumpTo(c, x1, y1, surf1, next) {
-  const dx = x1 - c.x;
-  if (Math.abs(dx) > 5) c.dir = Math.sign(dx);
   c.j = { x0: c.x, y0: c.y, x1, y1, surf1, next, k0: c.k };
+  prepareJump(c);
   c.ledgeTarget = surf1;
   setState(c, 'jumpPrep', 0.34, 0.15);
 }
+function prepareJump(c) {
+  const j=c.j,s=sprOf(c);
+  const y0=c.surf>=0?L.ledges[c.surf].base:j.y0;
+  const y1=j.surf1>=0?L.ledges[j.surf1].base:j.y1;
+  j.vx=j.x1-j.x0;j.vy=y1-y0;
+  const d=LW.petJumpDirection(c,j.vx,j.vy);
+  j.view=d.view;j.face=d.face;j.key=LW.petJumpKey(d.view,q=>s&&s.seq[q]);
+  c.dir=c.sx=c.sprDir=c.lastDir=d.face;c.flipT=0;c.seq=null;
+  LW.petJumpLand(c);
+}
 function startJump(c) {
   const j = c.j;
+  if(!j.view)prepareJump(c);
   const up = Math.max(0, j.y0 - j.y1);
   j.dur = 0.36 + Math.abs(j.y1 - j.y0) * 0.0007 + Math.abs(j.x1 - j.x0) * 0.00055;
   j.h = j.pounce ? 38 : 34 + up * 0.32;
@@ -1744,7 +1794,7 @@ function ledgeTakeoff(lg) {
   // a floor spot near the ledge to jump from
   if (lg.name === 'step') return floorClamp((lg.x0 + lg.x1) / 2 + 70, L.stairs.base + 24);
   if (lg.name === 'sill' || lg.name === 'roof') return null;
-  return floorClamp(clamp(rand(lg.x0, lg.x1), 60, W - 60), lg.base + 30);
+  return floorClamp(clamp(rand(lg.x0, lg.x1), 60, W - 60), lg.base + 65);
 }
 function goLedge(c, i) {
   const lg = L.ledges[i];
@@ -1755,7 +1805,7 @@ function goLedge(c, i) {
   if (occ.length) { const ox = occ[0].x; lx = ox - lg.x0 > lg.x1 - ox ? lg.x0 + 30 : lg.x1 - 30; }
   lx = clamp(lx, lg.x0 + 15, Math.min(lg.x1, L.R - 50) - 15);
   const to = ledgeTakeoff(lg);
-  goTo(c, clamp(lx + (c.x < lx ? -1 : 1) * rand(30, 60), 60, W - 60), to[1], 'trot', (c2) => jumpTo(c2, lx, lg.y, i, (c3) => { setState(c3, pick(['sit', 'sit', 'loaf', 'groom']), rand(5, 14)); }));
+  goTo(c, clamp(lx + (c.x < lx ? -1 : 1) * rand(20, 45), 60, W - 60), to[1], 'trot', (c2) => jumpTo(c2, lx, lg.y, i, (c3) => { setState(c3, pick(['sit', 'sit', 'loaf', 'groom']), rand(5, 14)); }));
 }
 function climbHigher(c) {
   // from a step: hop to the window sill or the roof by the dome
@@ -2220,7 +2270,7 @@ function seekShelter(c) {
       const st = L.ledges[viaStep], to = ledgeTakeoff(st);
       return goTo(c2, to[0], to[1], 'trot', (c3) => jumpTo(c3, (st.x0 + st.x1) / 2, st.y, viaStep, (c4) => jumpTo(c4, sp.x, lg.y, sp.ledge, arrive)));
     }
-    const to = lg.name === 'step' ? ledgeTakeoff(lg) : floorClamp(sp.x + (c2.x < sp.x ? -1 : 1) * 50, lg.base + 30);
+    const to = lg.name === 'step' ? ledgeTakeoff(lg) : floorClamp(sp.x + (c2.x < sp.x ? -1 : 1) * 50, lg.base + 65);
     goTo(c2, to[0], to[1], 'trot', (c3) => jumpTo(c3, sp.x, lg.y, sp.ledge, arrive));
   };
   if (c.surf >= 0) jumpDown(c, upFromFloor); else upFromFloor(c);
@@ -2284,10 +2334,10 @@ function update(c, dt, T) {
       c.y = lerp(j.y0, j.y1, p);
       c.z = 4 * j.h * p * (1 - p);
       c.vyAir = (j.y1 - j.y0) - 4 * j.h * (1 - 2 * p);
-      if (p >= 1) { c.z = 0; c.surf = j.surf1; c.ledgeTarget = undefined; setState(c, 'land', 0.16, 0.05); }
+      if (p >= 1) { LW.petJumpLand(c); c.z = 0; c.surf = j.surf1; c.ledgeTarget = undefined; setState(c, 'land', 0.16, 0.05); }
       break;
     }
-    case 'land': if (c.t >= c.dur) { const nx = c.j && c.j.next; c.j = null; if (nx) nx(c); else think(c); } break;
+    case 'land': if (c.t >= c.dur) { const nx = c.j && c.j.next; LW.petJumpLand(c); c.j = null; if (nx) nx(c); else think(c); } break;
     case 'hunt': {
       const pp = preyPos(c);
       c.huntT += dt;
@@ -2325,12 +2375,12 @@ function update(c, dt, T) {
         const d = Math.hypot(tx - c.x, ty - c.y);
         if (d > 200) { tx = c.x + ((tx - c.x) / d) * 200; ty = c.y + ((ty - c.y) / d) * 200; }
         const [fx, fy] = floorClamp(tx, ty);
-        c.j = { x0: c.x, y0: c.y, x1: fx, y1: fy, surf1: -1, pounce: true, next: (c2) => {
+        jumpTo(c, fx, fy, -1, (c2) => {
           const p2 = preyPos(c2);
           if (!p2) return endHunt(c2);
           if (c2.prey.kind === 'toy') setState(c2, 'bat', 0.42, 0.08); else setState(c2, 'stalk', rand(0.5, 1.2), 0.12);
-        } };
-        startJump(c);
+        });
+        c.j.pounce=true;c.dur=.18; // show the matching drawn crouch before a toy pounce
       }
       break;
     }
@@ -3487,9 +3537,10 @@ function render(T) {
       const c = d.cat;
       const gy = c.surf >= 0 ? L.ledges[c.surf].y : c.state === 'jump' && c.j ? lerp(c.j.y0, c.j.y1, clamp(c.t / c.j.dur, 0, 1)) : c.y;
       const s = sprOf(c) && c.sv ? SPR[c.id] : null;
-      const rw = (s ? c.spr.foot * 1.25 : 52 * c.k) * (1 - clamp(c.z / 400, 0, 0.35)), rh = rw * 0.2 + 3;
+      const contact=s?spriteShadow(c,s):{x:c.x,y:gy,width:52*c.k};
+      const rw = contact.width * (1 - clamp(c.z / 400, 0, 0.35)), rh = rw * 0.2 + 3;
       ctx.globalAlpha = 0.34 * (1 - clamp(c.z / 220, 0, 0.7)) * (0.55 + 0.45 * E.dl);
-      ctx.drawImage(SHADOW, c.x - rw, gy - rh, rw * 2, rh * 2);
+      ctx.drawImage(SHADOW, contact.x - rw, contact.y - rh, rw * 2, rh * 2);
       ctx.globalAlpha = 1;
       if (s) drawSpriteCat(ctx, c, s); else drawCat(ctx, c);
       drawn.push(c.id + ':' + c.coat.name);
@@ -3623,7 +3674,21 @@ function forceWalk(id,x,y,opt={}) {
   if(opt.turn)later(opt.turn.after,()=>forceWalk(id,opt.turn.to[0],opt.turn.to[1],{gait:opt.gait}));
   return c;
 }
-window.__cats = { forceWalk, syncPets, leaveScene, get MIR() { return MIR; }, prof, sprStats, goTo, seekShelter, SPR, cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
+function forceJump(id,x,y,opt={}) {
+  if(!LW.virtual)throw new Error('forceJump requires virtual=1');
+  const c=cats[id];if(!c)throw new Error('Unknown cat '+id);
+  if(opt.from){c.x=opt.from[0];c.y=opt.from[1];}
+  c.surf=opt.surf0??-1;c.z=0;c.px=c.x;c.py=c.y;c.mission='jump-qa';c.comeBack=true;
+  c._petDirection=null;c.seq=null;c.spPrev=null;c.spP='walk1';c.spFam='walk1';
+  c.vxS=c.vyS=c.groundVX=c.groundVY=0;
+  jumpTo(c,x,y,opt.surf1??-1,p=>{
+    if(opt.walk) {goTo(p,opt.walk[0],opt.walk[1],'walk',q=>setState(q,'stand',1e9));p.t=.7;}
+    else setState(p,'stand',1e9);
+  });
+  if(opt.pounce)c.j.pounce=true;
+  return c;
+}
+window.__cats = { forceJump, jumpTo, jumpDown, goLedge, forceWalk, syncPets, leaveScene, get MIR() { return MIR; }, prof, sprStats, goTo, seekShelter, SPR, cats, toys, parts, get E() { return E; }, get L() { return L; }, calm, setCalm, startWater, startStretch, stormStartle, spawnToy, pet, flash, bodiesOverlap, IDLE, selfTest, setState, COATS, get bakeMs() { return bakeMs; }, bake, bowls, fillBowl };
 })();
 </script>
 </body>

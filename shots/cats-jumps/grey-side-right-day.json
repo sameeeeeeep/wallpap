@@ -1,0 +1,505 @@
+[
+  {
+    "errors": [],
+    "report": {
+      "x": 610,
+      "y": 790,
+      "z": 0,
+      "state": "jumpPrep",
+      "frame": "jump-1",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 610,
+      "y": 790,
+      "z": 0,
+      "state": "jumpPrep",
+      "frame": "jump-1",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 620.6788710907705,
+      "y": 790,
+      "z": 9.582474409750068,
+      "state": "jump",
+      "frame": "jump-2",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 642.0366132723112,
+      "y": 790,
+      "z": 23.999706758688617,
+      "state": "jump",
+      "frame": "jump-2",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 663.3943554538521,
+      "y": 790,
+      "z": 32.08665048021175,
+      "state": "jump",
+      "frame": "jump-3",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 684.7520976353929,
+      "y": 790,
+      "z": 33.8433055743195,
+      "state": "jump",
+      "frame": "jump-3",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 706.1098398169338,
+      "y": 790,
+      "z": 29.269672041011848,
+      "state": "jump",
+      "frame": "jump-4",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 727.4675819984745,
+      "y": 790,
+      "z": 18.36574988028886,
+      "state": "jump",
+      "frame": "jump-4",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 748.8253241800153,
+      "y": 790,
+      "z": 1.1315390921505262,
+      "state": "jump",
+      "frame": "jump-4",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 750,
+      "y": 790,
+      "z": 0,
+      "state": "land",
+      "frame": "jump-5",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 750,
+      "y": 790,
+      "z": 0,
+      "state": "land",
+      "frame": "jump-5",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": {
+        "view": "side",
+        "key": "jump",
+        "vx": 140,
+        "vy": 0
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 754.3648741394406,
+      "y": 790,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-1",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": null,
+      "shift": [
+        -3.544758754093558,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 764.158085137425,
+      "y": 790,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-2",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": null,
+      "shift": [
+        -3.3079251700761874,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 777.0204743392583,
+      "y": 790,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-3",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": null,
+      "shift": [
+        -5.563602471461042,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 789.1233137995027,
+      "y": 790,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-4",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": null,
+      "shift": [
+        -7.202441690084745,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 798.4380876800429,
+      "y": 790,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-5",
+      "view": {
+        "view": "side",
+        "face": 1
+      },
+      "jump": null,
+      "shift": [
+        -6.577064449099327,
+        0
+      ],
+      "scale": 1.23136,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "jump",
+        "jump-f",
+        "turn",
+        "jump-b"
+      ]
+    }
+  }
+]

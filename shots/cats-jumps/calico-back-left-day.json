@@ -1,0 +1,505 @@
+[
+  {
+    "errors": [],
+    "report": {
+      "x": 750,
+      "y": 840,
+      "z": 0,
+      "state": "jumpPrep",
+      "frame": "jump-b-1",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.1388184615384616,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 750,
+      "y": 840,
+      "z": 0,
+      "state": "jumpPrep",
+      "frame": "jump-b-1",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.1388184615384616,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 746.2714392244594,
+      "y": 833.6614466815809,
+      "z": 16.893733515507304,
+      "state": "jump",
+      "frame": "jump-b-2",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.1325384179429818,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 738.814317673378,
+      "y": 820.9843400447427,
+      "z": 42.51340029728393,
+      "state": "jump",
+      "frame": "jump-b-2",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.1199783307520221,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 731.3571961222967,
+      "y": 808.3072334079045,
+      "z": 57.24266674674315,
+      "state": "jump",
+      "frame": "jump-b-3",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.1074182435610622,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 723.9000745712154,
+      "y": 795.6301267710663,
+      "z": 61.08153286388501,
+      "state": "jump",
+      "frame": "jump-b-3",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.0948581563701025,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 716.4429530201342,
+      "y": 782.9530201342282,
+      "z": 54.02999864870947,
+      "state": "jump",
+      "frame": "jump-b-4",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.082298069179143,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 708.9858314690529,
+      "y": 770.27591349739,
+      "z": 36.088064101216546,
+      "state": "jump",
+      "frame": "jump-b-4",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.0697379819881834,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 701.5287099179716,
+      "y": 757.5988068605517,
+      "z": 7.255729221406201,
+      "state": "jump",
+      "frame": "jump-b-4",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.0571778947972235,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 700,
+      "y": 755,
+      "z": 0,
+      "state": "land",
+      "frame": "jump-b-5",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.054603076923077,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 700,
+      "y": 755,
+      "z": 0,
+      "state": "land",
+      "frame": "jump-b-5",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": {
+        "view": "b",
+        "key": "jump-b",
+        "vx": -50,
+        "vy": -85
+      },
+      "shift": [
+        0,
+        0
+      ],
+      "scale": 1.054603076923077,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 696.732260409518,
+      "y": 753.2027432252348,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-b-1",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": null,
+      "shift": [
+        3.1020417511356504,
+        1.70612296312464
+      ],
+      "scale": 1.052822410210848,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 689.6240729516586,
+      "y": 749.2932401234123,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-b-3",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": null,
+      "shift": [
+        1.3250239881833843,
+        0.7287631935008673
+      ],
+      "scale": 1.0489489948299655,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 680.7872311507035,
+      "y": 744.4329771328869,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-b-5",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": null,
+      "shift": [
+        1.2290433208701952,
+        0.6759738264786203
+      ],
+      "scale": 1.0441335958055065,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 672.2539145533835,
+      "y": 739.7396530043609,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-b-7",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": null,
+      "shift": [
+        0.8798839832177628,
+        0.4839361907698206
+      ],
+      "scale": 1.0394835946689363,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 665.3972410483565,
+      "y": 735.968482576596,
+      "z": 0,
+      "state": "move",
+      "frame": "walk-b-8",
+      "view": {
+        "view": "b",
+        "face": -1
+      },
+      "jump": null,
+      "shift": [
+        3.218432405357129,
+        1.770137822946692
+      ],
+      "scale": 1.0357472350451198,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ]
+    }
+  }
+]

@@ -287,3 +287,64 @@ test('directional art registration and runtime geometry remain synchronized',()=
  assert.equal(Object.keys(reports).length,10);
  for(const r of Object.values(reports))assert.ok(r.max_contact_slip_px<1,'registered contact drift '+r.max_contact_slip_px);
 });
+
+test('jump direction shares walk hysteresis, mirrors by ground vx and retains pure-depth facing',()=>{
+ const {LW}=load();
+ for(const [vx,vy,view,face] of [[100,0,'side',1],[-100,0,'side',-1],[35,80,'f',1],[-35,80,'f',-1],[35,-80,'b',1],[-35,-80,'b',-1]]){
+  const p={dir:-1},w={dir:-1};const jump=LW.petJumpDirection(p,vx,vy),walk=LW.petDirection(w,vx,vy,0,'walk');
+  assert.equal(jump.view,view);assert.equal(jump.face,face);assert.deepEqual(jump,walk);
+  LW.petDirection(p,-vx,-vy,0,'walk');assert.equal(jump.view,view); // takeoff snapshot stays frozen
+ }
+ const p={dir:-1};assert.equal(LW.petJumpDirection(p,0,100).face,-1);assert.equal(LW.petJumpDirection(p,0,-100).view,'b');
+ assert.equal(LW.petJumpDirection(p,100,70).view,'f'); // depth → depth through hysteresis
+});
+test('missing jump view falls back to side; landing starts the matching walk at planted contact',()=>{
+ const {LW}=load(),p={dir:-1,gd:17,_gait:{ph:.73,off:-.4,shift:[-10,4]}};
+ LW.petJumpDirection(p,-40,-80);
+ assert.equal(LW.petJumpKey('b',q=>q==='jump'),'jump');
+ assert.equal(LW.petJumpKey('b',q=>q==='jump-b'||q==='jump'),'jump-b');
+ assert.equal(LW.petJumpKey('f',()=>false),null);
+ LW.petJumpLand(p);assert.equal(p._gait.ph,0);assert.equal(p._gait.d,17);assert.equal(p._gait.off,0);
+ assert.deepEqual([...p._gait.shift],[0,0]);
+ const C=directionRig(LW);assert.equal(LW.petGait(p,C,17,78,'walk',{vx:0,vy:0}),'walk-b-1');
+ assert.equal(p._petDirection.face,-1);
+});
+test('all fifty jump frames share walk geometry and the runtime registry matches the cut manifest',()=>{
+ const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/jumps-layout.json'),'utf8'));
+ assert.deepEqual(JSON.parse(JSON.stringify(LW.PET_JUMP_LAYOUT)),layout);
+ for(const [coat,views] of Object.entries(layout))for(const [name,geom] of Object.entries(views)){
+  assert.equal(geom.height,LW.PET_DIRECTION_LAYOUT[coat][name.replace('jump','walk')].height);
+  assert.equal(geom.centers.length,5);
+  let h;
+  for(let i=1;i<=5;i++){
+   const png=fs.readFileSync(require.resolve(`../scenes/art/sprites/${coat}/t/${name}-${i}.png`));
+   assert.equal(png.toString('hex',0,8),'89504e470d0a1a0a');assert.ok(png.length>1000);
+   const w=png.readUInt32BE(16),height=png.readUInt32BE(20);h??=height;assert.equal(height,h);
+   assert.ok(geom.centers[i-1]>geom.pad&&geom.centers[i-1]<w-geom.pad);
+  }
+ }
+});
+
+function shadowRig(){
+ const {LW}=load();const scene=fs.readFileSync(require.resolve('../scenes/cats.html'),'utf8');
+ const src=scene.slice(scene.indexOf('function sprContact('),scene.indexOf('// soft contact shadow, stamped'));
+ const ctx={LW,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),sprK:()=>1,sprAnchor:()=>50,isCyc:p=>p.startsWith('walk-')};
+ vm.runInNewContext(src+';this.shadow=spriteShadow',ctx);
+ const im=(x,y,span)=>({width:100,height:120,petFootPad:20,petContact:{x,y,span}});
+ const s={px:1,img:{'walk-f-1':im(60,95,40),'jump-f-1':im(55,99,40),'jump-f-3':im(90,99,90),'jump-f-5':im(65,99,40)},ok:{'walk-f-1':true,'jump-f-1':true,'jump-f-3':true,'jump-f-5':true}};
+ const c={x:200,y:300,k:1,dir:-1,sx:-1,spP:'walk-f-1',spFadeT:1,sv:{ox:0,oy:0,sx:1,sy:1,rot:0},_gait:{shift:[-4,6]}};
+ return {shadow:ctx.shadow,s,c};
+}
+test('contact shadow tracks measured paws including padding, mirroring and world-space gait shift',()=>{
+ const {shadow,s,c}=shadowRig();let f=shadow(c,s);
+ assert.equal(f.x,186);assert.equal(f.y,302);assert.equal(f.width,24);
+ c.sx=c.dir=1;f=shadow(c,s);assert.equal(f.x,206);assert.equal(f.y,302); // vector shift is not mirrored twice
+ c.k=2;f=shadow(c,s);assert.equal(f.x,212);assert.equal(f.y,304);
+});
+test('airborne shadow follows body path instead of jumping between tucked and reaching paws',()=>{
+ const {shadow,s,c}=shadowRig();c.state='jump';c.spP='jump-f-3';c.j={key:'jump-f',dur:1};c.sx=c.dir=1;
+ for(const t of [0,.25,.5,.75,1]){
+  c.t=t;c.x=200+80*t;c.y=300+60*t;const f=shadow(c,s);
+  assert.equal(f.x,205+90*t);assert.equal(f.y,c.y);assert.equal(f.width,24);
+ }
+});

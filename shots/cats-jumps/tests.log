@@ -1,0 +1,250 @@
+TAP version 13
+# Subtest: solar lighting anchors follow local rise/set in summer and winter
+ok 1 - solar lighting anchors follow local rise/set in summer and winter
+  ---
+  duration_ms: 9.781125
+  ...
+# Subtest: moon visibility follows its horizon crossing, independently of night
+ok 2 - moon visibility follows its horizon crossing, independently of night
+  ---
+  duration_ms: 1.200791
+  ...
+# Subtest: polar day/night remain finite without invented rise/set times
+ok 3 - polar day/night remain finite without invented rise/set times
+  ---
+  duration_ms: 0.557375
+  ...
+# Subtest: missing/invalid coordinates fall back and zero coordinates remain valid
+ok 4 - missing/invalid coordinates fall back and zero coordinates remain valid
+  ---
+  duration_ms: 0.253125
+  ...
+# Subtest: palette: day is bright, night is dark and moonlit, golden peaks at sunset
+ok 5 - palette: day is bright, night is dark and moonlit, golden peaks at sunset
+  ---
+  duration_ms: 2.432042
+  ...
+# Subtest: palette: weather dims, wets, snows and covers the sky
+ok 6 - palette: weather dims, wets, snows and covers the sky
+  ---
+  duration_ms: 2.563917
+  ...
+# Subtest: palette: shadows are long at low sun and point away from it
+ok 7 - palette: shadows are long at low sun and point away from it
+  ---
+  duration_ms: 0.301625
+  ...
+# Subtest: steer: seek/flee/bounds/calmZone push the right way
+ok 8 - steer: seek/flee/bounds/calmZone push the right way
+  ---
+  duration_ms: 0.825083
+  ...
+# Subtest: rope: pinned rope keeps its segment length and sags under gravity
+ok 9 - rope: pinned rope keeps its segment length and sags under gravity
+  ---
+  duration_ms: 21.053208
+  ...
+# Subtest: noise is deterministic and bounded
+ok 10 - noise is deterministic and bounded
+  ---
+  duration_ms: 0.603083
+  ...
+# Subtest: path: arc-length parameterisation, ends, heading
+ok 11 - path: arc-length parameterisation, ends, heading
+  ---
+  duration_ms: 0.338708
+  ...
+# Subtest: steer: layout-aware clear band (widgets left or right)
+ok 12 - steer: layout-aware clear band (widgets left or right)
+  ---
+  duration_ms: 0.109417
+  ...
+# Subtest: moon phase modulates night exposure without losing storm shadow detail
+ok 13 - moon phase modulates night exposure without losing storm shadow detail
+  ---
+  duration_ms: 0.271125
+  ...
+# Subtest: gait changes finish a stand-up transition instead of restarting it
+ok 14 - gait changes finish a stand-up transition instead of restarting it
+  ---
+  duration_ms: 5.611625
+  ...
+# Subtest: pose changes never dissolve two silhouettes: one opaque layer, tuck then cut at the midpoint
+ok 15 - pose changes never dissolve two silhouettes: one opaque layer, tuck then cut at the midpoint
+  ---
+  duration_ms: 2.681791
+  ...
+# Subtest: walking frames retain animal height despite differing image dimensions
+ok 16 - walking frames retain animal height despite differing image dimensions
+  ---
+  duration_ms: 3.177875
+  ...
+# Subtest: drawn transition paths play forward, reverse and chain through sit
+ok 17 - drawn transition paths play forward, reverse and chain through sit
+  ---
+  duration_ms: 2.691
+  ...
+# Subtest: in-between layout meets both end poses and mirrors the turn anchor
+ok 18 - in-between layout meets both end poses and mirrors the turn anchor
+  ---
+  duration_ms: 2.284542
+  ...
+# Subtest: a frame carrying its own size overrides the pose scale
+ok 19 - a frame carrying its own size overrides the pose scale
+  ---
+  duration_ms: 2.6625
+  ...
+# Subtest: in-between playback: pose changes, turns (mirrored when facing left) and cancels
+ok 20 - in-between playback: pose changes, turns (mirrored when facing left) and cancels
+  ---
+  duration_ms: 2.40575
+  ...
+# Subtest: standing up while facing the other way plays the stand-up, not the turn
+ok 21 - standing up while facing the other way plays the stand-up, not the turn
+  ---
+  duration_ms: 3.071417
+  ...
+# Subtest: swaps cut into drawn frames, fade quickly out of them
+ok 22 - swaps cut into drawn frames, fade quickly out of them
+  ---
+  duration_ms: 1.853083
+  ...
+# Subtest: pose state cuts into and out of drawn frames with a single layer
+ok 23 - pose state cuts into and out of drawn frames with a single layer
+  ---
+  duration_ms: 2.14075
+  ...
+# Subtest: gait cycle phase advances with distance travelled, not with time
+ok 24 - gait cycle phase advances with distance travelled, not with time
+  ---
+  duration_ms: 1.983292
+  ...
+# Subtest: a stopped pet settles on the nearest contact frame instead of freezing mid-stride
+ok 25 - a stopped pet settles on the nearest contact frame instead of freezing mid-stride
+  ---
+  duration_ms: 2.027875
+  ...
+# Subtest: walk and run hand over at the matching phase
+ok 26 - walk and run hand over at the matching phase
+  ---
+  duration_ms: 2.119458
+  ...
+# Subtest: cycle layout: one size for the loop, walking height, torso-pinned anchor
+ok 27 - cycle layout: one size for the loop, walking height, torso-pinned anchor
+  ---
+  duration_ms: 2.4615
+  ...
+# Subtest: cycle frames are gait cuts, sized by their own petK
+ok 28 - cycle frames are gait cuts, sized by their own petK
+  ---
+  duration_ms: 1.784333
+  ...
+# Subtest: petGait: stride from the set, plain walk1 once standing on frame 1, run falls back to the walk
+ok 29 - petGait: stride from the set, plain walk1 once standing on frame 1, run falls back to the walk
+  ---
+  duration_ms: 1.78975
+  ...
+# Subtest: planted paw keeps its world x within ±1 px over a stance (hold still, step at cuts)
+ok 30 - planted paw keeps its world x within ±1 px over a stance (hold still, step at cuts)
+  ---
+  duration_ms: 8.534583
+  ...
+# Subtest: paw planting preserves the average speed and stays within a step of the pet
+ok 31 - paw planting preserves the average speed and stays within a step of the pet
+  ---
+  duration_ms: 5.341584
+  ...
+# Subtest: even plant steps sum to the stride; the offset is periodic and steps only at cuts
+ok 32 - even plant steps sum to the stride; the offset is periodic and steps only at cuts
+  ---
+  duration_ms: 1.898209
+  ...
+# Subtest: installed cycles plant their paws (plant.py QA reports)
+ok 33 - installed cycles plant their paws (plant.py QA reports)
+  ---
+  duration_ms: 7.491583
+  ...
+# Subtest: direction selection uses hysteresis, contact phases and signed ground velocity
+ok 34 - direction selection uses hysteresis, contact phases and signed ground velocity
+  ---
+  duration_ms: 1.799667
+  ...
+# Subtest: diagonal gait keeps distance phase, chooses the same contact index, and plants both axes
+ok 35 - diagonal gait keeps distance phase, chooses the same contact index, and plants both axes
+  ---
+  duration_ms: 2.633083
+  ...
+# Subtest: a missing directional cycle falls back to a complete side loop without resetting phase
+ok 36 - a missing directional cycle falls back to a complete side loop without resetting phase
+  ---
+  duration_ms: 2.153083
+  ...
+# Subtest: directional loading is atomic: one failed frame disables only that view
+ok 37 - directional loading is atomic: one failed frame disables only that view
+  ---
+  duration_ms: 1.639792
+  ...
+# Subtest: all cat directional assets contain eight nonempty PNG frames
+ok 38 - all cat directional assets contain eight nonempty PNG frames
+  ---
+  duration_ms: 23.300209
+  ...
+# Subtest: directional padding never changes the animal scale or foot baseline
+ok 39 - directional padding never changes the animal scale or foot baseline
+  ---
+  duration_ms: 2.221
+  ...
+# Subtest: 2D planted treadmill holds world contact for front, back, left and vertical movement
+ok 40 - 2D planted treadmill holds world contact for front, back, left and vertical movement
+  ---
+  duration_ms: 5.693458
+  ...
+# Subtest: directional art registration and runtime geometry remain synchronized
+ok 41 - directional art registration and runtime geometry remain synchronized
+  ---
+  duration_ms: 3.116
+  ...
+# Subtest: jump direction shares walk hysteresis, mirrors by ground vx and retains pure-depth facing
+ok 42 - jump direction shares walk hysteresis, mirrors by ground vx and retains pure-depth facing
+  ---
+  duration_ms: 1.597416
+  ...
+# Subtest: missing jump view falls back to side; landing starts the matching walk at planted contact
+ok 43 - missing jump view falls back to side; landing starts the matching walk at planted contact
+  ---
+  duration_ms: 1.843583
+  ...
+# Subtest: all fifty jump frames share walk geometry and the runtime registry matches the cut manifest
+ok 44 - all fifty jump frames share walk geometry and the runtime registry matches the cut manifest
+  ---
+  duration_ms: 16.399541
+  ...
+# Subtest: contact shadow tracks measured paws including padding, mirroring and world-space gait shift
+ok 45 - contact shadow tracks measured paws including padding, mirroring and world-space gait shift
+  ---
+  duration_ms: 4.463958
+  ...
+# Subtest: airborne shadow follows body path instead of jumping between tucked and reaching paws
+ok 46 - airborne shadow follows body path instead of jumping between tucked and reaching paws
+  ---
+  duration_ms: 3.483875
+  ...
+# Subtest: rational harmonograph orbits close, including the rotary drop pendulum
+ok 47 - rational harmonograph orbits close, including the rotary drop pendulum
+  ---
+  duration_ms: 15.860708
+  ...
+# Subtest: all fifteen pendulums revive at the phrase period without staying synchronized
+ok 48 - all fifteen pendulums revive at the phrase period without staying synchronized
+  ---
+  duration_ms: 0.35225
+  ...
+1..48
+# tests 48
+# suites 0
+# pass 48
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 239.885458

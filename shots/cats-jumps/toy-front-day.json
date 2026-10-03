@@ -1,0 +1,438 @@
+[
+  {
+    "errors": [],
+    "report": {
+      "x": 650,
+      "y": 760,
+      "z": 0,
+      "k": 1.1977600000000002,
+      "state": "stalk",
+      "frame": "sit-sleep-5",
+      "view": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 650,
+      "y": 760,
+      "z": 0,
+      "k": 1.1977600000000002,
+      "state": "jumpPrep",
+      "frame": "jump-f-1",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 659.895423366693,
+      "y": 788.4868248435099,
+      "z": 31.911564976313738,
+      "k": 1.229665243824731,
+      "state": "jump",
+      "frame": "jump-f-2",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 664.8431350500393,
+      "y": 802.7302372652649,
+      "z": 37.61683138449401,
+      "k": 1.2456178657370967,
+      "state": "jump",
+      "frame": "jump-f-3",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 669.7908467333858,
+      "y": 816.9736496870198,
+      "z": 36.48842040602323,
+      "k": 1.2615704876494622,
+      "state": "jump",
+      "frame": "jump-f-3",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 674.7385584167323,
+      "y": 831.2170621087748,
+      "z": 28.52633204090139,
+      "k": 1.2775231095618278,
+      "state": "jump",
+      "frame": "jump-f-4",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 679.6862701000788,
+      "y": 845.4604745305297,
+      "z": 13.730566289128479,
+      "k": 1.2934757314741934,
+      "state": "jump",
+      "frame": "jump-f-4",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "land",
+      "frame": "jump-f-5",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "land",
+      "frame": "jump-f-5",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": {
+        "view": "f",
+        "key": "jump-f",
+        "vx": 33,
+        "vy": 95
+      },
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "bat",
+      "frame": "walk2",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "bat",
+      "frame": "walk2",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "bat",
+      "frame": "walk2",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "bat",
+      "frame": "walk2",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "batWait",
+      "frame": "walk1",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "batWait",
+      "frame": "walk1",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  },
+  {
+    "errors": [],
+    "report": {
+      "x": 683,
+      "y": 855,
+      "z": 0,
+      "k": 1.30416,
+      "state": "batWait",
+      "frame": "walk1",
+      "view": {
+        "view": "f",
+        "face": 1
+      },
+      "jump": null,
+      "loaded": [
+        "stand-sit",
+        "sit-sleep",
+        "turn",
+        "jump",
+        "jump-f",
+        "jump-b"
+      ],
+      "mirrored": false
+    }
+  }
+]

@@ -610,7 +610,7 @@ function paintBougainvillea(g, x, y) {
 const PLATE_W = 1500;
 const ARTREF = new URLSearchParams(location.search).get('artref');   // dev: render the reference for a repaint
 const PLATES = {};
-for (const n of ['terrace', 'props']) {
+for (const n of ['terrace', 'props', 'clouds']) {
   if (ARTREF || new URLSearchParams(location.search).get('procedural') === '1') break;
   const im = new Image();
   im.onload = () => { if (im.naturalWidth > 0) { PLATES[n] = im; if (L) bake(true); } };
@@ -2969,10 +2969,18 @@ function makeClouds() {
   const old = clouds;
   clouds = [];
   for (let i = 0; i < n; i++) {
-    const w = 260 + r() * 320, h = w * (0.26 + r() * 0.08);
+    const w = 300 + r() * 340, h = w * (PLATES.clouds ? 0.225 : 0.30);
     const cvx = document.createElement('canvas');
     cvx.width = Math.ceil(w * U * 0.5); cvx.height = Math.ceil(h * U * 0.5);
     const g = cvx.getContext('2d'); g.scale(U * 0.5, U * 0.5);
+    if (PLATES.clouds) {
+      const im = PLATES.clouds, rows = [0, 370, 670, 1024], q = i % 3, k = im.naturalHeight / 1024;
+      g.drawImage(im, 0, rows[q] * k, im.naturalWidth, (rows[q + 1] - rows[q]) * k, 0, 0, w, h);
+      // Relight once per bake; retain the painting's alpha and brush texture.
+      const px = g.getImageData(0, 0, cvx.width, cvx.height), d = px.data;
+      for (let j = 0; j < d.length; j += 4) for (let k = 0; k < 3; k++) d[j + k] *= top[k] / 245;
+      g.putImageData(px, 0, 0);
+    } else {
     const blobs = 10 + ((r() * 6) | 0);
     for (let b = 0; b < blobs; b++) {
       const t = b / blobs;
@@ -2980,6 +2988,7 @@ function makeClouds() {
       const gr = g.createRadialGradient(bx, by - br * 0.35, br * 0.05, bx, by, br);
       gr.addColorStop(0, rgba(top, 0.55)); gr.addColorStop(0.55, rgba(mix3(top, under, 0.5), 0.35)); gr.addColorStop(1, rgba(under, 0));
       g.fillStyle = gr; g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill();
+    }
     }
     const prev = old[i];
     clouds.push({ cv: cvx, w, h, x: prev ? prev.x : r() * (W + 400) - 300, y: prev ? prev.y : 40 + r() * 300, v: 4 + r() * 9, a: (E.storm > 0.5 ? 1 : E.clouds > 0.8 ? 0.95 : 0.85) * (0.45 + 0.55 * E.dl) });

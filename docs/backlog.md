@@ -6,7 +6,7 @@ Status: [ ] todo · [~] in progress (agent) · [x] done · owner in brackets
 - [x] P0 Train: actual mask bounds cover both openings; muted panorama grade; trees grounded on the matching moving foreground, smaller with contact shadows, excluded from bridges. All four skins checked in WebKit day/night/surge/tunnel.
 - [x] P0 Night Drive: continuous distance/detail fades, crest clipping, road-aligned traffic, painted biome/roadside assets. Opened motion contact sheets (66s each), ultrawide left/rain and individual biome shots. Forest 3.88 ms total / 3.08 ms JS at 1440×900.
 - [x] P0 Menu: all 16 scene control sets checked at 340px in light/dark; Bowls timer overflow fixed; expanded shared sections also inspected.
-- [ ] P1 Cats + Grass: finish pets/toggles, moon/weather/layout and mountain band
+- [x] P1 Cats + Grass: verified departures/returns, reminder and count changes while off, shared moon, accumulation/melt and mirrored/avoid layouts; fixed mountain seam and painted Cats clouds.
 - [ ] P1 Rooftop + Ramen: verify/fix day/night plate alignment
 
 Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; inspect `wkshot` screenshots before advancing and commit each finished item locally. No push, release or running-app replacement.

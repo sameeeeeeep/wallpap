@@ -44,7 +44,7 @@ final class Shot: NSObject, WKNavigationDelegate {
             self.run("1") { _ in
                 self.run(pre.isEmpty ? "1" : pre + ";void 0") { _ in
                     self.waitImages {
-                        self.run("(()=>{const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
+                        self.run("(()=>{if(window.__shotReady)window.__shotReady();const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 w.takeSnapshot(with: nil) { img, _ in
                                     if let img, let t = img.tiffRepresentation, let r = NSBitmapImageRep(data: t), let png = r.representation(using: .png, properties: [:]) {

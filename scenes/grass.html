@@ -164,17 +164,20 @@ void main(){
       sky = mix(sky, vec3(0.93, 0.92, 0.86), mdisk*mix(1.0, cres, 0.85)*uMoonP.z*(1.0 - cov*0.9));
     }
     col = mix(sky, uHaze, uFog*0.55*smoothstep(0.2, 1.0, ty));
-    if (uMtnOn > 0.5 && y > uHor - uMtnH) {
-      float my = (y - (uHor - uMtnH))/uMtnH;
-      vec4 m = texture(uMtnTex, vec2(x/W, my));
-      if (m.a > 0.003) {
-        vec3 mc = m.rgb*(uAmbC*1.05 + uSun*0.45);
-        mc = mix(mc, uSnowC, uSnow*0.7*(1.0 - 0.5*my));
-        // aerial perspective: the ridges are far off — hazier overall, a soft mist lying along their foot
-        float hz = clamp((0.2 + 0.34*uHazeK + uFog*0.75)*(1.1 - 0.4*my) + 0.22*smoothstep(0.78, 1.0, my), 0.0, 0.96);
-        mc = mix(mc, uHaze, hz) + scatter*(0.35 + 0.4*(1.0 - my));
-        col = mix(col, mc, m.a);
-      }
+  }
+  if (uMtnOn > 0.5 && y > uHor - uMtnH && y < uHor + H*0.045) {
+    float my = clamp((y - (uHor - uMtnH))/(uMtnH + H*0.045), 0.0, 1.0);
+    vec4 m = texture(uMtnTex, vec2(x/W, my));
+    if (m.a > 0.003) {
+      vec3 mc = m.rgb*(uAmbC*1.05 + uSun*0.45);
+      mc = mix(mc, uSnowC, uSnow*0.7*(1.0 - 0.5*my));
+      // aerial perspective: the ridges are far off — hazier overall, a soft mist lying along their foot
+      float hz = clamp((0.2 + 0.34*uHazeK + uFog*0.75)*(1.1 - 0.4*my) + 0.22*smoothstep(0.78, 1.0, my), 0.0, 0.96);
+      mc = mix(mc, uHaze, hz) + scatter*(0.35 + 0.4*(1.0 - my));
+      // Carry the foot of the painting into the distant grass, then dissolve it.
+      // A soft irregular edge avoids a ruler-straight cut at the horizon.
+      float foot = uHor + H*(0.012 + 0.006*vnoise(vec2(x/H*9.0, 2.0)));
+      col = mix(col, mc, m.a*(1.0 - smoothstep(foot, foot + H*0.025, y)));
     }
   }
   col += vec3(0.5, 0.55, 0.72)*uFlash*(y < uHor ? 0.55 : 0.25);
@@ -707,7 +710,7 @@ function stepLight(dt) {
   // snow settles over a few minutes of snowfall and lingers, melting faster in daylight; the meadow
   // stays wet a while after the rain stops
   const snowT = LW.env.weather === 'snow' ? 1 : 0;
-  Lt.snow = snapLight ? snowT : approach(Lt.snow || 0, snowT, dt / (snowT ? 150 / Math.max(0.4, LW.env.intensity || 0.7) : Lt.night > 0.5 ? 900 : 360));
+  Lt.snow = approach(Lt.snow || 0, snowT, dt / (snowT ? 150 / Math.max(0.4, LW.env.intensity || 0.7) : Lt.night > 0.5 ? 900 : 360));
   const wetT = t.wet;
   Lt.wet = snapLight ? wetT : approach(Lt.wetS == null ? wetT : Lt.wetS, wetT, dt / (wetT > (Lt.wetS || 0) ? 25 : 300)); Lt.wetS = Lt.wet;
   Lt.flash = (Lt.flash || 0) * Math.exp(-dt * 7);
@@ -2766,7 +2769,7 @@ ambDrive((ctx) => {
 // ─── Wellbeing ──────────────────────────────────────────────────────────────
 LW.on('calm', (on) => {
   calmOn = on; lastInput = performance.now() / 1000;
-  if (on) { for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.4 }); } }
+  if (on && petsOn()) { for (const p of pandas) { if (p.leaving || p.state === 'away') continue; stopEating(p); setState(p, 'calm', { blend: 1.4 }); } }
 });
 LW.on('reminder', (r) => {
   const t = performance.now() / 1000; lastInput = t;
@@ -2782,10 +2785,10 @@ LW.on('reminder', (r) => {
       walkTo(p, basin.x + side * (basin.r * 0.9 + p.len * 0.62), basin.s + 0.01, 'drink', { dur: 7, face: -side });
     }   // (the basin's spout runs and a panda drinks: the reminder is in the world, the host shows the words)
   } else if (r.kind === 'stretch') {
-    pandas.forEach((p, i) => { if (p.state !== 'calm') { stopEating(p); later(i * 0.38, () => { if (p.state !== 'calm') setState(p, 'stretch', { dur: 3.6, then: 'yawn' }); }); } });
+    pandas.forEach((p, i) => { if (petsOn() && !p.leaving && !['calm', 'away'].includes(p.state)) { stopEating(p); later(i * 0.38, () => { if (petsOn() && !p.leaving && !['calm', 'away'].includes(p.state)) setState(p, 'stretch', { dur: 3.6, then: 'yawn' }); }); } });
   } else {
     breathTemp = 14; if (!LW.calm) BR.t0 = performance.now() / 1000;   // no on-screen guide here: start a fresh breath
-    for (const p of pandas) { stopEating(p); setState(p, 'calm', { blend: 1.2 }); }
+    for (const p of pandas) { if (!petsOn() || p.leaving || p.state === 'away') continue; stopEating(p); setState(p, 'calm', { blend: 1.2 }); }
   }
 });
 LW.on('action', (name) => {
@@ -2804,7 +2807,7 @@ LW.on('env', () => {
 });
 function syncPandaCount() {
   const want = clamp(Math.round(+LW.settings.pandas || 3), 1, 3);
-  while (pandas.length < want) { const id = pandas.length; pandas.push(new Panda(id, clamp(W * (0.42 + id * 0.14), XMIN(), XMAX()), [0.56, 0.64, 0.5][id])); }
+  while (pandas.length < want) { const id = pandas.length; const p = new Panda(id, clamp(W * (0.42 + id * 0.14), XMIN(), XMAX()), [0.56, 0.64, 0.5][id]); pandas.push(p); if (!petsOn()) { p.x = groveX1 * 0.3; p.vis = 0; setState(p, 'away', {}); } }
   while (pandas.length > want) { const p = pandas.pop(); stopEating(p); p.dead = true; if (p.spr && p.spr.tex) gl.deleteTexture(p.spr.tex); }
 }
 

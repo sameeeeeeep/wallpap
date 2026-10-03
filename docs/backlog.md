@@ -31,6 +31,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Register new scenes + skins: drive, kinetic, fluids, skies, cymatics skins [x]; train skins (pending agent); kit add-ons via catalog [x]
 
 ## Scenes (agents)
+- [~] **Shared companions — owner 2026-10-04**: one `pets.js` and seven-member roster; migrate all eight scenes, cross-species avoidance/prop sorting, directional dog art, no-ghost poses, jump-scale continuity. Dog sheets cut and visually checked; runtime matrix, performance and integration checks in progress.
 - [ ] **Implement the generator spec** `tools/plate-scene/SPEC.md` — close the gap list at its end (design.json,
   geometry.json, cast sprite sheets with views, schema v2, measured gates + gates.json). Owner 2026-10-04: "the scene
   generator needs to keep all this properly documented — specced — so scenes can be generated very fast and perfect

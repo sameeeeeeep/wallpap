@@ -755,3 +755,14 @@ from the originals reproduced all fifty runtime assets byte for byte. `git diff 
 passed. Final evidence is approximately **36 MiB**, with raw PNG captures deleted. `df -h /`
 was checked throughout; free storage stayed above the 3 GiB stop threshold (about 11 GiB
 at final audit). No app rebuild, installation, relaunch, push, or release was performed.
+
+## 2026-10-04 — shared companions, directional dog art
+
+Owner decision: one common roster and one shared engine across all eight pet scenes.
+Added golden/corgi front/back eight-frame walks and five-frame jumps (52 cuts total),
+referenced on their existing side art. Side jump sheets already existed. Masters and
+reproduction pipeline: `art-src/pets-shared/`; generation brief: `PROMPTS.md` there.
+Visual art review: `shots/pets-shared/dog-art.jpg`. Corrected the golden second-frame
+paw detector and widened its leg warp to eliminate torn fur. The selected planted
+landmark residuals are below 1 source pixel; runtime verification follows separately.
+Pandas retain their existing side sheets and will use lateral-only routes.

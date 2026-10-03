@@ -52,3 +52,16 @@ Made with Codex image generation (`art-src/cycles/run-cycles.sh`), cut with the 
 Registry `LW.PET_CYCLE_HAS`, strides `LW.PET_STRIDE` (walking heights per cycle) in `scenes/pet-motion.js`.
 Size and anchor are not stored in the art: `LW.petCyclePrep` sizes the loop to walk1's height and pins every frame
 on walk1's torso point at load; `LW.petGait` / `LW.petGaitFrame` pick the frame from the distance walked.
+
+## Shared companions (2026-10-04)
+
+`scenes/pets.js` owns the roster and scene-independent movement/rendering. Scenes provide
+stage geometry; never copy the pet engine into a scene. The common roster is orange,
+black, grey, calico, siamese, golden and corgi. Pandas remain private to Touch Grass.
+
+Golden and corgi now also have `cycle/walk-f-1..8`, `cycle/walk-b-1..8`,
+`t/jump-f-1..5` and `t/jump-b-1..5`. Existing side jumps are retained. Generated masters,
+reproducible cutting/planting, and landmark reports live in `art-src/pets-shared/`.
+Run `python3 art-src/pets-shared/install.py` to regenerate all 52 new cuts and registries.
+A front/back walk uses a .55 ground slope; a side-only panda stays on its lateral lane.
+Pose changes use drawn transitions or one-silhouette tuck-and-cut, never a dissolve.

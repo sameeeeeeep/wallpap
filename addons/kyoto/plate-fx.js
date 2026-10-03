@@ -47,25 +47,6 @@ function create(config) {
   // Render precipitation into a transparent target and mask the entire result, not
   // merely spawn positions. Long streaks and drifting flakes cannot cross a roof.
   const weather=Kit.particles({rain:!!life.weather,snow:!!life.weather,splash:true});
-  const particleDraw=weather.draw, particleInit=weather.init;
-  let weatherRT,clipProgram;
-  weather.init=k=>{
-    particleInit(k);
-    clipProgram=k.program(`uniform sampler2D uWeather,uMask; uniform vec4 uBox;
-      void main(){vec2 px=kitPx();vec2 uv=(px-uBox.xy)/uBox.zw;
-      float m=texture(uMask,uv).r;
-      if(any(lessThan(uv,vec2(0)))||any(greaterThan(uv,vec2(1))))m=0.0;
-      o=texture(uWeather,px/uView)*m;}`);
-  };
-  weather.resize=k=>{if(weatherRT)k.free(weatherRT);weatherRT=k.target(k.W*k.res,k.H*k.res,false);};
-  weather.draw=(k,t)=>{
-    if(!life.weather||!plate.tex.m_exposed)return;
-    k.batch.flush(); k.bindTarget(weatherRT);
-    k.gl.clearColor(0,0,0,0);k.gl.clear(k.gl.COLOR_BUFFER_BIT);
-    particleDraw(k,t);k.batch.flush();
-    const p=plate.toScreen(0,0),q=plate.toScreen(1,1);
-    k.pass(clipProgram,{uWeather:weatherRT,uMask:plate.tex.m_exposed,uBox:[...p,q[0]-p[0],q[1]-p[1]]},k.sceneRT,true);
-  };
   const moving=Kit.sprites((b,k)=>{
     if(life.lights)for(const [nx,ny,r,p,col] of k.assets.lights?.lights||[]) {
       const [x,y]=plate.toScreen(nx,ny),a=quiet(k,x,y)*k.L.night*p;
@@ -126,7 +107,7 @@ function create(config) {
     },
     tick(A,k,at) {if(bed)bed.gain.setTargetAtTime((life.ambience==='stream'?.025:.038)*(1+Math.sin(clock*.22)*.15)*(LW.calm?.7:1),at,.8);}
   };
-  const grade=Kit.light({vignette:.08,grain:.012,glow:.12});
+  const grade=Kit.light({vignette:.08,grain:.009,glow:.12});
   const assets=life.lights&&C.lights?{lights:'art/'+C.lights}:{};
   for(const n of ['road','walk'])if(C.masks[n])assets[n+'Mask']='art/'+C.masks[n];
   if(life.boats)assets.boat='art/shared/fishing-boat.png';

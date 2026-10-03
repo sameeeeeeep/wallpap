@@ -678,11 +678,11 @@ function targetLight() {
   const sp = sunPos(h), mp = moonPos(h);
   const dayness = 1 - k.night;
   return {
-    skyTop: gray(k.skyTop, gr * 0.85).map((v) => v * lerp(1, dim, 0.8)),
+    skyTop: gray(k.skyTop, gr * 0.85).map((v,i) => (v + k.night*[.024,.032,.045][i]) * lerp(1, dim, 0.8)),
     skyHor: gray(k.skyHor, gr * 0.8).map((v) => v * lerp(1, dim, 0.6)),
-    sun: gray(k.sun, gr * 0.7).map((v) => v * (1 - 0.72 * gr) * lerp(1, dim, 0.5)),
-    amb: k.amb * lerp(1, dim, 0.7),
-    ambCol: gray(k.ambCol, gr * 0.6),
+    sun: gray(k.sun, gr * 0.7).map((v,i) => (v + k.night * [.20,.24,.30][i]) * (1 - 0.5 * gr) * lerp(1, dim, 0.5)),
+    amb: Math.max(k.amb * lerp(1, dim, 0.7), k.night * (0.38 + .06 * (env.astronomy?.moon?.fraction ?? .5))),
+    ambCol: gray(k.ambCol, gr * 0.6).map((v,i)=>v + k.night * [.18,.22,.26][i]),
     haze: gray(k.haze, gr * 0.65).map((v) => v * lerp(1, dim, 0.85)),
     back: k.back * (1 - gr * 0.9),
     gold: k.gold * (1 - gr * 0.9),

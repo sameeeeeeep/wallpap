@@ -29,12 +29,13 @@ const SPECIES = {
 };
 let wings, meadow, flies = [], u = 1;
 
-meadow = Kit.meadow({ dof: 0.8, shadow: 0.6, push: 30, groundScale: 380, soil: [0.13, 0.1, 0.07],
-  foliage: { density: 1.1, kinds: [{ name: 'hosta', size: [120, 175], weight: 1, sway: 2 }, { name: 'fern', size: [120, 170], weight: 1.2, sway: 4 },
-                                  { name: 'grass', size: [90, 140], weight: 1.6, sway: 6, height: 0.2 }, { name: 'mantle', size: [100, 150], weight: 1.1, sway: 2 }] },
-  flowers: { clusters: 16, per: [3, 9], under: ['mantle', 'hosta', 'fern'],
-    kinds: [{ name: 'cosmos', size: [56, 78], weight: 2 }, { name: 'daisy', size: [44, 60], weight: 2 }, { name: 'zinnia', size: [52, 70], weight: 1.2 },
-            { name: 'echinacea', size: [56, 76], weight: 1.5 }, { name: 'rudbeckia', size: [50, 68], weight: 1.5 }, { name: 'scabiosa', size: [46, 60], weight: 1.2 }] } });
+// A single integrated photographic bed: stems, foliage and contact shadows share one geometry.
+meadow=Kit.plate({base:'art/',plates:{day:'garden.webp'},focus:[.5,.5]});
+meadow.bloom=0;meadow.blooms=[];meadow.sheet={f:{hosta:{}}};
+meadow.field={list:[],sway:p=>[p.x,p.y]};
+const flowerSites=[[.096,.17],[.234,.133],[.278,.211],[.324,.205],[.164,.294],[.12,.39],[.174,.366],[.2,.429],[.323,.348],[.331,.43],[.42,.365],[.503,.407],[.255,.521],[.3,.62],[.348,.719],[.485,.657],[.54,.71],[.565,.465],[.508,.10],[.409,.145]];
+const resizeBed=meadow.resize;
+meadow.resize=k=>{resizeBed(k);meadow.blooms=flowerSites.map(([nx,ny])=>{const [x,y]=meadow.toScreen(nx,ny);return {x,y,bloom:1};});meadow.field.list=[[.18,.78],[.4,.87],[.57,.22]].map(p=>{const [x,y]=meadow.toScreen(...p);return{x,y,f:meadow.sheet.f.hosta};});};
 
 // ── Butterflies ──
 function spawn(k, from = 'edge') {
@@ -118,20 +119,19 @@ function drawFly(b, f, k, shadow) {
   for (const side of [-1, 1]) { const [ax, ay] = P(side * h * 0.16, -h * 0.62); b.line(hx, hy, ax, ay, 0.9 * sc, bc, f.a * 0.8, 0); b.glow(ax, ay, 1.4 * sc, bc, f.a * 0.8, 0, 2); }
 }
 
-Kit.scene({
-  assets: { atlas: 'atlas.png', ground: 'ground.jpg' },
+const garden=Kit.scene({
+  assets: { atlas: 'atlas.png' }, onReminder(){},
   setup(k) {
     k.shade = 0.55;   // an unseen tree shades the widget side (auto: follows LW.layout)
     wings = k.sheet(k.assets.atlas, FRAMES);
-    const cut = (kinds) => Object.fromEntries(kinds.map((q) => [q.name, Kit.slice(k.assets.atlas, FRAMES[q.name])]));
-    meadow.opt.flowers.images = cut(meadow.opt.flowers.kinds); meadow.opt.foliage.images = cut(meadow.opt.foliage.kinds); meadow.opt.groundImage = k.assets.ground;
+
   },
   resize(k) { u = Math.min(k.W, k.H) / 1000; for (const f of flies) if (f.bloom) { f.bloom = null; f.state = 'fly'; } },
   layers: [
     meadow,
     Kit.sprites((b, k) => { b.use(wings); for (const f of flies) drawFly(b, f, k, true); }, 'shadows'),
     Kit.sprites((b, k) => { b.use(wings); for (const f of flies.slice().sort((p, q) => p.z - q.z)) drawFly(b, f, k, false); }, 'butterflies'),
-    Kit.particles({ pollen: 26, fireflies: 22, petals: 0 }),
+    Kit.particles({ pollen: 12, fireflies: 14, petals: 0, splash:false }),
     Kit.light({ glow: 0.4, threshold: 0.78, vignette: 0.42, contrast: 1.1, warmth: 0.05 }),
   ],
   update,
@@ -153,6 +153,7 @@ Kit.scene({
     },
   },
 });
+window.garden={scene:garden,meadow,flies};
 </script>
 </body>
 </html>

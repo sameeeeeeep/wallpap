@@ -1,3 +1,4 @@
+from edges import refine_sky, decontaminate
 # plate-scene steps after generation: build (align + crop + upscale), masks, cut, check, pack.  Called by plate.py.
 import json, os, shutil, subprocess, sys
 import numpy as np
@@ -156,8 +157,12 @@ def masks(sid, rest):
         M[c['name']] = m
     for name, m in M.items():
         r = spec.get('feather', {}).get(name, 1.2)
-        m = guided(guide, m, 4, 1e-3) if name in ('sky', 'foliage', 'grass') else m
-        m = nd.gaussian_filter(m, r)
+        if name == 'sky':
+            full = np.asarray(Image.fromarray(m).resize((day.shape[1],day.shape[0]),Image.Resampling.BILINEAR))
+            m = refine_sky(day, full)
+        else:
+            m = guided(guide, m, 4, 1e-3) if name in ('foliage', 'grass') else m
+            m = nd.gaussian_filter(m, r)
         save(m * 255, f'{out}/{name}.png', 'L'); print(f'  masks/{name}.png  cover {m.mean() * 100:.1f}%')
     emissive(sid, spec)
 
@@ -285,7 +290,12 @@ def pack(sid, rest):
     for v in VARIANTS:
         s = art(sid, 'plates', f'plate-{v}.png')
         if os.path.exists(s):
-            Image.open(s).convert('RGB').resize(size, Image.LANCZOS).save(f'{dst}/plate-{v}.jpg', quality=q, optimize=True, progressive=True)
+            image = Image.open(s).convert('RGB')
+            sky_path = art(sid, 'masks', 'sky.png')
+            if os.path.exists(sky_path):
+                sky = np.asarray(Image.open(sky_path).convert('L').resize(image.size,Image.Resampling.BILINEAR))/255
+                image = Image.fromarray(decontaminate(np.asarray(image), sky))
+            image.resize(size, Image.LANCZOS).save(f'{dst}/plate-{v}.jpg', quality=q, optimize=True, progressive=True)
     for f in sorted(os.listdir(art(sid, 'masks'))):
         s = art(sid, 'masks', f)
         if f == 'emissive.png': Image.open(s).convert('RGB').resize(size, Image.LANCZOS).save(f'{dst}/emissive.jpg', quality=90, optimize=True)

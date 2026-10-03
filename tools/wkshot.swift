@@ -13,6 +13,9 @@ let out = a[2]
 let W = a.count > 3 ? Double(a[3]) ?? 1600 : 1600, H = a.count > 4 ? Double(a[4]) ?? 1000 : 1000
 let steps = a.count > 5 ? Double(a[5]) ?? 3 : 3
 let pre = a.count > 6 ? a[6] : ""
+// Optional sequence in ONE running scene. Values are elapsed virtual seconds after
+// the initial steps; snapshots use -f00, -f01... suffixes. No app is launched.
+let frames = (ProcessInfo.processInfo.environment["WKSHOT_FRAMES"] ?? "0").split(separator: ",").compactMap { Double($0) }.sorted()
 
 final class Shot: NSObject, WKNavigationDelegate {
     let web: WKWebView; let win: NSWindow
@@ -39,6 +42,24 @@ final class Shot: NSObject, WKNavigationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.waitImages(attempts + 1, done) }
         }
     }
+    func capture(_ index: Int = 0) {
+        let delta = frames[index] - (index > 0 ? frames[index - 1] : 0)
+        run("(()=>{for(let i=0;i<Math.round(\(delta)*30);i++)if(window.LW)LW.advance(1/30);return true})()") { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.web.takeSnapshot(with: nil) { img, _ in
+                    let path = frames.count > 1 ? String(out.dropLast(4)) + String(format: "-f%02d.png", index) : out
+                    if let img, let t = img.tiffRepresentation, let r = NSBitmapImageRep(data: t), let png = r.representation(using: .png, properties: [:]) {
+                        do { try png.write(to: URL(fileURLWithPath: path)); print("saved", path) }
+                        catch { print("write failed:", error); exit(2) }
+                    } else { print("snapshot failed"); exit(2) }
+                    self.run("JSON.stringify({errors:window.__errs||[],report:window.__shotReport?window.__shotReport():null})") { r in
+                        print("result:", r ?? "{}")
+                        if index + 1 < frames.count { self.capture(index + 1) } else { exit(0) }
+                    }
+                }
+            }
+        }
+    }
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             self.run("1") { _ in
@@ -46,12 +67,7 @@ final class Shot: NSObject, WKNavigationDelegate {
                     self.waitImages {
                         self.run("(()=>{if(window.__shotReady)window.__shotReady();const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                w.takeSnapshot(with: nil) { img, _ in
-                                    if let img, let t = img.tiffRepresentation, let r = NSBitmapImageRep(data: t), let png = r.representation(using: .png, properties: [:]) {
-                                        try? png.write(to: URL(fileURLWithPath: out)); print("saved", out)
-                                    } else { print("snapshot failed") }
-                                    self.run("JSON.stringify({errors:window.__errs||[],report:window.__shotReport?window.__shotReport():null})") { r in print("result:", r ?? "{}"); exit(0) }
-                                }
+                                self.capture()
                             }
                         }
                     }

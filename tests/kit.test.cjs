@@ -53,3 +53,10 @@ test('steer: layout-aware clear band (widgets left or right)',()=>{
  assert.ok(Kit.steer.calmZone({x:100},left)[0]>0);assert.equal(Kit.steer.calmZone({x:900},left)[0],0);
  assert.equal(Kit.steer.okToRest(100,left),false);assert.equal(Kit.steer.okToRest(600,left),true);
 });
+test('moon phase modulates night exposure without losing storm shadow detail',()=>{
+ const at=(fraction)=>Kit.palette({hour:2,weather:'storm',intensity:1,astronomy:{sun:{altitude:-1,azimuth:0},moon:{altitude:.5,azimuth:1,fraction,phase:.5}}});
+ const dark=at(0),full=at(1);
+ assert.ok(dark.amb>=.285,'new moon storm remains legible');
+ assert.ok(full.amb>dark.amb,'moon phase affects illumination');
+ assert.ok(dark.horizon[2]>dark.zenith[2],'graded night sky');
+});

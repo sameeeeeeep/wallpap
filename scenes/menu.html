@@ -255,7 +255,7 @@ function render(state) {
       return `<button aria-pressed="${c === tab}" data-tab="${esc(c)}" title="${esc(c)}">${icon(c, 18)}<span>${esc(c === 'Cozy Rooms' ? 'Rooms' : c === 'City Nights' ? 'City' : c)}</span>${n ? `<em>${n}</em>` : ''}</button>`;
     }).join('')}</div>
     ${tab === 'Discover' ? discover(offers, locked) : tab === 'Custom' ? customTab(locked) : `<div class="grid">${S.scenes.filter((s) => s.cat === tab).map(tile).join('')}</div>`}
-    <div class="look" style="margin-top:9px"><span class="note">Change scene automatically</span>${chips(CYCLE.map(([v, l]) => [v, v ? 'Every ' + l : 'Off']), S.cycle, 'pickSceneCycle', { wrap: true, tag: true })}</div>
+    <div class="look" style="margin-top:9px"><span class="note">Change scene automatically</span>${chips(CYCLE, S.cycle, 'pickSceneCycle', { wrap: true, tag: true })}</div>
     ${S.cycle ? `<div class="row"><div style="width:190px">${chips([['all', 'All scenes'], ['category', 'This category']], S.cycleScope, 'pickSceneCycleScope')}</div><span>Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}`)}
 
   ${sec('env', 'Environment', `${esc(label(CLOCKS.concat(VIEWS), S.timeView).toLowerCase())} time · ${S.weather ? esc(label(WEATHER, S.weather).toLowerCase()) : 'live weather'}`, `

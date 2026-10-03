@@ -9,12 +9,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
+from edges import complete_sky, refine_sky, decontaminate
 ROOT=Path(__file__).resolve().parents[2]
 for s in json.loads((ROOT/'art-src/plate-scenes/manifest.json').read_text()):
     dest=ROOT/'addons'/s['id'];art=dest/'art';art.mkdir(parents=True,exist_ok=True)
     day=Image.open(ROOT/s['day']).convert('RGB');w,h=day.size
-    for name in ['day','night']:
-        Image.open(ROOT/s[name]).convert('RGB').save(art/f'plate-{name}.webp',quality=92)
     a=np.array(day).astype(float);r,g,b=a[:,:,0],a[:,:,1],a[:,:,2]
     candidates=(b>r+5)&(g>r+1)&(a.mean(2)>s.get('sky_luminance',145))
     if s['id']=='taj-mahal':
@@ -29,7 +28,11 @@ for s in json.loads((ROOT/'art-src/plate-scenes/manifest.json').read_text()):
     seed=np.zeros_like(candidates);seed[0]=candidates[0]
     sky=ndimage.binary_propagation(seed,mask=candidates)
     sky=ndimage.binary_fill_holes(sky)
-    Image.fromarray((sky*255).astype('uint8')).filter(ImageFilter.GaussianBlur(.6)).save(art/'sky.png')
+    sky=refine_sky(a, complete_sky(a, sky))
+    Image.fromarray((sky*255).astype('uint8')).save(art/'sky.png')
+    for name in ['day','night']:
+        source=np.asarray(Image.open(ROOT/s[name]).convert('RGB'))
+        Image.fromarray(decontaminate(source, sky)).save(art/f'plate-{name}.webp',quality=92)
     def polygon(points):
         im=Image.new('L',(w,h));ImageDraw.Draw(im).polygon([(int(x*w),int(y*h)) for x,y in points],fill=255);return im
     water=polygon(s['water']).filter(ImageFilter.GaussianBlur(1));water.save(art/'water.png')

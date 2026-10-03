@@ -272,7 +272,10 @@ void main(){
 
   // Vignette, gentle filmic shoulder, grain.
   float vig = smoothstep(1.25, 0.35, length((uv-0.5)*vec2(uAspect*0.8, 1.0)));
-  col *= 0.62 + 0.38*vig;
+  col *= 0.82 + 0.18*vig;
+  // Camera exposure adapts to moonlight, retaining pond-bed and scale detail.
+  float moonExposure = smoothstep(0.65, 0.38, uAmb);
+  col = mix(col, sqrt(max(col,0.0))*0.72, moonExposure*0.72);
   col = col / (1.0 + max(col - 0.7, 0.0)*0.9);
   col += (fract(sin(dot(gl_FragCoord.xy + fract(uTime*7.0)*97.0, vec2(12.9898,78.233)))*43758.5453) - 0.5) * 0.02;
   o = vec4(pow(max(col, 0.0), vec3(0.97)), 1.0);
@@ -579,7 +582,7 @@ function targetLight() {
   const h = env.hour, sa = ((h - 6) / 12) * Math.PI;
   return {
     light: gray(k.light, lerp(1, 0.55, (1 - dim) * 1.6)).map((v) => v * lerp(1, dim, 0.7)),
-    amb: k.amb * dim,
+    amb: Math.max(k.amb * dim, night * (0.34 + 0.06 * (LW.env.astronomy?.moon?.fraction ?? .5))),
     sky: gray(k.sky, lerp(1, 0.4, 1 - dim)).map((v) => v * lerp(0.7, 1, dim)),
     deep: k.deep, shallow: k.shallow,
     caust: wmix(w.caust, 1) * lerp(0.12, 1, dayness),

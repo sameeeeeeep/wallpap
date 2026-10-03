@@ -96,8 +96,8 @@ const CALM_X = 0.72;   // the right ~28% is for macOS widgets: calm background o
 // ─── Lighting palette: time of day × weather (pure) ────────────────────────────────────────────
 // hour, sun light rgb, ambient, zenith, horizon   (hours follow lw.js: sunrise 6.3, sunset 18.3, dusk 19.6)
 const SKY = [
-  [0,    [0.54, 0.64, 0.96], 0.34, [0.010, 0.016, 0.040], [0.035, 0.050, 0.095]],
-  [4.9,  [0.56, 0.64, 0.95], 0.35, [0.016, 0.024, 0.060], [0.060, 0.070, 0.130]],
+  [0,    [0.54, 0.64, 0.96], 0.34, [0.038, 0.058, 0.110], [0.105, 0.140, 0.215]],
+  [4.9,  [0.56, 0.64, 0.95], 0.35, [0.043, 0.064, 0.122], [0.115, 0.150, 0.225]],
   [5.7,  [0.80, 0.56, 0.55], 0.44, [0.090, 0.120, 0.260], [0.560, 0.400, 0.440]],
   [6.3,  [1.00, 0.70, 0.50], 0.60, [0.200, 0.300, 0.540], [1.000, 0.620, 0.420]],
   [7.6,  [1.00, 0.86, 0.70], 0.84, [0.190, 0.380, 0.700], [0.720, 0.780, 0.850]],
@@ -106,8 +106,8 @@ const SKY = [
   [17.6, [1.00, 0.78, 0.55], 0.76, [0.220, 0.320, 0.580], [1.000, 0.660, 0.400]],
   [18.3, [1.00, 0.66, 0.50], 0.56, [0.150, 0.180, 0.380], [0.950, 0.460, 0.340]],
   [19.6, [0.60, 0.60, 0.88], 0.38, [0.040, 0.060, 0.150], [0.260, 0.200, 0.320]],
-  [21,   [0.54, 0.64, 0.96], 0.34, [0.010, 0.016, 0.040], [0.035, 0.050, 0.095]],
-  [24,   [0.54, 0.64, 0.96], 0.34, [0.010, 0.016, 0.040], [0.035, 0.050, 0.095]],
+  [21,   [0.54, 0.64, 0.96], 0.34, [0.038, 0.058, 0.110], [0.105, 0.140, 0.215]],
+  [24,   [0.54, 0.64, 0.96], 0.34, [0.038, 0.058, 0.110], [0.105, 0.140, 0.215]],
 ];
 const WEATHER = { // dim, spec, caust, wind, fog, sat, cloud cover, wet, snow
   clear:  { dim: 1.0,  spec: 1.0,  caust: 1.0,  wind: 0.45, fog: 0.0,  sat: 1.0,  cloud: 0.28, wet: 0, snow: 0 },
@@ -153,7 +153,7 @@ function palette(env) {
   const cloud = clamp(wm(w.cloud, 0.28), 0, 1);
   return {
     light: gray(k.light, lerp(1, 0.5, (1 - dim) * 1.6)).map((v) => v * lerp(1, dim, 0.75)),
-    amb: k.amb * dim,
+    amb: Math.max(k.amb * dim, night * (0.29 + 0.085 * (B.moon.frac ?? 0.75))),
     zenith: gray(k.zenith, lerp(1, 0.35, 1 - dim)).map((v) => v * lerp(0.62, 1, dim)),
     horizon: gray(k.horizon, lerp(1, 0.4, 1 - dim)).map((v) => v * lerp(0.75, 1, dim)),
     sunDir: [Math.sin(src.az) * sl, -Math.cos(src.az) * sl],   // top-down shadow offset per px of height (y down)
@@ -1528,7 +1528,7 @@ function plate(o = {}) {
   const opt = Object.assign({ plates: {}, masks: {}, occluders: [], fit: 'cover', focus: [0.5, 0.5], mirror: true, emissive: 1, shimmer: 1, sparkle: 1, maxScale: 1 }, o);
   const FS = `
   uniform sampler2D uPDay, uPDusk, uPNight, uPOver, uSkyM, uWaterM, uExpM, uEmM, uSim, uOccM;
-  uniform vec4 uW, uFit, uHas, uHasM; uniform vec2 uSimTx; uniform float uMirror, uEmK, uShimmer, uSparkle, uOcc;
+  uniform vec4 uW, uFit, uHas, uHasM; uniform vec2 uSimTx; uniform float uMirror, uEmK, uShimmer, uSparkle, uOcc, uMoonExposure;
   vec2 toPlate(vec2 px){ if (uMirror > 0.5) px.x = uView.x - px.x; return (px - uFit.xy) / uFit.zw; }
   void main(){
     vec2 px = kitPx(), uv = toPlate(px);
@@ -1544,7 +1544,9 @@ function plate(o = {}) {
     }
     vec3 day = texture(uPDay, duv).rgb;
     vec3 dusk = uHas.x > 0.5 ? texture(uPDusk, duv).rgb : day * vec3(1.06, 0.8, 0.6) * 0.8;
-    vec3 night = uHas.y > 0.5 ? texture(uPNight, duv).rgb : day * vec3(0.16, 0.19, 0.28);
+    // Preserve painted practical lights while retaining surface detail on dark masters.
+    vec3 moonlit = day * vec3(0.32, 0.39, 0.51) * uMoonExposure + vec3(0.012, 0.018, 0.028);
+    vec3 night = uHas.y > 0.5 ? max(texture(uPNight, duv).rgb, moonlit) : moonlit;
     vec3 over = uHas.z > 0.5 ? texture(uPOver, duv).rgb : mix(vec3(dot(day, vec3(0.3, 0.59, 0.11))), day, 0.55) * 0.78;
     vec3 col = day * uW.x + dusk * uW.y + night * uW.z + over * uW.w;
     // night lights: explicit emissive mask, or what the night plate has that daylight doesn't
@@ -1560,6 +1562,8 @@ function plate(o = {}) {
     // weather on exposed ground: wet darkens + sheen, snow settles on the lit, up-facing bits first
     float ground = expM * (1.0 - waterM) * (1.0 - skyM);
     col = mix(col, col * vec3(0.72, 0.74, 0.78) + uSkyRefl * 0.05, uWet * ground * 0.7);
+    float sheen = pow(max(0.0, noise(px * vec2(0.008, 0.16)) - 0.28), 2.0);
+    col += mix(vec3(0.22,0.27,0.32),vec3(0.10,0.15,0.23),uNight) * sheen * uWet * ground;
     float lum = dot(col, vec3(0.3, 0.59, 0.11));
     col = mix(col, vec3(0.9, 0.93, 0.98) * (uAmb * 0.9 + 0.1), uSnow * ground * smoothstep(0.08, 0.5, lum + uSnow * 0.25 + (fbm3(px * 0.02) - 0.5) * 0.3));
     float a = 1.0 - skyM;
@@ -1615,7 +1619,7 @@ function plate(o = {}) {
   L.init = (kk) => {
     k = kk; k.plateLayer = L; prog = k.program(FS);
     for (const n of ['day', 'dusk', 'night', 'overcast']) { const im = src(opt.plates[n]); if (im) L.tex[n] = k.image(sized(im), false); }
-    for (const n of ['sky', 'water', 'exposed', 'emissive']) { const im = src(opt.masks[n]); if (im) { L.tex['m_' + n] = k.image(sized(im, n === 'emissive' ? 1 : 0.5), false); L.masks[n] = cpuMask(im); } }
+    for (const n of ['sky', 'water', 'exposed', 'emissive']) { const im = src(opt.masks[n]); if (im) { L.tex['m_' + n] = k.image(sized(im), false); L.masks[n] = cpuMask(im); } }
     L.occ = opt.occluders.map((oc) => { const im = src(oc.mask); return im ? { base: oc.base, tex: k.image(sized(im, 0.75), false), box: oc.box || [0, 0, 1, 1] } : null; }).filter(Boolean);
     const d = src(opt.plates.day); pw = d.width; ph = d.height;
   };
@@ -1636,7 +1640,7 @@ function plate(o = {}) {
       uExpM: T.m_exposed || T.day, uEmM: T.m_emissive || T.day, uSim: { tex: R && R.tex ? R.tex : T.day.tex }, uOccM: occ ? occ.tex : T.day,
       uW: w, uFit: fit, uMirror: mirror ? 1 : 0, uHas: [T.dusk ? 1 : 0, T.night ? 1 : 0, T.overcast ? 1 : 0, T.m_emissive ? 1 : 0],
       uHasM: [T.m_sky ? 1 : 0, T.m_water ? 1 : 0, T.m_exposed ? 1 : 0, R && R.tex ? 1 : 0], uSimTx: R ? [1 / R.w, 1 / R.h] : [0, 0],
-      uEmK: opt.emissive * (T.m_emissive ? lightsOn : Math.max(0, lightsOn - w[2]) + 0.15 * w[2]), uShimmer: opt.shimmer, uSparkle: opt.sparkle, uOcc: occ ? 1 : 0 };
+      uMoonExposure: 0.82 + 0.18 * Lt.moonFrac, uEmK: opt.emissive * (T.m_emissive ? lightsOn : Math.max(0, lightsOn - w[2]) + 0.15 * w[2]), uShimmer: opt.shimmer, uSparkle: opt.sparkle, uOcc: occ ? 1 : 0 };
   }
   L.draw = () => { k.pass(prog, uniforms(null), k.sceneRT, true); };
   // Redraw plate pixels that stand in front of a sprite whose ground point is at screen y = groundY (clipped to rect).
@@ -1670,10 +1674,10 @@ function particles(o = {}) {
   P.update = (dt, t, k) => {
     const env = root.LW.env, w = env.weather, it = env.intensity ?? 0.7, W = k.W, H = k.H, wind = k.wind;
     const raining = opt.rain && (w === 'rain' || w === 'storm'), snowing = opt.snow && w === 'snow';
-    const want = raining ? (w === 'storm' ? 260 : 120) * (0.5 + it) : 0, wantS = snowing ? 140 * (0.5 + it) : 0;
+    const want = raining ? Math.min(1600, (w === 'storm' ? 680 : 440) * (0.5 + it) * W * H / 1296000) : 0, wantS = snowing ? 140 * (0.5 + it) : 0;
     let nr = 0, ns = 0, np = 0, nl = 0, npo = 0; for (const p of P.list) { if (p.type === 'rain') nr++; else if (p.type === 'snow') ns++; else if (p.type === 'petal') np++; else if (p.type === 'leaf') nl++; else if (p.type === 'pollen') npo++; }
     const spot = (x0, x1, y0, y1) => { for (let i = 0; i < 4; i++) { const x = rand(x0, x1), y = rand(y0, y1); if (k.exposedAt(x, y)) return [x, y]; } return null; };
-    for (; nr < want; nr++) { const s = spot(-60, W + 60, -H * 0.2, H); if (!s) break; P.list.push({ type: 'rain', x: s[0], y: s[1], z: rand(0.4, 1), age: 0, life: rand(0.25, 0.6) }); }
+    for (; nr < want; nr++) { const s = spot(-60, W + 60, -H * 0.2, H); if (!s) continue; P.list.push({ type: 'rain', x: s[0], y: s[1], z: rand(0.4, 1), age: 0, life: rand(0.5, 0.9) }); }
     for (; ns < wantS; ns++) { const s = spot(-50, W, -50, H); if (!s) break; P.list.push({ type: 'snow', x: s[0], y: s[1], z: rand(0.3, 1), age: 0, life: rand(4, 9), ph: rand(TAU) }); }
     const day = k.L.day > 0.5 && !raining && !snowing;
     if (day && np < opt.petals && Math.random() < dt * 0.6) P.list.push({ type: 'petal', i: Math.floor(rand(P.npetal)), x: rand(-40, W * 0.6), y: rand(-40, H), z: rand(0.5, 1), age: 0, life: rand(8, 14), rot: rand(TAU), vr: rand(-2, 2), ph: rand(TAU) });
@@ -1690,7 +1694,7 @@ function particles(o = {}) {
       if (p.age > p.life) {
         if (p.type === 'rain' && Math.random() < 0.5 && k.exposedAt(p.x, p.y)) {
           const surf = k.surfaceAt(p.x, p.y);                                       // rings only on exposed ground
-          if (surf === 'ground' && opt.splash) P.list.push({ type: 'splash', x: p.x, y: p.y, age: 0, life: 0.35, z: p.z });
+          if ((surf === 'ground' || surf === 'water') && opt.splash) P.list.push({ type: 'splash', x: p.x, y: p.y, age: 0, life: 0.35, z: p.z });
           if (surf === 'water' && k.ripples) k.ripples.drop(p.x, p.y, 3, -0.08);
           if (surf && opt.onHit) opt.onHit(p.x, p.y, k, surf);
         }
@@ -1709,8 +1713,8 @@ function particles(o = {}) {
     b.use(sheet);
     for (const p of P.list) {
       const fade = Math.min(1, p.age * 3) * Math.min(1, (p.life - p.age) * 2);
-      if (p.type === 'rain') { const len = 34 * p.z, dx = (k.wind.base * 0.08 + 0.04) * len; b.line(p.x, p.y, p.x + dx, p.y + len, 1 + p.z * 0.8, rainC, 0.0, 1, 0.36 * p.z * fade); }
-      else if (p.type === 'splash') { const q = p.age / p.life; b.ring(p.x, p.y, 2 + q * 7 * p.z, rainC, (1 - q) * 0.35, 0.18); }
+      if (p.type === 'rain') { const len = (18 + 48 * p.z) * Math.sqrt(k.H / 900), dx = (k.wind.base * 0.08 + 0.04) * len; b.line(p.x, p.y, p.x + dx, p.y + len, 1 + p.z * 0.8, rainC, 0.0, 1, (0.38 + 0.32 * p.z) * Math.min(1, p.age * 14, (p.life - p.age) * 14)); }
+      else if (p.type === 'splash') { const q = p.age / p.life; b.ring(p.x, p.y, 2 + q * 7 * p.z, rainC, (1 - q) * 0.6, 0.14); }
       else if (p.type === 'snow') { const sz = (1.2 + 2.6 * p.z); b.glow(p.x, p.y, sz * 1.6, [0.95, 0.97, 1].map((v) => v * (Lt.amb * 0.7 + 0.35)), 0.85 * fade * p.z, 0, 2.2); }
       else if (p.type === 'petal' || p.type === 'leaf') { const f = sheet.f[(p.type === 'petal' ? 'p' : 'l') + p.i], s = (p.type === 'petal' ? 16 : 22) * p.z, flip = Math.cos(t * 2.4 + p.ph); b.shadow(f, p.x + Lt.sunDir[0] * 18, p.y + Lt.sunDir[1] * 18, s, s * Math.abs(flip) + 2, p.rot, 0.18 * fade, 2.5); b.sprite(f, p.x, p.y, s, s * Math.abs(flip) + 2, p.rot, tint, fade); }
       else if (p.type === 'pollen') { const sun = Lt.light.map((v) => v * Lt.amb), tw = 0.5 + 0.5 * Math.sin(t * 2 + p.ph); b.glow(p.x, p.y, 2.2 + 2 * p.z, sun, 0.45 * fade * tw * Lt.day, 1, 2.5); }
@@ -1722,6 +1726,31 @@ function particles(o = {}) {
       if (glow < 0.02) continue;
       b.glow(f.x, f.y, 16 * f.s, [0.9, 0.95, 0.45], glow * 0.55, 1, 2.2); b.glow(f.x, f.y, 3 * f.s, [1, 1, 0.75], glow * 1.4, 1, 1.5);
     }
+  };
+  // Plate weather is clipped across its entire footprint, including streak tips
+  // and splash rings. Non-plate scenes retain their own exposure contract.
+  const drawParticles = P.draw, initParticles = P.init;
+  let weatherRT, clipProgram;
+  P.init = k => {
+    initParticles(k);
+    clipProgram = k.program(`uniform sampler2D uWeather,uSkyMask,uGroundMask,uWaterMask;
+      uniform vec4 uBox; uniform vec3 uMasks;
+      void main(){vec2 px=kitPx(),uv=(px-uBox.xy)/uBox.zw;
+        float mask=max(texture(uSkyMask,uv).r*uMasks.x,max(texture(uGroundMask,uv).r*uMasks.y,texture(uWaterMask,uv).r*uMasks.z));
+        if(any(lessThan(uv,vec2(0)))||any(greaterThan(uv,vec2(1))))mask=0.0;
+        o=texture(uWeather,px/uView)*mask;}`);
+  };
+  P.resize = k => { if(weatherRT)k.free(weatherRT); weatherRT=null; };
+  P.draw = (k,t) => {
+    const plate=k.plateLayer, T=plate?.tex;
+    if(!T?.m_exposed){drawParticles(k,t);return;}
+    if(!weatherRT)weatherRT=k.target(k.W*k.res,k.H*k.res,false);
+    k.batch.flush(); k.bindTarget(weatherRT);
+    k.gl.clearColor(0,0,0,0); k.gl.clear(k.gl.COLOR_BUFFER_BIT);
+    drawParticles(k,t); k.batch.flush();
+    const a=plate.toScreen(0,0),z=plate.toScreen(1,1);
+    k.pass(clipProgram,{uWeather:weatherRT,uSkyMask:T.m_sky||T.m_exposed,uGroundMask:T.m_exposed,uWaterMask:T.m_water||T.m_exposed,
+      uMasks:[T.m_sky?1:0,1,T.m_water?1:0],uBox:[...a,z[0]-a[0],z[1]-a[1]]},k.sceneRT,true);
   };
   return P;
 }
@@ -1751,6 +1780,7 @@ function light(o = {}) {
       vec3 fc = mix(vec3(0.58, 0.62, 0.64), vec3(0.17, 0.2, 0.27), uNight) * (uAmb * 0.85 + 0.12);
       col = mix(col, fc, uFog * uFogK * (0.35 + 0.55 * mist)); }
     col += uSkyRefl * uFlash * 0.6;
+    col += vec3(0.012, 0.019, 0.029) * uNight * (1.0 - smoothstep(0.03, 0.3, dot(col, vec3(0.3,0.59,0.11))));
     col = kitSat(col, uSatK);
     col *= vec3(1.0 + uWarm, 1.0 + uWarm * 0.3, 1.0 - uWarm * 0.6);
     float lum = dot(col, vec3(0.299, 0.587, 0.114));

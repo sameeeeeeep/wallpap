@@ -3346,7 +3346,7 @@ function updateOutside(dt, T) {
     const C = ['#2a3446', '#5a2630', '#3c4a3a', '#6b6a66', '#1d1d22', '#7a5a2a'];
     const car = { dir, x: dir > 0 ? w.x0 - 220 : w.x1 + 220, y: lane, v: rand(170, 260), col: hex(C[Math.floor(Math.random() * C.length)]), k: dir > 0 ? 1 : 0.86 };
     const ids = Object.keys(ART.car);
-    if (L.lanes && ids.length) { car.i = ids[Math.floor(Math.random() * ids.length)]; car.y = dir > 0 ? L.lanes.near : L.lanes.far; car.k = dir > 0 ? 1 : 0.93; car.v = rand(150, 230); }
+    if (L.lanes && ids.length) { car.i = ids[Math.floor(Math.random() * ids.length)]; car.y = dir > 0 ? L.lanes.near : L.lanes.far; car.k = dir > 0 ? 1 : 0.93; car.v = rand(30, 45) / 3.6 * L.mU; }
     cars.push(car); ambCar(car, w);
   }
   for (let i = cars.length - 1; i >= 0; i--) { const c = cars[i]; c.x += c.dir * c.v * dt; if ((c.dir > 0 && c.x > w.x1 + 260) || (c.dir < 0 && c.x < w.x0 - 260)) cars.splice(i, 1); }
@@ -4179,7 +4179,7 @@ function selfTest(secs = 60) {
   if (tc[0] === tc[1]) err++;
   return { err, ids, jumps, maxStep: +maxStep.toFixed(1), rightLong, spots: seen.map((s) => [...s]), where: pets.map((p) => p.kind + '@' + p.plat + ':' + Math.round(p.x) + ',' + Math.round(p.y)) };
 }
-window.__cafe = { amb: AMB, get E() { return E; }, get L() { return L; }, ART, rebuild, beat, dangle, startRoll, cat, dog, music, calm, setCalm, startWater, startStretch, bench, benchRaw, selfTest, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, bake, onDown };
+window.__cafe = { cars, get carMetres() { return CAR_LEN; }, amb: AMB, get E() { return E; }, get L() { return L; }, ART, rebuild, beat, dangle, startRoll, cat, dog, music, calm, setCalm, startWater, startStretch, bench, benchRaw, selfTest, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, bake, onDown };
 })();
 </script>
 </body>

@@ -20,17 +20,18 @@ const FRAMES = {"gullL":[10,10,150,174],"gullR":[180,10,150,174],"crab":[350,10,
 const { rand, clamp, lerp, smooth, ease, angDiff, pick, noise1, TAU } = Kit.math;
 const WHITE = [1, 1, 1];
 
-let sheet, shells = [], crabs = [], gulls = [];
+let sheet, crabSheet, shells = [], crabs = [], gulls = [];
 const surf = Kit.waves({ shore: { a: [0.28, -0.05], b: [0.66, 1.05] }, period: 11, runup: 0.075, backwash: 0.03, breakAt: 0.3,
   under(b, k) {   // things on the sand: drawn unlit (the waves shader lights + refracts them)
     b.use(sheet);
     const sd = k.L.sunDir;
     for (const s of shells) { b.shadow(s.f, s.x + sd[0] * 3, s.y + sd[1] * 3, s.w, s.h, s.r, 0.35, 1.5); b.sprite(s.f, s.x, s.y, s.w, s.h, s.r, WHITE); }
+    b.use(crabSheet);
     for (const c of crabs) {
       if (c.a < 0.01) continue;
       const wob = c.moving ? Math.sin(c.step * 22) * 0.05 : 0, sz = c.size * (0.9 + 0.1 * c.a);
-      b.shadow(sheet.f.crab, c.x + sd[0] * 6, c.y + sd[1] * 6, sz, sz * sheet.f.crab.aspect, c.body + wob, 0.45 * c.a, 2);
-      b.sprite(sheet.f.crab, c.x, c.y, sz, sz * sheet.f.crab.aspect * (1 + wob * 0.3), c.body + wob, WHITE, c.a);
+      b.shadow(crabSheet.f.crab, c.x + sd[0] * 6, c.y + sd[1] * 6, sz, sz * crabSheet.f.crab.aspect, c.body + wob, 0.45 * c.a, 2);
+      b.sprite(crabSheet.f.crab, c.x, c.y, sz, sz * crabSheet.f.crab.aspect * (1 + wob * 0.3), c.body + wob, WHITE, c.a);
     }
   } });
 
@@ -42,7 +43,7 @@ function sandSpot(k, sMin, sMax) {   // a point on the beach (shore coordinate r
 function crabGoal(c, k, fast) { [c.tx, c.ty] = sandSpot(k, -0.3, surf.edge - 0.03); c.speed = fast ? rand(230, 300) : rand(80, 150); c.state = 'scuttle'; }
 function updateCrabs(dt, t, k) {
   const want = k.L.night > 0.5 ? 5 : ['rain', 'storm', 'snow'].includes(LW.env.weather) ? 1 : 3;   // ghost crabs come out at night
-  while (crabs.length < want) { const [x, y] = sandSpot(k, -0.28, -0.04); crabs.push({ x, y, vx: 0, vy: 0, size: rand(34, 46), body: rand(TAU), a: 0, state: 'emerge', timer: rand(1, 3), step: 0, seed: rand(99) }); }
+  while (crabs.length < want) { const [x, y] = sandSpot(k, -0.28, -0.04); crabs.push({ x, y, vx: 0, vy: 0, size: rand(54, 66), body: rand(TAU), a: 0, state: 'emerge', timer: rand(1, 3), step: 0, seed: rand(99) }); }
   for (let i = crabs.length - 1; i >= 0; i--) {
     const c = crabs[i], s = surf.s(c.x, c.y), cur = k.cursor;
     if (i >= want && c.state !== 'burrow') { c.state = 'burrow'; c.timer = 0.8; }
@@ -58,7 +59,7 @@ function updateCrabs(dt, t, k) {
       const [fx, fy, d] = Kit.steer.arrive(c, c.tx, c.ty, 40);
       Kit.steer.move(c, fx, fy, dt, c.speed, 7);
       c.moving = c.speed > 15; c.step += dt * c.speed / 60;
-      if (c.moving) c.body += angDiff(c.body, Math.atan2(c.vy, c.vx) - Math.PI / 2 + (noise1(c.seed + t) > 0 ? Math.PI : 0)) * (1 - Math.exp(-dt * 6));
+      if (c.moving) c.body += angDiff(c.body, Math.atan2(c.vy, c.vx) + (noise1(c.seed + t) > 0 ? Math.PI : 0)) * (1 - Math.exp(-dt * 6));
       if (d < 6) { c.state = Math.random() < 0.06 ? 'burrow' : 'pause'; c.timer = c.state === 'burrow' ? 0.8 : rand(1.5, 6); }
     } else if (c.state === 'burrow') { c.a = Math.max(0, c.a - dt * 1.6); c.timer -= dt; if (c.a <= 0) { if (i >= want) { crabs.splice(i, 1); continue; } c.state = 'hidden'; c.timer = rand(5, 14); } }
     else if (c.state === 'hidden') { c.timer -= dt; if (c.timer <= 0) { [c.x, c.y] = sandSpot(k, -0.28, surf.edge - 0.05); c.state = 'emerge'; c.timer = 1; } }
@@ -100,9 +101,9 @@ function drawGull(b, g, k, t, shadow) {
   }
 }
 
-Kit.scene({
-  assets: { atlas: 'atlas.png' },
-  setup(k) { sheet = k.sheet(k.assets.atlas, FRAMES); },
+const beach=Kit.scene({
+  assets: { atlas: 'atlas.png', crab:'art/crab.webp' }, onReminder(){},
+  setup(k) { sheet = k.sheet(k.assets.atlas, FRAMES); crabSheet=k.sheet({crab:k.assets.crab}); },
   resize(k) {
     shells = [];
     for (let i = 0; i < 16; i++) { const [x, y] = sandSpot(k, -0.22, i < 4 ? 0.05 : -0.01), f = sheet.f[pick(['cockle', 'scallop', 'whelk', 'tellin', 'cockle'])], w = rand(16, 26); shells.push({ x, y, f, w, h: w * f.aspect, r: rand(TAU) }); }
@@ -148,6 +149,7 @@ Kit.scene({
     },
   },
 });
+window.beach={scene:beach,crabs,surf};
 </script>
 </body>
 </html>

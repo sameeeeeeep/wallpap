@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Copies the shared scene runtime that add-ons need but the app doesn't provide into every add-on folder, so each
-# zip is self-contained: scenes/kit.js, scenes/moon.js and scenes/art/shared/moon.png. Touches nothing else.
+# zip is self-contained: scenes/kit.js, scenes/moon.js and scenes/art/shared/moon.png. Also syncs the data-driven plate preset runtime when a scene config exists.
 # (The app itself provides lw.js, pet-motion.js and astronomy.js to add-ons.)
 #   addons/build.sh            then  tools/pack-scene.sh addons/<id>
 set -e
@@ -10,5 +10,8 @@ for d in */; do
   rm -f "$d/kit.js" "$d/moon.js" "$d/art/shared/moon.png"          # (replaces dev symlinks with real copies)
   cp ../scenes/kit.js ../scenes/moon.js "$d/"
   mkdir -p "$d/art/shared" && cp ../scenes/art/shared/moon.png "$d/art/shared/moon.png"
+  if [[ -f "$d/art/scene-config.json" ]]; then
+    cp ../tools/plate-scene/plate-fx.js "$d/plate-fx.js"
+  fi
   echo "kit.js, moon.js, art/shared/moon.png → addons/$d"
 done

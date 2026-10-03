@@ -47,7 +47,7 @@
 //   k.exposedAt(x, y) / k.surfaceAt(x, y) → precipitation reach / 'ground' | 'water' | null (what a raindrop hits)
 //   k.wetAcc / k.snowAcc  weather that builds up: wet soaks in ~30 s, dries over ~6 min; snow settles over ~4 min
 //   k.L          eased lighting: light, amb, zenith, horizon, sky, sunDir (shadow px per px of height), sun/moon
-//                {x,y,elev,vis}, night, day, golden, cloud, wet, snow (accumulated), fog, sat, wind, spec, caust, flash, tint
+//                {x,y,elev,vis}, night, day, golden, overcast, direct, cloud, wet, snow (accumulated), fog, sat, wind, spec, caust, flash, tint
 //   k.wind       {base, gust, dir, at(x,y)} — same field as GLSL kitWind(p); k.wind.puff(s) adds a gust
 //   k.cursor     {x, y, vx, vy, speed, inside, still (s since moved), down}
 //   k.breath     {fade, level, phase, k, still} — lw.js breath clock; LW.breathDiegetic set if def.breathe
@@ -135,7 +135,8 @@ function bodies(env) {
   const h = env.hour, d = (h - 12.3) / 12;   // canonical day: sunrise 6.3 → sunset 18.3
   const sun = { elev: Math.sin(Math.PI * (h - 6.3) / 12) * 1.05, az: d * Math.PI * 1.1 };
   const mh = (h + 12) % 24;
-  return { sun, moon: { elev: Math.sin(Math.PI * (mh - 6.3) / 12) * 0.9, az: ((mh - 12.3) / 12) * Math.PI, frac: 0.75, phase: 0.38 } };
+  const lunar = root.SunCalc?.getMoonIllumination(new Date());
+  return { sun, moon: { elev: Math.sin(Math.PI * (mh - 6.3) / 12) * 0.9, az: ((mh - 12.3) / 12) * Math.PI, frac: lunar?.fraction ?? 0.75, phase: lunar?.phase ?? 0.38 } };
 }
 function palette(env) {
   env = env || { hour: 12, weather: 'clear', intensity: 0.7, wind: 0.3 };
@@ -151,15 +152,20 @@ function palette(env) {
   const src = B.sun.elev > -0.05 ? B.sun : B.moon;
   const sl = shadowLen(src.elev);
   const cloud = clamp(wm(w.cloud, 0.28), 0, 1);
+  // A readable blue-silver sky even at new moon. Phase controls the key, not visibility of the world.
+  const overcast = smooth(.55, .88, cloud);
+  const moonKey = 0.86 + 0.14 * (B.moon.frac ?? 0.75);
+  const zenith = mix3(k.zenith, [0.125, 0.17, 0.255].map(v => v * moonKey), night);
+  const horizon = mix3(k.horizon, [0.235, 0.30, 0.405].map(v => v * moonKey), night);
   return {
     light: gray(k.light, lerp(1, 0.5, (1 - dim) * 1.6)).map((v) => v * lerp(1, dim, 0.75)),
     amb: Math.max(k.amb * dim, night * (0.29 + 0.085 * (B.moon.frac ?? 0.75))),
-    zenith: gray(k.zenith, lerp(1, 0.35, 1 - dim)).map((v) => v * lerp(0.62, 1, dim)),
-    horizon: gray(k.horizon, lerp(1, 0.4, 1 - dim)).map((v) => v * lerp(0.75, 1, dim)),
+    zenith: mix3(gray(zenith, lerp(1, 0.35, 1 - dim)).map(v => v * lerp(.62, 1, dim)), [0.30, 0.335, 0.38].map(v => v * lerp(1, .48, night)), overcast),
+    horizon: mix3(gray(horizon, lerp(1, 0.4, 1 - dim)).map(v => v * lerp(.75, 1, dim)), [0.53, 0.56, 0.60].map(v => v * lerp(1, .48, night)), overcast),
     sunDir: [Math.sin(src.az) * sl, -Math.cos(src.az) * sl],   // top-down shadow offset per px of height (y down)
     sunElev: B.sun.elev, sunAz: B.sun.az, moonElev: B.moon.elev, moonAz: B.moon.az,
     moonFrac: B.moon.frac ?? 0.75, moonPhase: B.moon.phase ?? 0.38,
-    night, day, golden,
+    night, day, golden: golden * (1 - overcast), overcast, direct: 1 - overcast,
     cloud, wet: wm(w.wet, 0), snow: wm(w.snow, 0),
     fog: wm(w.fog, 0) + night * 0.03,
     sat: wm(w.sat, 1) * lerp(1, 0.6, night),                     // colour fades under moonlight
@@ -341,7 +347,7 @@ const PRE = `#version 300 es
 precision highp float;
 uniform vec2 uRes, uView; uniform float uTime;
 uniform vec3 uLight, uZenith, uHorizon, uSkyRefl;
-uniform float uAmb, uNight, uDay, uGolden, uWet, uSnow, uCloud, uFog, uFlash, uSpec, uCaust;
+uniform float uAmb, uNight, uDay, uGolden, uWet, uSnow, uCloud, uFog, uFlash, uSpec, uCaust, uDirect;
 uniform vec2 uSunDir, uCloudDrift; uniform vec4 uWind; uniform vec4 uShade;
 out vec4 o;
 vec2 kitPx(){ return gl_FragCoord.xy / uRes * uView; }
@@ -355,18 +361,18 @@ float kitWind(vec2 p){ float s = dot(p, uWind.zw);
   return uWind.x*(0.7+0.3*sin(s*0.0045 - uTime*1.1 + 1.7*sin(p.y*0.0021 + uTime*0.37))) + uWind.y*(0.6+0.4*sin(s*0.003 - uTime*2.0)); }
 // Drifting cloud shadows on the ground (strongest at partial cover).
 float kitCloudShadow(vec2 p){
-  float strength = smoothstep(0.32, 0.62, uCloud) * (1.0 - smoothstep(0.85, 1.0, uCloud)) * uDay;
+  float strength = smoothstep(0.32, 0.62, uCloud) * (1.0 - smoothstep(0.85, 1.0, uCloud)) * uDay * uDirect;
   if (strength < 0.01) return 0.0;
   float n = fbm3(p * 0.0009 + uCloudDrift);
   return smoothstep(0.62 - uCloud * 0.3, 0.8 - uCloud * 0.3, n) * strength * 0.6;
 }
 // A tree's dappled shade over the widget side (uShade = edge x 0..1, softness, amount, direction ±1) — calms it.
 float kitShade(vec2 p){
-  if (uShade.z < 0.01) return 0.0;
+  if (uShade.z < 0.01 || uDirect < 0.01) return 0.0;
   float fx = p.x / uView.x + 0.06 * (noise(p * 0.004) - 0.5);
   float m = uShade.w < 0.0 ? smoothstep(uShade.x + uShade.y, uShade.x - uShade.y, fx) : smoothstep(uShade.x - uShade.y, uShade.x + uShade.y, fx);
   float leaves = smoothstep(0.42, 0.62, fbm3(p * 0.012 + vec2(sin(uTime * 0.4), cos(uTime * 0.33)) * 0.08 * uWind.x + uCloudDrift * 0.2));
-  return m * uShade.z * (0.75 + 0.25 * leaves) * uDay;
+  return m * uShade.z * (0.75 + 0.25 * leaves) * uDay * uDirect;
 }
 vec3 kitSat(vec3 c, float s){ float l = dot(c, vec3(0.299,0.587,0.114)); return mix(vec3(l), c, s); }
 // Tileable water caustic (after joltz0r / Dave Hoskins), as in koi.
@@ -452,7 +458,7 @@ function scene(def) {
     setU(prog, 'uLight', L.light); setU(prog, 'uZenith', L.zenith); setU(prog, 'uHorizon', L.horizon); setU(prog, 'uSkyRefl', L.sky);
     setU(prog, 'uAmb', L.amb); setU(prog, 'uNight', L.night); setU(prog, 'uDay', L.day); setU(prog, 'uGolden', L.golden);
     setU(prog, 'uWet', L.wet); setU(prog, 'uSnow', L.snow); setU(prog, 'uCloud', L.cloud); setU(prog, 'uFog', L.fog); setU(prog, 'uFlash', L.flash);
-    setU(prog, 'uSpec', L.spec); setU(prog, 'uCaust', L.caust);
+    setU(prog, 'uDirect', L.direct); setU(prog, 'uSpec', L.spec); setU(prog, 'uCaust', L.caust);
     setU(prog, 'uSunDir', L.sunDir); setU(prog, 'uShade', shadeVec()); setU(prog, 'uCloudDrift', k.wind.drift); setU(prog, 'uWind', [k.wind.base, k.wind.gust, k.wind.dir[0], k.wind.dir[1]]);
   }
   k.common = common;
@@ -554,7 +560,7 @@ function scene(def) {
     // sprite(frame, x, y, w, h, rot, rgb, alpha, ax, ay, blur) — rgb is a tint (use k.L.tint for lit sprites)
     sprite(f, x, y, w, h, rot = 0, col = k.L.tint, a = 1, ax = 0.5, ay = 0.5, blur = 0) { quadV(corners(x, y, w, h, rot, ax, ay), f.uv, col[0], col[1], col[2], a, 0, blur); },
     // A soft cast shadow of the sprite's silhouette (mip-blurred), multiply-ish via premultiplied black.
-    shadow(f, x, y, w, h, rot = 0, a = 0.35, blur = 2, ax = 0.5, ay = 0.5) { quadV(corners(x, y, w, h, rot, ax, ay), f.uv, 0.02, 0.03, 0.04, a, 4, blur); },
+    shadow(f, x, y, w, h, rot = 0, a = 0.35, blur = 2, ax = 0.5, ay = 0.5) { quadV(corners(x, y, w, h, rot, ax, ay), f.uv, 0.02, 0.03, 0.04, a * k.L.direct, 4, blur + k.L.overcast * 2); },
     // Arbitrary quad (e.g. a wing hinged at the body): P = 4 corners TL TR BR BL.
     quad4(f, P, col = k.L.tint, a = 1, mode = 0, blur = 0) { quadV(P, f ? f.uv : [0, 0, 1, 1], col[0], col[1], col[2], a, mode, blur); },
     tri(x0, y0, x1, y1, x2, y2, col, a = 1, c1, c2) {
@@ -621,7 +627,7 @@ function scene(def) {
   in vec2 vUV; in vec4 vTint; in vec2 vWorld; in float vBias; out vec4 o;
   void main(){
     vec4 t = texture(uAtlas, vUV, vBias);
-    if (uShadow > 0.0) { o = vec4(0.0, 0.006, 0.01, 1.0) * t.a * uShadowA * vTint.a; return; }
+    if (uShadow > 0.0) { o = vec4(0.0, 0.006, 0.01, 1.0) * t.a * uShadowA * vTint.a * uDirect; return; }
     float cs = max(kitCloudShadow(vWorld), kitShade(vWorld));
     vec3 c = t.rgb * vTint.rgb * uTint * (1.0 - cs * 0.85);
     c = mix(c, c * vec3(0.72, 0.8, 0.82), uWet * 0.5);                                       // wet foliage darkens…
@@ -1014,28 +1020,38 @@ function ambience(k, def) {
 // ─── Layer: sky (looking up) ──────────────────────────────────────────────────────────────────────
 // Half-res pass (every other frame): gradient + sun glow + 3 cloud layers (cirrus, cumulus, near wisps), alpha =
 // cloud cover. Full-res composite adds sharp stars, sun disc and moon under the clouds.
+// Stable per-place cloud field, independent of asset paths, time and reload order.
+function cloudSeed(id) {
+  let h = 2166136261;
+  for (const c of String(id)) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  const random = seeded(h);
+  return [random() * 47, random() * 47];
+}
 function sky(o = {}) {
   // elev: [elevation at the top of the screen, at the bottom] in radians. Looking up (default) ≈ [1.45, 0.48];
   // a horizon view (plates, landscapes) ≈ [0.55, -0.05] — clouds then flatten into the distance at the horizon.
   const opt = Object.assign({ res: 0.5, cover: null, stars: true, elev: [1.45, 0.48], moonSize: 0.034 }, o);
   const CLOUD = `
-  uniform vec2 uSunPos, uElev; uniform float uSunVis, uCover;
+  uniform vec2 uSunPos, uElev, uCloudSeed; uniform float uSunVis, uCover, uMirror;
   float lerp_n(float a, float b, float t){ return a + (b - a) * t; }
   float elevAt(vec2 uv){ return mix(uElev.x, uElev.y, uv.y); }
   vec2 plane(vec2 uv, float h){            // perspective onto a cloud plane at height h
-    float e = max(elevAt(uv), 0.035);
-    float r = min(h / tan(e), 14.0);
-    return vec2((uv.x - 0.5) * uView.x / uView.y * (0.35 + r * 0.9), r * 1.4);
+    // Bounded depth projection: h/tan(e) magnified derivatives near the skyline,
+    // crushing cloud billows into aliased horizontal dashes. Haze handles the far deck.
+    float depth = pow(clamp((uElev.x - elevAt(uv)) / max(uElev.x, .15), 0.0, 1.0), .85);
+    vec2 q = vec2((uv.x - .5) * uView.x / uView.y * (1.8 + depth), depth * 2.4);
+    return q * h + uCloudSeed;
   }
   float dens(vec2 q, float cover){
     vec2 w = vec2(fbm3(q * 0.9 + uCloudDrift * 0.6), fbm3(q * 0.9 + 5.2 - uCloudDrift * 0.4));
-    float n = fbm(q * 1.6 + w * 0.8 + uCloudDrift * 2.0) - (0.8 - cover * 0.5);
+    float n = fbm(q * 1.15 + w * 0.8 + uCloudDrift * 2.0) - (0.67 - cover * 0.25);
     float det = fbm(q * 6.5 + w * 1.6 + uCloudDrift * 3.2);                    // billows: crisp cauliflower edges
-    float v = n + (det - 0.5) * 0.24;
-    return smoothstep(0.0, 0.07, v) * (0.35 + 0.65 * smoothstep(0.0, 0.32, v));   // edge, then thickness
+    float v = n + (det - 0.5) * 0.10;
+    return smoothstep(0.0, max(0.09, fwidth(v) * 1.5), v) * (0.45 + 0.55 * smoothstep(0.0, 0.24, v));   // edge, then thickness
   }
   void main(){
     vec2 px = kitPx(), uv = px / uView;
+    if (uMirror > .5) uv.x = 1.0 - uv.x;
     float lowEl = max(uElev.y, 0.0), el = elevAt(uv);                            // gradient spans the visible sky
     float hz = pow(clamp((uElev.x - el) / max(uElev.x - lowEl, 1e-3), 0.0, 1.0), 1.7);
     vec3 col = mix(uZenith, uHorizon, hz);
@@ -1048,7 +1064,7 @@ function sky(o = {}) {
     vec2 sdir = normalize(-sd + vec2(1e-4)) * 0.07;
     float cover = uCover;
     // cirrus: high, thin, combed by the wind
-    vec2 qc = plane(uv, 2.4); vec2 qw = vec2(qc.x * 0.5 + qc.y * 0.15, qc.y * 2.6);
+    vec2 qc = plane(uv, 2.4); vec2 qw = qc * .65;
     float ci = smoothstep(0.55, 0.95, fbm(qw * 1.1 + uCloudDrift * vec2(1.6, 0.3))) * smoothstep(0.1, 0.5, cover + 0.2) * 0.55 * (1.0 - far);
     vec3 ciC = mix(uZenith * 0.6 + uLight * 0.55 * uAmb, uLight * 1.15, 0.4 + 0.6 * exp(-ds * 3.0)) + uHorizon * uGolden * 0.4;
     col = mix(col, ciC, ci * (1.0 - uNight * 0.6));
@@ -1066,7 +1082,7 @@ function sky(o = {}) {
       vec3 cc = mix(shade, litC, lit * (1.0 - uCloud * 0.55)) + uLight * edge * 1.3;
       float lump = fbm3(q * 13.0 + uCloudDrift * 3.5), thick = smoothstep(0.4, 1.0, d);
       cc *= mix(1.0, 0.66 + 0.45 * lump, thick * (1.0 - lit * 0.45));            // thick undersides go grey and lumpy
-      cc *= lerp_n(1.0, 0.42, uNight);
+      cc *= lerp_n(1.0, 0.60, uNight);
       a = smoothstep(0.0, 0.55, d);
       col = mix(col, cc, a);
     }
@@ -1134,7 +1150,7 @@ function sky(o = {}) {
     }
     o = vec4(col, 1.0);
   }`;
-  let progC, progS, rt = null, frameN = 0;
+  let progC, progS, rt = null, frameN = 0, seed;
   const L = { kind: 'sky', opt };
   function screenPos(k, elev, az) {   // dome → screen (facing south; mirrored with the layout); override with opt.place
     if (opt.place) return opt.place(k, elev, az);
@@ -1154,15 +1170,30 @@ function sky(o = {}) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     moonKey = key; return moonTex;
   }
-  L.init = (k) => { progC = k.program(CLOUD); progS = k.program(COMP); };
+  L.init = (k) => { seed = cloudSeed(opt.seed ?? k.def.id ?? root.location?.pathname.split('/').filter(Boolean).slice(-2,-1)[0] ?? 'sky'); L.seed = seed; progC = k.program(CLOUD); progS = k.program(COMP); };
   L.resize = (k) => { k.free(rt); rt = k.target(k.sceneRT.w * opt.res, k.sceneRT.h * opt.res, true); frameN = 0; };
   L.draw = (k) => {
     const Lt = k.L;
     const sun = screenPos(k, Lt.sunElev, Lt.sunAz), moon = screenPos(k, Lt.moonElev, Lt.moonAz);
-    const sunVis = smooth(-0.08, 0.06, Lt.sunElev), moonVis = smooth(-0.04, 0.08, Lt.moonElev) * (root.LW.moonVisibility ? root.LW.moonVisibility() : 1);
+    // These scenes compose a sky, rather than a fixed astronomical camera. Fit an above-horizon
+    // moon into the exposed sky; never pin it over a ridge/roof, or invent a risen moon in live mode.
+    const r = k.H * opt.moonSize, plate = k.plateLayer;
+    moon[1] = clamp(moon[1], r * 1.6, k.H - r * 1.6);
+    if (plate?.masks.sky) {
+      let best = null, cost = Infinity;
+      for (const x of [moon[0], k.clearX(.65), k.clearX(.4), k.clearX(.2)]) {
+        for (let y = r * 1.6; y < k.H * .65; y += Math.max(5, r * .3)) {
+          if (![[-1,-1],[0,-1],[1,-1],[-1,0],[0,0],[1,0],[-1,1],[0,1],[1,1]].every(([dx,dy]) => plate.maskAt('sky', x + dx*r*1.35, y + dy*r*1.35) > .98)) continue;
+          const d = Math.abs(y-moon[1]) + Math.abs(x-moon[0])*.4;
+          if (d < cost) { best=[x,y]; cost=d; }
+        }
+      }
+      if (best) { moon[0]=best[0]; moon[1]=best[1]; }
+    }
+    const sunVis = smooth(-0.08, 0.06, Lt.sunElev) * Lt.direct, moonVis = smooth(-0.04, 0.08, Lt.moonElev) * (root.LW.moonVisibility ? root.LW.moonVisibility() : 1);
     L.sun = { x: sun[0], y: sun[1], vis: sunVis }; L.moon = { x: moon[0], y: moon[1], vis: moonVis };
-    const cover = opt.cover ?? Lt.cloud;
-    if (frameN++ % 2 === 0) k.pass(progC, { uSunPos: sun, uSunVis: sunVis, uCover: cover, uElev: opt.elev }, rt);
+    const cover = lerp(opt.cover ?? Lt.cloud, Lt.cloud, Lt.overcast);
+    if (frameN++ % 2 === 0) k.pass(progC, { uSunPos: sun, uSunVis: sunVis, uCover: cover, uElev: opt.elev, uCloudSeed: seed, uMirror: k.layout.mirror ? 1 : 0 }, rt);
     const mR = k.H * opt.moonSize, mt = moonVis > 0.01 ? moonTexture(k, mR, Lt.moonElev) : null;
     k.pass(progS, { uSky: rt, uMoonTex: { tex: mt || rt.tex }, uHasMoonTex: mt ? 1 : 0, uMoonR: mR, uSunPos: sun, uMoonPos: moon, uSunVis: sunVis, uMoonVis: moonVis, uMoonFrac: Lt.moonFrac, uMoonPhase: Lt.moonPhase, uStars: opt.stars ? smooth(0.45, 0.95, Lt.night) : 0 }, k.sceneRT);
   };
@@ -1576,7 +1607,7 @@ function plate(o = {}) {
     // Preserve painted practical lights while retaining surface detail on dark masters.
     vec3 moonlit = day * vec3(0.32, 0.39, 0.51) * uMoonExposure + vec3(0.012, 0.018, 0.028);
     vec3 night = uHas.y > 0.5 ? max(texture(uPNight, duv).rgb, moonlit) : moonlit;
-    vec3 over = uHas.z > 0.5 ? texture(uPOver, duv).rgb : mix(vec3(dot(day, vec3(0.3, 0.59, 0.11))), day, 0.55) * 0.78;
+    vec3 over = uHas.z > 0.5 ? texture(uPOver, duv).rgb : (mix(vec3(dot(day, vec3(0.3, 0.59, 0.11))), day, 0.4) * 0.57 + vec3(.105, .115, .125));
     vec3 col = day * uW.x + dusk * uW.y + night * uW.z + over * uW.w;
     // night lights: explicit emissive mask, or what the night plate has that daylight doesn't
     vec3 em = uHas.w > 0.5 ? texture(uEmM, uv).rgb : max(night - day * 0.5 - 0.06, 0.0) * 1.4 * uHas.y;
@@ -1591,7 +1622,10 @@ function plate(o = {}) {
     // weather on exposed ground: wet darkens + sheen, snow settles on the lit, up-facing bits first
     float ground = expM * (1.0 - waterM) * (1.0 - skyM);
     col = mix(col, col * vec3(0.72, 0.74, 0.78) + uSkyRefl * 0.05, uWet * ground * 0.7);
-    float sheen = pow(max(0.0, noise(px * vec2(0.008, 0.16)) - 0.28), 2.0);
+    // Broad irregular wet patches. The old 20:1 noise stretch made a bright scanline every ~6 CSS px.
+    vec2 wetP = px / uView.y * vec2(11.0, 16.0);
+    wetP += vec2(fbm3(wetP * .7), fbm3(wetP * .7 + 8.3)) * 1.5;
+    float sheen = pow(max(0.0, fbm3(wetP) - 0.35), 2.0);
     col += mix(vec3(0.22,0.27,0.32),vec3(0.10,0.15,0.23),uNight) * sheen * uWet * ground;
     float lum = dot(col, vec3(0.3, 0.59, 0.11));
     col = mix(col, vec3(0.9, 0.93, 0.98) * (uAmb * 0.9 + 0.1), uSnow * ground * smoothstep(0.08, 0.5, lum + uSnow * 0.25 + (fbm3(px * 0.02) - 0.5) * 0.3));
@@ -1830,7 +1864,7 @@ function light(o = {}) {
       k.pass(dP, { uSrc: k.sceneRT, uTx: [1 / k.sceneRT.w, 1 / k.sceneRT.h], uThresh: opt.threshold }, g1);
       k.pass(dP, { uSrc: g1, uTx: [1 / g1.w, 1 / g1.h], uThresh: 0 }, g2);
     }
-    k.pass(gP, { uScene: k.sceneRT, uGlow: g2 || k.sceneRT, uGlowK: opt.glow, uVig: opt.vignette, uGrain: opt.grain, uFogK: opt.fog, uSatK: k.L.sat, uCalm: opt.calmDim * k.breath.fade, uExpo: opt.exposure, uContrast: opt.contrast, uWarm: opt.warmth }, null);
+    k.pass(gP, { uScene: k.sceneRT, uGlow: g2 || k.sceneRT, uGlowK: opt.glow, uVig: opt.vignette, uGrain: opt.grain, uFogK: opt.fog, uSatK: k.L.sat, uCalm: opt.calmDim * k.breath.fade, uExpo: opt.exposure, uContrast: lerp(opt.contrast, Math.min(.86, opt.contrast), k.L.overcast), uWarm: opt.warmth }, null);
   };
   return L;
 }
@@ -1854,7 +1888,7 @@ function bench(seconds = 5) {
 
 const Kit = {
   scene, sky, water, waves, meadow, plate, particles, sprites, life, light,
-  palette, steer, rope, spring, path, paint, bench, profile, canvas, slice,
+  palette, cloudSeed, steer, rope, spring, path, paint, bench, profile, canvas, slice,
   math: { TAU, rand, clamp, lerp, smooth, ease, angDiff, pick, mix3, noise1, noise2, seeded },
   CALM_X, PRE,
 };

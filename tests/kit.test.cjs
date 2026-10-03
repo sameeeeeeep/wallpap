@@ -60,3 +60,31 @@ test('moon phase modulates night exposure without losing storm shadow detail',()
  assert.ok(full.amb>dark.amb,'moon phase affects illumination');
  assert.ok(dark.horizon[2]>dark.zenith[2],'graded night sky');
 });
+test('night sky stays graded and legible across phases and bad weather',()=>{
+ for(const fraction of [0,.5,1])for(const weather of ['clear','rain','storm']){
+  const p=Kit.palette({hour:23,weather,intensity:1,astronomy:{sun:{altitude:-1,azimuth:0},moon:{altitude:.7,azimuth:0,fraction,phase:.75}}});
+  const l=c=>c[0]*.2126+c[1]*.7152+c[2]*.0722;
+  assert.ok(l(p.zenith)>.11,`${weather}: readable zenith`);
+  assert.ok(l(p.horizon)-l(p.zenith)>.07,`${weather}: horizon glow`);
+ }
+});
+test('pinned-hour sky still uses the real lunar phase without a location',()=>{
+ window.SunCalc={getMoonIllumination:()=>({fraction:.21,phase:.84})};
+ const p=Kit.palette({hour:23,weather:'clear'});
+ assert.equal(p.moonFrac,.21);assert.equal(p.moonPhase,.84);
+ delete window.SunCalc;
+});
+test('rain lighting removes the direct sun and blue sky, clear restores them',()=>{
+ const clear=Kit.palette({hour:15,weather:'clear'}),rain=Kit.palette({hour:15,weather:'rain',intensity:.7});
+ assert.equal(clear.direct,1);assert.equal(rain.direct,0);
+ assert.equal(rain.overcast,1);assert.equal(rain.golden,0);
+ assert.ok(rain.zenith[2]-rain.zenith[0]<.1,'neutral storm ceiling');
+ assert.ok(clear.zenith[2]-clear.zenith[0]>.4,'clear blue restored');
+});
+test('cloud layouts are stable for a scene and distinct across scene ids',()=>{
+ const ids=['airport','harbour','iceland','kyoto','hillside-valley','marine-drive','taj-mahal','sky-kites'];
+ const seeds=ids.map(id=>Array.from(Kit.cloudSeed(id)));
+ assert.equal(new Set(seeds.map(JSON.stringify)).size,ids.length);
+ ids.forEach((id,i)=>assert.deepEqual(Array.from(Kit.cloudSeed(id)),seeds[i]));
+ for(const seed of seeds)assert.ok(seed.every(n=>Number.isFinite(n)&&n>=0&&n<47));
+});

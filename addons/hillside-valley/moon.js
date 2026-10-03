@@ -5,7 +5,7 @@
      LW.moonCanvas(px, opts)        → a cached square canvas of the moon disk (for WebGL scenes: upload
                                       it as a texture only when LW.moonKey(opts) changes, never per frame)
    opts: { phase 0..1 (0 new · .25 first quarter · .5 full · .75 last quarter; default = real, from
-           LW.env.astronomy, else full), tilt (radians, bright-limb rotation), alt (radians above the
+           LW.env.astronomy, else SunCalc for today, else full), tilt (radians, bright-limb rotation), alt (radians above the
            horizon, warms/dims it when low), glow 0..1 (halo strength, default .35), haze 0..1 (thin cloud
            softening), alpha 0..1 }
    Phase shading is computed per pixel once per (size, phase step, tint) and cached. */
@@ -19,7 +19,8 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const realPhase = () => {
     const m = LW.env && LW.env.astronomy && LW.env.astronomy.moon;
-    return m && Number.isFinite(m.phase) ? m.phase : 0.5;
+    return m && Number.isFinite(m.phase) ? m.phase :
+      (window.SunCalc?.getMoonIllumination(new Date()).phase ?? 0.5);
   };
   // Low moon: warmer and a touch dimmer (atmospheric extinction), like the real thing.
   const tintFor = (alt) => {

@@ -825,3 +825,10 @@ Grass 4.578→4.289). These are serial isolated-WKWebView batch measurements; sm
 differences are within normal timing noise, not a claim about installed-app FPS. The
 earlier café mask regression was corrected by baking/caching masks, then remeasured.
 No push, release, app rebuild/install/relaunch, host Swift edit or sibling-tree edit.
+
+## 2026-10-04 — audit-fixes: shared night sky
+- Cause: horizon camera placement projected the risen moon above the viewport; pinned previews used inconsistent hard-coded phases (Kit .38, moon texture .5). Low zenith values made a dark slab after grading; independent star twinkle already existed and is preserved.
+- Shared fix: blue-silver night palette with phase-sensitive exposure and horizon glow; fit the moon into fully exposed sky samples while retaining live astronomical rise/set visibility. Both Kit and moon.js use SunCalc's current-date phase without a location. Propagated with the copy-only `zsh addons/build.sh`; no app build.
+- Looked at audit source sheets (read-only), baseline `shots/audit-fix/before/<id>.jpg`, and `shots/audit-fix/night/<id>.jpg` for all seven horizon add-ons. Night display luminance .187–.245, above G1 .12. Airport additionally inspected mirrored and 3440x1440. Existing cloud dashes remain for the separate cloud fix.
+- Verification tooling: `python3 tools/audit-server.py` (:5214, this worktree only), `python3 tools/audit-addons.py <stage> [ids...] [--cases day,night,rain,left,wide]`; three frames/case, disk guard at 3 GiB, JPEG sheets, deletes raw PNGs. Unit tests include night gradients across weather/phases and real-phase fallback.
+- Three scene baselines are blocked by missing tracked-reference art: beach/art/crab.webp, butterfly-garden/art/garden.webp, sky-kites/art/{diamond,delta,cloud}.webp. Permission to recover just these assets read-only from the other worktree was requested; no access made. Full ten-scene acceptance stays pending. No image generation or prompts.

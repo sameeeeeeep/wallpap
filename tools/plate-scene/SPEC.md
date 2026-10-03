@@ -181,3 +181,21 @@ behaviours, so only art is new.
 7. The pet engine (`scenes/pets.js`, in progress) is the reference behaviour for ground actors: directional
    walks/jumps, distance-planted gait, drawn-heading paths, tuck-and-cut poses. The template's walkers and pets
    presets should use it.
+
+## Shared sky/weather requirements (owner audit, 2026-10-04)
+S5 must use the shared Kit lighting and sky implementation. Night has a blue-silver
+zenith, a gradual horizon glow, independently twinkling stars and the shared lunar
+texture with the actual date's phase (also in pinned-hour previews). Compose a risen
+moon inside the exposed sky mask; live astronomy still controls rise/set visibility.
+Rain must override any clear-weather cloud setting, suppress direct sun and cast
+shadows, soften contrast and restore daylight gradually after clearing.
+Cloud fields are seeded by scene id, with broad irregular billows and soft depth/haze
+at the horizon; no identical layouts, hard horizon strips or thin dash artifacts.
+
+Additional G1/G5/G6 checks for shared changes: night mean Rec.709 display luminance
+>= 0.12 in every add-on; inspect day/night/rain frame sequences at 1600x1000 plus
+mirrored and 3440x1440 skies. Verify lunar phase against the astronomy value, a risen
+moon fits fully within sky pixels, and separate ids produce different cloud fields.
+Rain start/end sequences must show a continuous light transition and no solar disk
+or hard cast shadows under full overcast; wet-ground crops must have no repeating
+horizontal bands. Keep JPEG contact sheets and remove raw capture PNGs.

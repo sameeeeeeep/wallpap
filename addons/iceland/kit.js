@@ -135,7 +135,8 @@ function bodies(env) {
   const h = env.hour, d = (h - 12.3) / 12;   // canonical day: sunrise 6.3 → sunset 18.3
   const sun = { elev: Math.sin(Math.PI * (h - 6.3) / 12) * 1.05, az: d * Math.PI * 1.1 };
   const mh = (h + 12) % 24;
-  return { sun, moon: { elev: Math.sin(Math.PI * (mh - 6.3) / 12) * 0.9, az: ((mh - 12.3) / 12) * Math.PI, frac: 0.75, phase: 0.38 } };
+  const lunar = root.SunCalc?.getMoonIllumination(new Date());
+  return { sun, moon: { elev: Math.sin(Math.PI * (mh - 6.3) / 12) * 0.9, az: ((mh - 12.3) / 12) * Math.PI, frac: lunar?.fraction ?? 0.75, phase: lunar?.phase ?? 0.38 } };
 }
 function palette(env) {
   env = env || { hour: 12, weather: 'clear', intensity: 0.7, wind: 0.3 };
@@ -151,11 +152,15 @@ function palette(env) {
   const src = B.sun.elev > -0.05 ? B.sun : B.moon;
   const sl = shadowLen(src.elev);
   const cloud = clamp(wm(w.cloud, 0.28), 0, 1);
+  // A readable blue-silver sky even at new moon. Phase controls the key, not visibility of the world.
+  const moonKey = 0.86 + 0.14 * (B.moon.frac ?? 0.75);
+  const zenith = mix3(k.zenith, [0.125, 0.17, 0.255].map(v => v * moonKey), night);
+  const horizon = mix3(k.horizon, [0.235, 0.30, 0.405].map(v => v * moonKey), night);
   return {
     light: gray(k.light, lerp(1, 0.5, (1 - dim) * 1.6)).map((v) => v * lerp(1, dim, 0.75)),
     amb: Math.max(k.amb * dim, night * (0.29 + 0.085 * (B.moon.frac ?? 0.75))),
-    zenith: gray(k.zenith, lerp(1, 0.35, 1 - dim)).map((v) => v * lerp(0.62, 1, dim)),
-    horizon: gray(k.horizon, lerp(1, 0.4, 1 - dim)).map((v) => v * lerp(0.75, 1, dim)),
+    zenith: gray(zenith, lerp(1, 0.35, 1 - dim)).map((v) => v * lerp(0.62, 1, dim)),
+    horizon: gray(horizon, lerp(1, 0.4, 1 - dim)).map((v) => v * lerp(0.75, 1, dim)),
     sunDir: [Math.sin(src.az) * sl, -Math.cos(src.az) * sl],   // top-down shadow offset per px of height (y down)
     sunElev: B.sun.elev, sunAz: B.sun.az, moonElev: B.moon.elev, moonAz: B.moon.az,
     moonFrac: B.moon.frac ?? 0.75, moonPhase: B.moon.phase ?? 0.38,
@@ -1159,6 +1164,21 @@ function sky(o = {}) {
   L.draw = (k) => {
     const Lt = k.L;
     const sun = screenPos(k, Lt.sunElev, Lt.sunAz), moon = screenPos(k, Lt.moonElev, Lt.moonAz);
+    // These scenes compose a sky, rather than a fixed astronomical camera. Fit an above-horizon
+    // moon into the exposed sky; never pin it over a ridge/roof, or invent a risen moon in live mode.
+    const r = k.H * opt.moonSize, plate = k.plateLayer;
+    moon[1] = clamp(moon[1], r * 1.6, k.H - r * 1.6);
+    if (plate?.masks.sky) {
+      let best = null, cost = Infinity;
+      for (const x of [moon[0], k.clearX(.65), k.clearX(.4), k.clearX(.2)]) {
+        for (let y = r * 1.6; y < k.H * .65; y += Math.max(5, r * .3)) {
+          if (![[-1,-1],[0,-1],[1,-1],[-1,0],[0,0],[1,0],[-1,1],[0,1],[1,1]].every(([dx,dy]) => plate.maskAt('sky', x + dx*r*1.35, y + dy*r*1.35) > .98)) continue;
+          const d = Math.abs(y-moon[1]) + Math.abs(x-moon[0])*.4;
+          if (d < cost) { best=[x,y]; cost=d; }
+        }
+      }
+      if (best) { moon[0]=best[0]; moon[1]=best[1]; }
+    }
     const sunVis = smooth(-0.08, 0.06, Lt.sunElev), moonVis = smooth(-0.04, 0.08, Lt.moonElev) * (root.LW.moonVisibility ? root.LW.moonVisibility() : 1);
     L.sun = { x: sun[0], y: sun[1], vis: sunVis }; L.moon = { x: moon[0], y: moon[1], vis: moonVis };
     const cover = opt.cover ?? Lt.cloud;

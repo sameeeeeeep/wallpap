@@ -2,6 +2,15 @@
 
 Status: [ ] todo · [~] in progress (agent) · [x] done · owner in brackets
 
+## Priority verification pass — 2026-10-03
+- [~] P0 Train: inspecting window-mask coverage, panorama style and trackside grounding. Browser verification blocked in the current session (localhost bind denied by sandbox; Safari access denied by computer-use tool). No scene changes or completion claim yet.
+- [ ] P0 Night Drive: entry/exit robustness, painted biome backdrops, performance and ultrawide/left-layout checks
+- [ ] P0 Menu: every scene's controls, light/dark, overflow
+- [ ] P1 Cats + Grass: finish pets/toggles, moon/weather/layout and mountain band
+- [ ] P1 Rooftop + Ramen: verify/fix day/night plate alignment
+
+Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; inspect browser screenshots before advancing and commit each finished item locally. No push, release or running-app replacement.
+
 ## App / menu (host — Claude)
 - [x] Energy modes: always / pause when away (30s–30m, 2m recommended) / pause on battery; crisp pause (no blur), click resumes; never pause under our own panel/menu
 - [x] Panel dark mode (follows system)

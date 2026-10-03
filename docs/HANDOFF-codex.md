@@ -19,6 +19,12 @@ text bubbles). Latest release: **0.12.1** (notarized). Everything below is commi
 - Dev server: `python3 devserver.py 5210` (serves `scenes/`), open `http://localhost:5210/<scene>.html?virtual=1&muted=1`
   — with `virtual=1` step time via `LW.advance(seconds)` and save shots via `await LW.shot('name.png', scale, [x,y,w,h])`
   (writes to `shots/`). Look at every shot before calling something done.
+- **Visual verification (use this — no browser needed):** `tools/wkshot` renders a scene in WebKit (the engine the app
+  uses) and saves a PNG + prints JS errors: `./tools/wkshot <scene|url> <out.png> [w h stepsSeconds "js run before"]`,
+  e.g. `./tools/wkshot "http://localhost:5210/train.html?virtual=1&muted=1&hour=12" shots/t.png 1600 1000 4 "__lw('settings',{skin:'swiss'})"`
+  (rebuild with `swiftc -O -o tools/wkshot tools/wkshot.swift -framework AppKit -framework WebKit`). Needs the dev
+  server (`python3 devserver.py 5210`). Output is 2× (retina) — downscale/crop with PIL to inspect. Open the PNGs and
+  look at them before calling anything done.
 - Tests: `node --test tests/*.cjs` (32 passing). Swift: `swiftc -typecheck -target arm64-apple-macos13 host/*.swift`.
 - Build app: `./build.sh` (ad-hoc dev build into `wallpap.app`), `./build.sh --run`, release `./build.sh --dmg`
   (Developer ID + hardened runtime + notarize + staple via the existing `relay-notary` keychain profile — no setup

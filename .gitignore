@@ -8,3 +8,4 @@ site/scenes/
 __pycache__/
 art-src/transitions/cut/
 art-src/transitions/*.log
+.codex-runs/

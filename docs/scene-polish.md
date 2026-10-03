@@ -398,3 +398,23 @@ indian-bridge,orient-uw-rain2,orient-uw-calm-music,indian-uw-rain,swiss-uw-snow}
 `node --test tests/` passes.
 Known: the panorama's top band boundary can shear slightly under Fuji/hill bases at the far band's slow speed.
 The cup/teapot handle holes keep a few grey pixels. Each new skin adds ~9-10 MB of PNG.
+# 2026-10-03 — priority pass intake (verification blocked)
+
+Read AGENTS.md, docs/HANDOFF-codex.md and scene briefs. All 32 existing Node tests pass.
+No scene/art changes, generated images, new browser screenshots or finished-item commits in this pass yet.
+The existing `.gitignore` modification was left untouched.
+
+Train inspection: current mask alpha bounds in 1600×1000 stage coordinates are
+Indian [475.16,316.53,952.33,555.44], Shinkansen [93.82,230.85,977.55,523.19],
+Swiss [339.97,70.56,1168.22,476.81], Orient [491.30,225.81,986.63,498.99].
+These differ from the declared glass rectangles. The outside renderer adds a 10-unit margin,
+so inspect coverage during carriage rocking before attributing the blue rim solely to those bounds.
+`winClip` still uses the main glass rectangle, excluding Shinkansen's second opening for clipped effects.
+Trackside images already have tight nonzero-alpha bounds; inspect terrain placement and faint alpha fringes
+before assuming transparent padding causes the floating trees.
+
+Verification blocker: `python3 devserver.py 5210` failed at socket bind with PermissionError/Operation not permitted;
+this session cannot request elevated execution. Browser inventory returned no controlled browsers and
+`cua.getApp("com.apple.Safari")` returned “Computer Use was not approved to use Safari”.
+Resume with an externally started dev server and an approved browser connection. No later priority item
+has been marked complete or substituted for the required browser verification.

@@ -73,6 +73,10 @@ extension App {
     }
 
     func installRuntime(into dir: URL) {
+        let play = dir.appendingPathComponent("play")
+        try? FileManager.default.removeItem(at: play)
+        try? FileManager.default.copyItem(at: scenesDir.appendingPathComponent("play"), to: play)
+
         for f in sharedRuntime {
             let src = scenesDir.appendingPathComponent(f), dst = dir.appendingPathComponent(f)
             guard let s = try? Data(contentsOf: src) else { continue }   // older bundles may lack newer files

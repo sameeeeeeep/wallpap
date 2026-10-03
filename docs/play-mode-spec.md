@@ -154,3 +154,9 @@ The product direction: the wallpaper becomes a place you come back to. It's a ca
   - the analytics batch having no identifiers;
   - `check-card.js` gates.
 - Host: build with `./build.sh` in this worktree only, and run the built app with `LIVEWALL_SCENES` pointed at this worktree's `scenes/` **only for automated checks that don't take over the owner's screen**. The owner's live wallpaper must not be touched. Otherwise leave host checks for the owner's test card.
+
+## Implementation notes — 2026-10-04
+- Full-screen policy: disabled with tooltip when a foreign layer-zero window covers the target display. This public-API check is deliberately conservative (borderless full-display games are also disabled); Play never switches the owner's Space programmatically.
+- Native presentation is per mouse display; auto-cycle waits while Play is open. Screen/Space/scene changes close and restore Play before rebuilding windows.
+- Local puzzle progress uses the main page's persistent WebKit localStorage. The sandboxed opaque-origin cards cannot access it, cookies, files, or any native message handler; main-frame checks apply to every host capability.
+- The shared pets stage API accepts `setScreenOccluder(id, CSSRect)`, maps it through each scene canvas transform (including mirrored layouts), excludes new paths/jumps/resting positions, and clips pets already behind the panel. No per-scene patch is required.

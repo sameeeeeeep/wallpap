@@ -28,6 +28,7 @@
 (() => {
 'use strict';
 const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v)), lerp=(a,b,t)=>a+(b-a)*t;
+const screenOccluders=new Map();
 const rand=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.floor(Math.random()*a.length)];
 const enabled=()=>![false,0,'0','false'].includes(LW.settings.pets);
 const ROSTER=Object.freeze(Object.fromEntries([
@@ -130,7 +131,9 @@ function headings(a,b,slope=.55,directional=true){
 const length=pts=>pts.slice(1).reduce((sum,p,i)=>sum+Math.hypot(p[0]-pts[i][0],p[1]-pts[i][1]),0);
 function overlap(a,b,gap=8){return a[0]<b[2]+gap&&a[2]+gap>b[0]&&a[1]<b[3]+gap&&a[3]+gap>b[1]}
 function create({scene,roster,stage}){
- let S=null,T=0,was=enabled(),clock=0;
+ let S=null,T=0,was=enabled(),clock=0,screenMap=null;
+ function panelBoxes(){if(!screenMap)return [];const {m,rect,sx,sy}=screenMap;return [...screenOccluders.values()].map(r=>{const a=m.transformPoint({x:(r[0]-rect.x)*sx,y:(r[1]-rect.y)*sy}),b=m.transformPoint({x:(r[0]+r[2]-rect.x)*sx,y:(r[1]+r[3]-rect.y)*sy});return [Math.min(a.x,b.x),Math.min(a.y,b.y),Math.max(a.x,b.x),Math.max(a.y,b.y)];});}
+ function panelClear(b){return !panelBoxes().some(r=>overlap(b,r,10));}
  const wanted=p=>!(LW.virtual&&p.mission==='qa-hidden')&&enabled()&&p.id<(S.count??items.length);
  const items=roster.map((r,i)=>{
   const opt=typeof r==='string'?{id:r}:r,spec=ROSTER[opt.id]||(scene==='grass'&&PANDAS[opt.id]);
@@ -158,8 +161,9 @@ function create({scene,roster,stage}){
    (!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q)))&&
    (!reserve||!o.goal||!overlap(b,box(o,o.goal.x,o.goal.y,0,size(o,o.goal.y,o.goal.surf))))));
  }
- function flightClear(p,j){return flightBoxes(p,j).every(b=>items.every(o=>o===p||o.away||(!overlap(b,box(o))&&(!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q))))));}
+ function flightClear(p,j){return flightBoxes(p,j).every(b=>panelClear(b)&&items.every(o=>o===p||o.away||(!overlap(b,box(o))&&(!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q))))));}
  function allowed(p,x,y,surf=p.surf,exit=false){
+  if(!panelClear(box(p,x,y))&&panelClear(box(p)))return false;
   if(surf!=='floor'){const l=ledge(surf);return !!l&&x>=l.x0-1e-5&&x<=l.x1+1e-5&&Math.abs(y-l.y)<1;}
   if(exit&&!directions(p))return true;
   if(exit){const e=(S.exits||[]).find(e=>Math.abs(y-e.y)<1);if(e)return true;}
@@ -167,7 +171,7 @@ function create({scene,roster,stage}){
  }
  function clearRest(p,x,y){
   const [a,b]=S.clear||[-Infinity,Infinity];
-  return x>=a+p.spec.height*p.k*.6&&x<=b-p.spec.height*p.k*.6&&!(S.avoid||[]).some(r=>overlap(box(p,x,y),[r[0],r[1],r[0]+r[2],r[1]+r[3]],0));
+  return panelClear(box(p,x,y))&&x>=a+p.spec.height*p.k*.6&&x<=b-p.spec.height*p.k*.6&&!(S.avoid||[]).some(r=>overlap(box(p,x,y),[r[0],r[1],r[0]+r[2],r[1]+r[3]],0));
  }
  function directions(p){return p.asset.cyc.has('walk-f')&&p.asset.cyc.has('walk-b')}
  function validPath(p,pts,exit=false,avoidPets=true){
@@ -185,6 +189,7 @@ function create({scene,roster,stage}){
   if(!best&&p.surf==='floor'&&directions(p)){
    // Route around pets/props using visibility candidates; every edge still uses drawn headings.
    const bounds=S.bounds||[0,0,1600,1000],ys=[bounds[1]+10,bounds[3]-10];
+   for(const r of panelBoxes()){ys.push(r[1]-20,r[3]+p.spec.height*size(p)*1.4+20);}
    for(const o of items)if(o!==p&&!o.away){const b=box(o),h=p.spec.height*size(p);ys.push(b[1]-18,b[3]+h*1.3+18)}
    for(const yy of ys)for(const xx of [a[0],b[0],(a[0]+b[0])/2]){
     const m=[xx,clamp(yy,bounds[1],bounds[3])];
@@ -410,8 +415,10 @@ function create({scene,roster,stage}){
   g.translate(f.x,f.y);g.scale(f.dir*f.sx,f.sy);g.drawImage(f.image,f.ox,f.oy,f.w,f.h);g.restore();
  }
  function draw(g,extra=[]){
+  const rect=g.canvas?.getBoundingClientRect?.();if(rect?.width&&rect.height)screenMap={m:g.getTransform().inverse(),rect,sx:g.canvas.width/rect.width,sy:g.canvas.height/rect.height};
+  if(screenOccluders.size)g.save();if(screenOccluders.size){g.beginPath();g.rect(-100000,-100000,200000,200000);for(const r of panelBoxes())g.rect(r[0],r[1],r[2]-r[0],r[3]-r[1]);g.clip("evenodd");}
   const entries=[...items.filter(p=>!p.away).map(p=>({depth:depth(p),draw:()=>drawOne(g,p)})),...(S.occluders||[]),...extra];
-  entries.sort((a,b)=>a.depth-b.depth);for(const e of entries)e.draw(g);
+  entries.sort((a,b)=>a.depth-b.depth);for(const e of entries)e.draw(g);if(screenOccluders.size)g.restore();
  }
  function click(x,y){const p=items.filter(p=>!p.away&&inside([x,y],[[box(p)[0],box(p)[1]],[box(p)[2],box(p)[1]],[box(p)[2],box(p)[3]],[box(p)[0],box(p)[3]]])).sort((a,b)=>depth(b)-depth(a))[0];
   if(p){p.happyT=3;p.awake=0;if(!p.j){p.goal=null;state(p,'groom',3)}return p;}return null;
@@ -419,7 +426,7 @@ function create({scene,roster,stage}){
  function toy(x,y){const p=items.filter(p=>!p.away&&!p.j&&p.surf==='floor').sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];if(!p)return;const q=nearest(p,x,y);if(q)walk(p,...q,{gait:'run',next:r=>state(r,'sniff',3)});}
  function forceWalk(id,x,y,opt={}){if(!LW.virtual)throw Error('QA requires virtual=1');const p=items[id];if(opt.from){[p.x,p.y]=opt.from;p.surf=opt.surf||'floor';p.z=0;p.j=null;p.gd=0;p._gait=null;p._petDirection=null;p.sequence=null;p.prev=null;p.spFam='walk1';p.spP='walk1'}p.away=p.gone=false;p.mission='qa';walk(p,x,y,{gait:opt.gait||'walk',next:q=>state(q,'stand',1e9)});return p;}
  function forceJump(id,x,y,opt={}){if(!LW.virtual)throw Error('QA requires virtual=1');const p=items[id];if(opt.from)[p.x,p.y]=opt.from;p.surf=opt.surf0||'floor';p.away=p.gone=false;p.mission='qa';p.k=size(p);jump(p,x,y,opt.surf1||'floor',q=>opt.walk?walk(q,...opt.walk,{next:r=>state(r,'stand',1e9)}):state(q,'stand',1e9));return p;}
- const api={items,reset,step,draw,drawOne,frame,click,toy,walk,trip,jump,state,forceWalk,forceJump,box,free,
+ const api={panelBoxes,items,reset,step,draw,drawOne,frame,click,toy,walk,trip,jump,state,forceWalk,forceJump,box,free,
   get stage(){return S},get ready(){return items.every(p=>p.asset.ready)},get roster(){return ROSTER},
   overlaps:()=>items.flatMap((p,i)=>items.slice(i+1).filter(q=>!p.away&&!q.away&&overlap(box(p),box(q),0)).map(q=>[p.rosterId,q.rosterId]))};
  LW.on('action',a=>{if(a==='toy'&&S)toy((S.bounds[0]+S.bounds[2])/2,(S.bounds[1]+S.bounds[3])/2);if(a==='feed'||a==='water')items.forEach(p=>{if(a==='feed')p.hunger=.9;else p.thirst=.9;if(!p.away&&!p.j)think(p)})});
@@ -446,5 +453,5 @@ function plate(g,cv,poly){
  }
  g.save();g.setTransform(1,0,0,1,0,0);g.drawImage(im,x,y);g.restore();
 }
-LW.pets={ROSTER,create,plate,geometry:{inside,headings,scaleAt,overlap}};
+LW.pets={ROSTER,create,plate,setScreenOccluder(id,rect){if(rect)screenOccluders.set(id,rect);else screenOccluders.delete(id);},geometry:{inside,headings,scaleAt,overlap}};
 })();

@@ -86,7 +86,7 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 
 ## Play mode v1 — isolated play-mode worktree (2026-10-04)
 - [x] Step 1: sandboxed card SDK, shared deterministic rules, shell, authoring contract, template/scaffolder and static gates. Final headless gates follow the cards in step 6.
-- [~] Step 2: native presentation/menus and restricted feed/link bridge.
+- [x] Step 2: per-display native presentation/menus, paused-state restore, conservative fullscreen guard, shared pet occluder, restricted RSS/Atom/link bridge and 15-minute disk cache. Swift typecheck passes (existing duplicate bowls warning); all 60 baseline tests pass.
 - [ ] Step 3: original bundled puzzles and verified official feed decisions.
 - [ ] Step 4: contextual house ads and adapter.
 - [ ] Step 5: anonymous counters and undeployed aggregate worker.

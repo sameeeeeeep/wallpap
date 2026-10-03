@@ -12,16 +12,17 @@ FW=(-framework AppKit -framework WebKit -framework ServiceManagement -framework 
 if [[ "$1" == "--zip" || "$1" == "--dmg" ]]; then
   # Release: universal binary (Apple Silicon + Intel), macOS 13+
   mkdir -p .build
-  swiftc -O -target arm64-apple-macos13 -o .build/wallpap-arm64 host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift $FW
-  swiftc -O -target x86_64-apple-macos13 -o .build/wallpap-x86_64 host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift $FW
+  swiftc -O -target arm64-apple-macos13 -o .build/wallpap-arm64 host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift host/Play.swift host/PlayFeeds.swift $FW
+  swiftc -O -target x86_64-apple-macos13 -o .build/wallpap-x86_64 host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift host/Play.swift host/PlayFeeds.swift $FW
   lipo -create .build/wallpap-arm64 .build/wallpap-x86_64 -output $APP/Contents/MacOS/wallpap
 else
-  swiftc -O -o $APP/Contents/MacOS/wallpap host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift $FW
+  swiftc -O -o $APP/Contents/MacOS/wallpap host/main.swift host/BeatSync.swift host/Panel.swift host/License.swift host/Catalog.swift host/Layout.swift host/Reminders.swift host/Skins.swift host/Cycle.swift host/Play.swift host/PlayFeeds.swift $FW
 fi
 cp host/Info.plist $APP/Contents/Info.plist
 [[ -f host/AppIcon.icns ]] && cp host/AppIcon.icns $APP/Contents/Resources/AppIcon.icns
 mkdir -p $APP/Contents/Resources/scenes
 cp scenes/*.html scenes/*.js $APP/Contents/Resources/scenes/
+cp -R scenes/play $APP/Contents/Resources/scenes/play
 [[ -d scenes/art ]] && cp -R scenes/art $APP/Contents/Resources/scenes/art
 # Ad-hoc signature with a STABLE designated requirement (bundle id, not cdhash), so
 # macOS privacy permissions (Automation for Music/Spotify, Screen & Audio capture)

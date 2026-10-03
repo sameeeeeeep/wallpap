@@ -24,6 +24,23 @@ final class Shot: NSObject, WKNavigationDelegate {
         cfg.websiteDataStore = .nonPersistent()
         cfg.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         cfg.userContentController.addUserScript(WKUserScript(source: "window.__pendingImages=new Set();const sd=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');Object.defineProperty(HTMLImageElement.prototype,'src',{get:sd.get,set(v){__pendingImages.add(this);const done=()=>__pendingImages.delete(this);this.addEventListener('load',done,{once:true});this.addEventListener('error',done,{once:true});sd.set.call(this,v)}});window.__errs=[];addEventListener('message',e=>{if(e.data&&e.data.__wkshotError)__errs.push(e.data.__wkshotError)});if(window!==top){addEventListener('error',e=>top.postMessage({__wkshotError:String(e.message)},'*'));addEventListener('unhandledrejection',e=>top.postMessage({__wkshotError:String(e.reason)},'*'));}addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        cfg.userContentController.addUserScript(WKUserScript(source: """
+
+window.__imageErrors=[];
+window.__loadedImages=[];
+const failImage=e=>{const im=e.target;if(im instanceof HTMLImageElement)__imageErrors.push(im.currentSrc||im.src)};
+addEventListener('error',failImage,true);
+// Detached new Image() resources do not bubble errors to window.
+const imageSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+Object.defineProperty(HTMLImageElement.prototype,'src',{get:imageSrc.get,set(v){
+ this.addEventListener('error',failImage,{once:true});
+ this.addEventListener('load',()=>__loadedImages.push(this.currentSrc||this.src),{once:true});
+ imageSrc.set.call(this,v);
+}});
+const originalError=console.error;
+console.error=(...args)=>{__errs.push(args.map(String).join(' '));originalError.apply(console,args)};
+if(new URLSearchParams(location.search).has('shotSeed')){let seed=Number(new URLSearchParams(location.search).get('shotSeed'))||1;Math.random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}};
+""", injectionTime: .atDocumentStart, forMainFrameOnly: false))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: W, height: H), configuration: cfg)
         win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
@@ -62,7 +79,7 @@ final class Shot: NSObject, WKNavigationDelegate {
                         do { try png.write(to: URL(fileURLWithPath: path)); print("saved", path) }
                         catch { print("write failed:", error); exit(2) }
                     } else { print("snapshot failed"); exit(2) }
-                    self.run("JSON.stringify({errors:window.__errs||[],report:window.__shotReport?window.__shotReport():null})") { r in
+                    self.run("JSON.stringify({errors:window.__errs||[],imageErrors:window.__imageErrors||[],loadedImages:window.__loadedImages||[],pendingImages:window.__pendingImages.size,report:window.__shotReport?window.__shotReport():null})") { r in
                         print("result:", r ?? "{}")
                         if index + 1 < frames.count { self.capture(index + 1) } else { exit(0) }
                     }

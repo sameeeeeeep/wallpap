@@ -122,16 +122,17 @@ function create(config) {
     },
     tick(A,k,at) {if(bed)bed.gain.setTargetAtTime((life.ambience==='stream'?.025:.038)*(1+Math.sin(clock*.22)*.15)*(LW.calm?.7:1),at,.8);}
   };
+  const grade=Kit.light({vignette:.08,grain:.012,glow:.12});
   const assets=life.lights&&C.lights?{lights:'art/'+C.lights}:{};
   for(const n of ['road','walk'])if(C.masks[n])assets[n+'Mask']='art/'+C.masks[n];
   const scene=Kit.scene({assets,
-    layers:[sky,plate,moving,weather,Kit.light({vignette:.08,grain:.06,glow:.12})],ambience,
+    layers:[sky,plate,moving,weather,grade],ambience,
     exposedAt:(x,y)=>inMask('exposed',x,y),
     surfaceAt:(x,y)=>!inMask('exposed',x,y)||inMask('sky',x,y)?null:inMask('water',x,y)?'water':'ground',
     onReminder(){},
     update(dt,t,k){clock+=dt*(LW.calm&&life.calm?.4:1);
       plate.opt.shimmer=(life.water?.strength??0)*(1+(life.calm?breath*.1:0));},
-    ...(life.calm?{breathe(level){breath=level;}}:{}),
+    ...(life.calm?{breathe(level,phase,k){breath=level;grade.opt.exposure=1+(level-.5)*.035*k.breath.fade;}}:{}),
     onDown(x,y,k){
       if(!life.click||!k.restOK(x,y))return;
       if(inMask('water',x,y)){k.ripples.drop(x,y,12,-.35);k.sound.plop(x,.25);}

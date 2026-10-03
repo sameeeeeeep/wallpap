@@ -1,0 +1,12 @@
+name = "wallpap-play-counts"
+main = "worker.mjs"
+compatibility_date = "2026-10-04"
+workers_dev = false
+
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wallpap-play-counts"
+database_id = "OWNER_CONFIGURES_BEFORE_DEPLOY"

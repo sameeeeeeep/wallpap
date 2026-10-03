@@ -77,6 +77,8 @@
 // The host calls window.__lw(type, x, y, flag).
 (function () {
   const handlers = {};
+  const runtimeBase = new URL(".", document.currentScript.src);
+  let playLoading = false;
   const qs = new URLSearchParams(location.search);
   const LW = {
     isHost: !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lw),
@@ -634,11 +636,13 @@
 
   // Native host entry point.
   window.__lw = function (type, x, y, flag) {
+    if (type === 'play') { if(window.PlayShell) LW.emit('play',x); else { LW._playPending=x; if(!playLoading){playLoading=true;const s=document.createElement('script');s.src=new URL('play/play.js',runtimeBase);s.onerror=()=>{playLoading=false;LW.post({type:'play',op:'close'});};document.head.append(s);} } return; }
+    if (type === 'playReply') { LW.emit('playReply',x); return; }
     if (type === 'agents') { setAgents(x); return; }
     if (type === 'audio') { for (const k in x || {}) { LW.audioPrefs[k] = Object.assign(LW.audioPrefs[k] || {}, x[k]); applyBus(k); } LW.emit('audioprefs', LW.audioPrefs); return; }
     if (type === 'breath') { LW.globalBreath = x; return; }
     if (type === 'beat') { onBeatFrame(x); return; }
-    if (type === 'focus') { setFocused(!!x); return; }
+    if (type === 'focus') { setFocused(LW.playOpen || !!x); return; }
     if (type === 'perf') { if (x && x.fps) LW.fps = x.fps; LW._resumeFrames(); return; }
     if (type === 'nowplaying') { setNowPlaying(x); return; }
     if (type === 'ambient') { LW.setSoundscape(x); return; }
@@ -662,6 +666,7 @@
     addEventListener('pointerleave', () => { LW.pointer.inside = false; LW.emit('leave'); });
     const W = ['clear', 'cloudy', 'rain', 'storm', 'snow', 'fog'];
     addEventListener('keydown', (e) => {
+      if (LW.playOpen) return;
       if (e.key === 'm') window.__lw('mute', 0, 0, !LW.muted);
       if (e.key === 'w') LW.setEnv({ weather: W[(W.indexOf(LW.env.weather) + 1) % W.length] });
       if (e.key === 't') LW.setView('custom', (LW.env.hour + 3) % 24);
@@ -676,7 +681,7 @@
         { title: 'Moon River', artist: 'Lo-fi Dev Trio', album: 'Late Night Tests', artwork: '', playing: true, app: 'Music' });
     });
     // Landing-page embeds drive the scene via postMessage({__lw: [type, ...args]}).
-    addEventListener('message', (e) => { const d = e.data; if (d && Array.isArray(d.__lw)) window.__lw(...d.__lw); });
+    addEventListener('message', (e) => { const d = e.data; if (e.source===window.parent && e.source!==window && d && Array.isArray(d.__lw)) window.__lw(...d.__lw); });
     if (qs.get('np') === '1') setNowPlaying({ title: 'Moon River', artist: 'Lo-fi Dev Trio', album: 'Late Night Tests', artwork: '', playing: true, app: 'Music' });
     if (qs.get('ambient')) LW.soundscape.kind = qs.get('ambient');
   }

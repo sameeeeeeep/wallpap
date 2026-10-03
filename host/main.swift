@@ -51,6 +51,9 @@ let allBuiltinScenes: [Scene] = [
 let builtinScenes: [Scene] = allBuiltinScenes.filter { !shelvedScenes.contains($0.id) }
 
 final class WallWindow: NSWindow {
+    var playPresented = false
+    override var canBecomeKey: Bool { playPresented }
+    override var canBecomeMain: Bool { playPresented }
     private(set) var web: WKWebView
     let screenID: CGDirectDisplayID
     private weak var handler: WKScriptMessageHandler?
@@ -59,7 +62,7 @@ final class WallWindow: NSWindow {
         let config = WKWebViewConfiguration()
         config.mediaTypesRequiringUserActionForPlayback = []
         config.suppressesIncrementalRendering = true
-        config.websiteDataStore = .nonPersistent()
+        config.websiteDataStore = .default() // Persist shell-only local puzzle progress; opaque card frames have no origin.
         config.userContentController.add(handler, name: "lw")
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         let web = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: config)
@@ -137,6 +140,11 @@ extension NSScreen {
 }
 
 final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavigationDelegate, NSMenuDelegate, CLLocationManagerDelegate {
+    lazy var playAnalytics: PlayAnalytics = {
+        let client = PlayAnalytics(version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.12.1")
+        client.enabled = sharePlayCounts; client.start(); return client
+    }()
+    lazy var playHost = PlayHost(app: self)
     var windows: [WallWindow] = []
     var status: NSStatusItem!
     var monitors: [Any] = []
@@ -191,6 +199,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var engaged = true
 
     func checkEngagement() {
+        if let w = playHost.window { w.js("__lw('focus',true)"); return }
         let now = CACurrentMediaTime()
         let panelOpen = panelHostIfLoaded?.popover.isShown == true      // never pause under our own menu
         var want: Bool
@@ -650,10 +659,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     @objc func spaceChanged() {
+        playHost.close(restoreFocus: false, immediate: true)
         windows.forEach { $0.orderFrontRegardless() }
     }
 
     func rebuildWindows() {
+        playHost.close(immediate: true)
         windows.forEach { $0.close() }
         windows = NSScreen.screens.map { screen in
             let w = WallWindow(screen: screen, handler: self)
@@ -664,6 +675,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     func loadScene() {
+        playHost.close(immediate: true)
         if paused { rebuildMenu(); return }
         if !isPro, scenes.first(where: { $0.id == sceneID })?.pro == true { sceneID = "koi" }
         if sceneFile(sceneID) == nil { sceneID = "koi" }   // e.g. an add-on scene that was removed
@@ -732,6 +744,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func target(for p: NSPoint) -> WallWindow? { windows.first { $0.frame.contains(p) } }
 
     func onMove() {
+        if playHost.isOpen { return }
         if paused { return }
         let now = CACurrentMediaTime()
         let p = NSEvent.mouseLocation
@@ -759,6 +772,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     var downOnDesktop = false
     func onButton(_ type: String) {
+        if playHost.isOpen { return }
         let p = NSEvent.mouseLocation
         if paused {   // a click on the desktop continues a paused wallpaper
             if type == "down", isDesktop(at: p) { userPaused = false; applyPause() }
@@ -951,6 +965,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func sendReminder(_ kind: String) { windows.forEach { $0.js("__lw('reminder','\(kind)')") } }
 
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+        // Sandboxed subframes must never reach ANY scene/native capability.
+        guard message.frameInfo.isMainFrame else { return }
+        if let d = message.body as? [String: Any], d["type"] as? String == "play" { playHost.handle(message, body: d); return }
         if let s = message.body as? String, s.hasPrefix("log:") { NSLog("[scene] %@", String(s.dropFirst(4))) }
         // In-scene controls persist their settings here (LW.set).
         if let d = message.body as? [String: Any], d["type"] as? String == "media", let cmd = d["cmd"] as? String {
@@ -986,7 +1003,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     // If WebKit kills the page process (memory pressure, crash), the window would stay
     // black — reload the scene instead.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        decisionHandler(PlayNavigation.allows(sourceMain: action.sourceFrame.isMainFrame, targetMain: action.targetFrame?.isMainFrame, url: action.request.url) ? .allow : .cancel)
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if playHost.window?.web === webView { playHost.close(immediate: true) }
         NSLog("wallpap: scene process terminated — reloading")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.loadScene() }
     }
@@ -1028,6 +1050,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         let header = NSMenuItem(title: isPro ? "wallpap Pro" : "wallpap", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
+        let play = NSMenuItem(title: playHost.isOpen ? "Close Play" : "Play…", action: #selector(togglePlay), keyEquivalent: "")
+        play.target = self; if playHost.unavailableReason != nil { play.action = nil }; play.isEnabled = playHost.unavailableReason == nil; play.toolTip = playHost.unavailableReason
+        menu.addItem(play)
+        let counts = NSMenuItem(title: "Share anonymous usage counts", action: #selector(togglePlayCounts), keyEquivalent: "")
+        counts.target = self; counts.state = sharePlayCounts ? .on : .off
+        counts.toolTip = "Daily totals only. No identifiers, puzzle answers or article links."
+        menu.addItem(counts)
         if !isPro {
             let up = NSMenuItem(title: "Unlock Pro — $5 one-time…", action: #selector(openPro), keyEquivalent: "")
             up.target = self
@@ -1528,6 +1557,17 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 }
 
+// This command-line check returns before NSApplication, defaults, monitors or windows exist.
+if CommandLine.arguments.contains("--play-resource-check") {
+    guard let root = ProcessInfo.processInfo.environment["LIVEWALL_SCENES"] else { fputs("LIVEWALL_SCENES is required\n", stderr); exit(2) }
+    let url = URL(fileURLWithPath: root)
+    for file in ["play/play.js", "play/card-sdk.js", "play/catalog.js", "play/feeds.json", "play/house-ads.json", "play/cards/word-of-the-day/data/words.json", "play/cards/crossword-of-the-day/data/2026.json"] {
+        guard FileManager.default.fileExists(atPath: url.appendingPathComponent(file).path) else { fputs("Missing Play resource\n", stderr); exit(2) }
+    }
+    guard PlayConfig.analyticsEndpoint.isEmpty else { fputs("Expected unconfigured endpoint\n", stderr); exit(2) }
+    print("Play resource check PASS: bundled shell, SDK, cards, content, feeds and house ads; analytics endpoint empty. No app windows created.")
+    exit(0)
+}
 let app = NSApplication.shared
 let delegate = App()
 app.delegate = delegate

@@ -55,3 +55,13 @@ test('plate masks crop the same backing pixels under a mirrored scene transform'
  sourceArgs=null;LW.pets.plate(g,cv,[[100,50],[140,50],[140,90],[100,90]]);assert.equal(sourceArgs,null);
  cv.petRevision=1;LW.pets.plate(g,cv,[[100,50],[140,50],[140,90],[100,90]]);assert.ok(sourceArgs);
 });
+test('Play screen occluder maps through mirrored canvas transforms and blocks new crossings',()=>{
+ const {LW,pets,tick}=rig(['orange']);let mirrored=false;
+ const g={canvas:{width:2000,height:1000,getBoundingClientRect:()=>({x:0,y:0,width:2000,height:1000})},getTransform:()=>({inverse:()=>({transformPoint:({x,y})=>({x:mirrored?2000-x:x,y})})}),save(){},restore(){},translate(){},scale(){},drawImage(){},beginPath(){},rect(){},clip(){}};
+ LW.pets.setScreenOccluder('play',[600,300,500,600]);pets.draw(g);
+ assert.deepEqual(JSON.parse(JSON.stringify(pets.panelBoxes())),[[600,300,1100,900]]);
+ pets.forceWalk(0,1500,600,{from:[300,600]});
+ for(let i=0;i<600;i++){tick();assert.ok(!LW.pets.geometry.overlap(pets.box(pets.items[0]),[600,300,1100,900],0));}
+ mirrored=true;pets.draw(g);assert.deepEqual(JSON.parse(JSON.stringify(pets.panelBoxes())),[[900,300,1400,900]]);
+ LW.pets.setScreenOccluder('play',null);assert.equal(pets.panelBoxes().length,0);
+});

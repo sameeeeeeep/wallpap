@@ -1,0 +1,2 @@
+Copy with `tools/new-card.sh <id> "one line"`. Edit card.json and index.html, register the id in scenes/play/catalog.json, then run `node tools/pack-cards.js` and `node tools/check-card.js <id>`.
+Read ../../CARD-SPEC.md. Markers inject the shared style, rules and SDK at packaging time. Optional data/*.json are embedded as `CARD_DATA` by the packer, never fetched by the card. All text must use textContent. Await card.ready before using the SDK. Catch failed capabilities and give a retry state.

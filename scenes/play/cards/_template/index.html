@@ -1,0 +1,3 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A quiet moment</title><!--CARD_STYLE--></head><body><h1>A quiet moment</h1><p class="muted">A small thing to return to.</p><button id="remember">Remember this moment</button><p id="status" role="status"></p><!--CARD_SDK--><script>
+(async()=>{await card.ready();const saved=await card.load('moment');document.querySelector('#status').textContent=saved?'Last visited '+saved:'';document.querySelector('#remember').onclick=async()=>{await card.save('moment',card.today());document.querySelector('#status').textContent='Saved on this Mac.';};})();
+</script></body></html>

@@ -8,7 +8,7 @@ import WebKit
 
 let a = CommandLine.arguments
 guard a.count >= 3 else { print("usage: wkshot <url|scene> <out.png> [w h steps js]"); exit(1) }
-let target = a[1].hasPrefix("http") ? a[1] : "http://localhost:5210/\(a[1]).html?virtual=1&muted=1"
+let target = (a[1].hasPrefix("http") || a[1].hasPrefix("file:")) ? a[1] : "http://localhost:5210/\(a[1]).html?virtual=1&muted=1"
 let out = a[2]
 let W = a.count > 3 ? Double(a[3]) ?? 1600 : 1600, H = a.count > 4 ? Double(a[4]) ?? 1000 : 1000
 let steps = a.count > 5 ? Double(a[5]) ?? 3 : 3
@@ -22,7 +22,8 @@ final class Shot: NSObject, WKNavigationDelegate {
     override init() {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
-        cfg.userContentController.addUserScript(WKUserScript(source: "window.__pendingImages=new Set();const sd=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');Object.defineProperty(HTMLImageElement.prototype,'src',{get:sd.get,set(v){__pendingImages.add(this);const done=()=>__pendingImages.delete(this);this.addEventListener('load',done,{once:true});this.addEventListener('error',done,{once:true});sd.set.call(this,v)}});window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cfg.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.__pendingImages=new Set();const sd=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');Object.defineProperty(HTMLImageElement.prototype,'src',{get:sd.get,set(v){__pendingImages.add(this);const done=()=>__pendingImages.delete(this);this.addEventListener('load',done,{once:true});this.addEventListener('error',done,{once:true});sd.set.call(this,v)}});window.__errs=[];addEventListener('message',e=>{if(e.data&&e.data.__wkshotError)__errs.push(e.data.__wkshotError)});if(window!==top){addEventListener('error',e=>top.postMessage({__wkshotError:String(e.message)},'*'));addEventListener('unhandledrejection',e=>top.postMessage({__wkshotError:String(e.reason)},'*'));}addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: false))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: W, height: H), configuration: cfg)
         win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
@@ -31,7 +32,9 @@ final class Shot: NSObject, WKNavigationDelegate {
         if let theme = URLComponents(string: target)?.queryItems?.first(where: { $0.name == "shotAppearance" })?.value {
             web.appearance = NSAppearance(named: theme == "dark" ? .darkAqua : .aqua)
         }
-        web.load(URLRequest(url: URL(string: target)!))
+        let url = URL(string: target)!
+        if url.isFileURL { web.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent()) }
+        else { web.load(URLRequest(url: url)) }
     }
     func run(_ js: String, _ done: @escaping (Any?) -> Void) {
         web.evaluateJavaScript(js) { r, e in if let e { print("js error:", e.localizedDescription) }; done(r) }
@@ -40,6 +43,13 @@ final class Shot: NSObject, WKNavigationDelegate {
         run("window.__pendingImages.size") { result in
             if (result as? Int ?? 0) == 0 || attempts >= 60 { done(); return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.waitImages(attempts + 1, done) }
+        }
+    }
+    func waitSetup(_ attempts: Int = 0, _ done: @escaping () -> Void) {
+        run("(window.__shotPoll&&window.__shotPoll(),window.__shotPending===true)") { result in
+            if (result as? Bool) != true { done(); return }
+            if attempts > 120 { self.run("JSON.stringify({errors:window.__errs,report:window.__shotReport?window.__shotReport():null,stage:window.__setupStage,ticks:window.__pollCount,html:document.querySelector('iframe')?.srcdoc.slice(-1000)})") { r in print("async setup timeout:",r ?? "null"); exit(4) }; return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.waitSetup(attempts + 1, done) }
         }
     }
     func capture(_ index: Int = 0) {
@@ -67,7 +77,7 @@ final class Shot: NSObject, WKNavigationDelegate {
                     self.waitImages {
                         self.run("(()=>{if(window.__shotReady)window.__shotReady();const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                self.capture()
+                                self.waitSetup { self.capture() }
                             }
                         }
                     }

@@ -32,6 +32,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
     var available: Bool { FileManager.default.fileExists(atPath: pageURL.path) }
 
     func show(from button: NSStatusBarButton) {
+        app.playHost.rememberMenuContext()
         if web.url == nil { ready = false; web.loadFileURL(pageURL, allowingReadAccessTo: app.scenesDir) }
         else { push() }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -66,10 +67,11 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         "toggleMute", "toggleMusicMode", "toggleBeatSync", "openAutomationSettings", "pickSoundscape:",
         "pickSoundscapeVolume:", "toggleAudioCat:", "pickAudioVol:", "toggleCalm", "pickBreath:", "pickReminder:",
         "remindNow", "pickCompanions:", "togglePause", "pickFps:", "pickEnergy:", "pickAway:", "pickLayoutMode:", "toggleAvoidIcons", "pickBreathReminder:", "toggleRemindersOverApps", "previewReminderCard", "pickSceneCycle:", "pickSceneCycleScope:", "toggleSceneCycleShuffle", "nextSceneNow", "shareApp", "openSubmitScene", "deactivateLicense", "openScenesFolder",
-        "toggleLogin", "reloadScene", "openDesktopSettings", "dismissClickTip", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
+        "togglePlay", "togglePlayCounts", "toggleLogin", "reloadScene", "openDesktopSettings", "dismissClickTip", "openPro", "enterLicense", "installScene:", "addSceneFolder", "openScenesFolder",
     ]
 
     func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame else { return }
         guard let d = message.body as? [String: Any], let a = d["a"] as? String else { return }
         let v = d["v"].flatMap { $0 is NSNull ? nil : $0 }
         switch a {
@@ -131,6 +133,7 @@ extension App {
     }
 
     func openNativeMenu() {
+        playHost.rememberMenuContext(); rebuildMenu()
         setEngaged(true); lastDesktopActivity = CACurrentMediaTime()   // don't pause under our own menu
         status.menu = panelHost.nativeMenu
         status.button?.performClick(nil)   // tracks the menu until it closes
@@ -158,6 +161,7 @@ extension App {
         var login = false
         if #available(macOS 13, *) { login = SMAppService.mainApp.status == .enabled }
         return [
+            "sharePlayCounts": sharePlayCounts, "playAvailable": playHost.unavailableReason == nil, "playReason": playHost.unavailableReason ?? "", "playOpen": playHost.isOpen,
             "pro": isPro, "scene": sceneID, "categories": categories,
             "scenes": avail.map { s -> [String: Any] in
                 var d: [String: Any] = ["id": s.id, "title": s.title, "cat": s.category, "pro": s.pro, "music": s.music,

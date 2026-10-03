@@ -86,3 +86,12 @@ _2026-10-03 04:20 IST: monthly spend limit hit — 8 agents stopped mid-task; re
 _2026-10-03 12:00: user asked to prioritise near-complete work to save compute — stopped Airport + plate scenes; scoped down visualizers, marketing, train._
 
 _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Next: in-app test + 0.13 release + site push; rooftop/ramen day plates generated (verify alignment)._
+
+## Play mode v1 — isolated play-mode worktree (2026-10-04)
+- [x] Step 1: sandboxed card SDK, shared deterministic rules, shell, authoring contract, template/scaffolder and static gates. Final headless gates follow the cards in step 6.
+- [x] Step 2: per-display native presentation/menus, paused-state restore, conservative fullscreen guard, shared pet occluder, restricted RSS/Atom/link bridge and 15-minute disk cache. Swift typecheck passes (existing duplicate bowls warning); all 60 baseline tests pass.
+- [x] Step 3: Letter Garden (2,116 curated answers), Little Crossings (365 unique offline 5×5 grids, 356 original-clued common entries), news UI. Official candidate URL/terms checks recorded in docs/play-feed-review.md; no commercially permitted source verified, so production allow-list is empty with an honest empty state.
+- [x] Step 4: AdSource/HouseAdSource adapter, fixed contextual first-party promotions, Sponsored rows at news bottom and puzzle completion only, no Pro slot.
+- [x] Step 5: memory-only anonymous daily counts, default-on off switch in both settings surfaces, empty endpoint, aggregate-only Cloudflare/D1 worker and privacy note. Worker not deployed.
+- [x] Step 6: 76 tests pass; isolated app build and resource-only run pass; native off-screen WebKit security/persistence checks pass; 72-capture cats/koi/train light/dark matrix plus final crossword/Pro, file:// authoring gates, mirrored/ultrawide/small/paused and real interaction/fault-retry checks. JPEGs in shots/play; details and owner checklist in docs/play-verification.md.
+- [ ] Owner follow-up: obtain commercial feed permission; deploy/configure aggregate analytics only when ready; select any future contextual ad network; test visible native Space/display/focus/VoiceOver behavior. Strict <2 ms total-frame latency remains unproven (0–1 ms card handlers; one 5 ms cold WebKit dispatch sample).

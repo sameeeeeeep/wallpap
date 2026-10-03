@@ -38,7 +38,7 @@ extension App {
     }
 
     func cycleToNextScene() {
-        guard !paused, engaged else { return }
+        guard !paused, engaged, !playHost.isOpen else { return }
         let list = cycleCandidates().map(\.id)
         guard list.count > 1 else { return }
         var next: String

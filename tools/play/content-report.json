@@ -1,0 +1,23 @@
+{
+  "generatorSeed": 20261004,
+  "days": 365,
+  "uniqueGrids": 365,
+  "answers": 2116,
+  "crosswordWords": 356,
+  "maxScowlLevel": 35,
+  "attempts": 711,
+  "allCellsCheckedBothDirections": true,
+  "clues": "Original Codex-authored clues; reviewed against the answer and crossing letters; no external clue corpus.",
+  "sourceSHA256": {
+    "american-words.35": "c999d002cfe31a2c3d9726eee1b87697402bb71cc831a2c63d064403c6a3a7fb",
+    "american-words.50": "1846537a15d7cf9f0b5fde8d2f69a9d3606856695c68de1701fc85d698646994",
+    "american-words.60": "3296121b977bcc2fc3fab374b69d2a0891c825bb473ef8078161245b2a990f2f",
+    "english-words.10": "f19988ecdb0280ab63340e5c5e155a814ab3d0f225ae60f5cb9e000252283b0b",
+    "english-words.20": "618998fff18fb9e143a5bab49e669ec48c023758f0db476d6b64ec06994ba71e",
+    "english-words.35": "f36ace33ff09bd5eda5f3ccbcc9971c1b6a8887fa62f5ad7f93e3c220d871388",
+    "english-words.40": "fc5c2058cd24af4ca6a9bca97ce7d300c8899753715d029fc8bb3cbe602eef7f",
+    "english-words.50": "ff5b1f1752df695e0512c1e9e096f22af2dc127119918b1e43a35582ef90da90",
+    "english-words.55": "be646fbdc9c4b4fef5b23e9c5678f7479534c428a7581745178642dfd9c744d6",
+    "english-words.60": "8922ac79ea926ae876d68f178fcb1107bbdf1b90996086f63ffc3e97da55427f"
+  }
+}

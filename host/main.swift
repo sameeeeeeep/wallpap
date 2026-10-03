@@ -24,7 +24,7 @@ struct Scene {
 
 /// Menu categories, in order. Music Mode works in every scene; it isn't a category.
 /// "More" collects add-on scenes whose category isn't one of these (Catalog.swift).
-let categories = ["Nature", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More", "Custom"]
+let categories = ["Nature", "Places", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More", "Custom"]
 /// Scenes shipped inside the app. `scenes` (Catalog.swift) adds the installed add-ons.
 let builtinScenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),

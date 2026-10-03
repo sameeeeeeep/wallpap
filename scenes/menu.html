@@ -73,6 +73,9 @@ h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
 .row+.row,.row+.chips,.chips+.row,.chips+.chips{margin-top:6px}
 .chips{display:flex;background:var(--card);border-radius:7px;padding:2px;gap:2px}
 .chips.grid4{display:grid;grid-template-columns:repeat(4,1fr)}
+.chips.grid2{display:grid;grid-template-columns:repeat(2,1fr)}
+.chips.grid2 button{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.look{display:flex;flex-direction:column;gap:4px}
 .chips button{flex:1;border-radius:5px;padding:3px 4px;color:var(--ink-2);font-size:11px;white-space:nowrap}
 .chips button:hover{color:var(--ink)}
 .chips button[aria-pressed=true]{background:var(--sel);color:var(--sel-ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
@@ -130,7 +133,7 @@ const LEVELS = [['fx', 'Interactions'], ['ambience', 'Ambience'], ['weather', 'W
 const VOLS = [[0.4, 'Quiet'], [0.7, 'Medium'], [1, 'Full']];
 
 const key = (x) => (x !== null && typeof x === 'object' ? JSON.stringify(x) : String(x));
-const chips = (list, cur, act, opt = {}) => `<div class="chips${list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
+const chips = (list, cur, act, opt = {}) => `<div class="chips${opt.grid2 ? ' grid2' : list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
   `<button aria-pressed="${key(v) === key(cur)}" data-a="${act}" data-v='${esc(JSON.stringify(v))}'${opt.tag ? ' data-tag' : ''}>${esc(l)}</button>`).join('')}</div>`;
 const sw = (on, act, v) => `<button class="sw" role="switch" aria-checked="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${esc(JSON.stringify(v))}'` : ''}></button>`;
 const pro = (locked) => (locked ? '<span class="lock">PRO</span>' : '');
@@ -169,7 +172,10 @@ function render(state) {
   const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
   const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
-    ? `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`
+    ? (c.title === 'Look' || c.options.some((o) => String(o.label).length > 9)
+      // Long labels (Looks / skins) get their own full-width block that wraps to two columns.
+      ? `<div class="look"><span class="note">${esc(c.title)}</span>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { grid2: true })}</div>`
+      : `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`)
     : '').join('');
   // Every action the current scene offers (feed, pet, toy, fireworks, play/pause…), as one row.
   const sceneActs = S.sceneCtl.filter((c) => c.type === 'action')

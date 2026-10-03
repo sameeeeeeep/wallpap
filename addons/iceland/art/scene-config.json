@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "title": "Iceland",
+  "layers": {
+    "plates": {
+      "day": "plate-day.jpg",
+      "dusk": "plate-dusk.jpg",
+      "night": "plate-night.jpg",
+      "overcast": "plate-overcast.jpg"
+    },
+    "masks": {
+      "sky": "sky.png",
+      "exposed": "exposed.png",
+      "water": "water.png",
+      "emissive": "emissive.jpg"
+    },
+    "focus": [
+      0.5,
+      0.5
+    ],
+    "lights": "lights.json",
+    "horizon": 0.502
+  },
+  "life": {
+    "weather": true,
+    "calm": "breathing",
+    "click": "ripple-or-breeze",
+    "ambience": "ocean",
+    "water": {
+      "strength": 0.28,
+      "sparkle": 0.1
+    },
+    "birds": {
+      "count": 5,
+      "height": 0.26104
+    }
+  },
+  "paths": {},
+  "fallbacks": []
+}

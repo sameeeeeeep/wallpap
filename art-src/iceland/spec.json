@@ -1,0 +1,48 @@
+{
+  "scene": "Icelandic black-sand beach with basalt sea stacks",
+  "style": "photo",
+  "calm": "quiet open water, sky or simple low-contrast ground appropriate to this place",
+  "space": "Wide establishing view from a fixed camera, believable perspective. Place the main landmark in the left two-thirds. Leave water and travel corridors unobstructed in the middle distance where appropriate. Preserve the character of the requested place; do not add roads or buildings that do not belong.",
+  "preserve": "every shoreline, branch, rock, path, building, roof edge and horizon",
+  "surfaces": "the existing natural and architectural surfaces",
+  "night_lights": "No artificial lighting, no lamps, no buildings added; only very faint blue ambient night light",
+  "wet": "exposed surfaces have a restrained wet sheen, while sheltered ground stays dry; preserve water boundaries",
+  "plates": [
+    "day",
+    "dusk",
+    "night",
+    "overcast"
+  ],
+  "keys": {
+    "sky": "ONLY the open sky, including the sky in gaps between branches; exclude water reflections, foliage, buildings and land",
+    "exposed": "ONLY open sky and outdoor upward-facing surfaces directly exposed to falling rain (open water, uncovered ground, open paths, upper roof surfaces). Leave walls, tree trunks, foliage silhouettes, interiors, sheltered ground under roofs/awnings/bridges/canopies and all other objects UNCHANGED. Be conservative at shelter boundaries",
+    "water": "ONLY visible liquid water, precisely excluding banks, rocks, bridges, land, structures and sky"
+  },
+  "mask_ops": [
+    {
+      "name": "water",
+      "minus": [
+        "sky"
+      ]
+    }
+  ],
+  "emissive": {
+    "max_lights": 160
+  },
+  "ship_size": [
+    2560,
+    1600
+  ],
+  "jpeg": 86,
+  "generator": {
+    "name": "plate-new",
+    "version": 1,
+    "id": "iceland",
+    "description": "Icelandic black-sand beach with basalt sea stacks",
+    "category": "Nature",
+    "presets": [
+      "birds",
+      "water"
+    ]
+  }
+}

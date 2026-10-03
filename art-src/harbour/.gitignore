@@ -1,0 +1,6 @@
+raw/
+plates/
+masks/
+logs/
+package/
+.new.lock

@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Living place</title>
+<style>html,body{margin:0;overflow:hidden;background:#080d13}</style></head><body>
+<script src="astronomy.js"></script><script src="kit.js"></script><script src="lw.js"></script><script src="moon.js"></script>
+<script src="plate-fx.js"></script>
+<script>
+'use strict';
+// Every generated scene uses this exact file. All place-specific data lives in JSON.
+window.plateSceneReady = fetch('art/scene-config.json').then(r => {
+  if (!r.ok) throw new Error('scene-config.json: HTTP ' + r.status);
+  return r.json();
+}).then(config => {
+  document.title = config.title || 'Living place';
+  window.plateScene = PlatePresets.create(config);
+  return window.plateScene;
+}).catch(error => { console.error('plate scene:', error); throw error; });
+window.__shotReport = () => window.plateScene ? window.plateScene.report() : {ready:false};
+</script></body></html>

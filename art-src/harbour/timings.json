@@ -1,0 +1,78 @@
+{
+  "runs": [
+    {
+      "started": "2026-10-03T17:39:03+0530",
+      "stages": [
+        {
+          "name": "gen",
+          "status": "ok",
+          "seconds": 240.64
+        },
+        {
+          "name": "build",
+          "status": "ok",
+          "seconds": 45.05
+        },
+        {
+          "name": "masks",
+          "status": "ok",
+          "seconds": 15.74
+        },
+        {
+          "name": "pack",
+          "status": "ok",
+          "seconds": 2.48
+        },
+        {
+          "name": "configure",
+          "status": "ok",
+          "seconds": 0.71
+        },
+        {
+          "name": "package",
+          "status": "ok",
+          "seconds": 0.46
+        }
+      ],
+      "status": "ok",
+      "seconds": 305.09
+    },
+    {
+      "started": "2026-10-03T17:49:35+0530",
+      "stages": [
+        {
+          "name": "gen",
+          "status": "ok",
+          "seconds": 0.17
+        },
+        {
+          "name": "build",
+          "status": "ok",
+          "seconds": 44.65
+        },
+        {
+          "name": "masks",
+          "status": "ok",
+          "seconds": 15.66
+        },
+        {
+          "name": "pack",
+          "status": "ok",
+          "seconds": 1.47
+        },
+        {
+          "name": "configure",
+          "status": "ok",
+          "seconds": 0.66
+        },
+        {
+          "name": "package",
+          "status": "ok",
+          "seconds": 0.33
+        }
+      ],
+      "status": "ok",
+      "seconds": 62.95
+    }
+  ]
+}

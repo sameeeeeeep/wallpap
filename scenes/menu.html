@@ -73,6 +73,17 @@ h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
 .row+.row,.row+.chips,.chips+.row,.chips+.chips{margin-top:6px}
 .chips{display:flex;background:var(--card);border-radius:7px;padding:2px;gap:2px}
 .chips.grid4{display:grid;grid-template-columns:repeat(4,1fr)}
+.cats{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:6px 0 10px}
+.cats button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px 6px;border-radius:9px;color:var(--ink-3);font-size:10px;line-height:1.1}
+.cats button:hover{background:var(--card);color:var(--ink-2)}
+.cats button[aria-pressed=true]{background:var(--card-2);color:var(--ink)}
+.cats button[aria-pressed=true] .ci{color:var(--accent)}
+.cats em{position:absolute;top:3px;right:6px;font-style:normal;font-size:8.5px;color:var(--ink-3)}
+.ci{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
+h2 .ci{color:var(--ink-3);margin-right:2px;align-self:center}
+.chips.wrap{display:flex;flex-wrap:wrap;background:none;padding:0;gap:4px}
+.chips.wrap button{flex:none;background:var(--card);padding:4px 10px}
+.chips.wrap button[aria-pressed=true]{background:var(--sel);color:var(--sel-ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .chips.grid2{display:grid;grid-template-columns:repeat(2,1fr)}
 .chips.grid2 button{overflow:hidden;text-overflow:ellipsis;min-width:0}
 .look{display:flex;flex-direction:column;gap:4px}
@@ -144,7 +155,7 @@ const LEVELS = [['fx', 'Interactions'], ['ambience', 'Ambience'], ['weather', 'W
 const VOLS = [[0.4, 'Quiet'], [0.7, 'Medium'], [1, 'Full']];
 
 const key = (x) => (x !== null && typeof x === 'object' ? JSON.stringify(x) : String(x));
-const chips = (list, cur, act, opt = {}) => `<div class="chips${opt.grid2 ? ' grid2' : list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
+const chips = (list, cur, act, opt = {}) => `<div class="chips${opt.wrap ? ' wrap' : opt.grid2 ? ' grid2' : list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
   `<button aria-pressed="${key(v) === key(cur)}" data-a="${act}" data-v='${esc(JSON.stringify(v))}'${opt.tag ? ' data-tag' : ''}>${esc(l)}</button>`).join('')}</div>`;
 const sw = (on, act, v) => `<button class="sw" role="switch" aria-checked="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${esc(JSON.stringify(v))}'` : ''}></button>`;
 const pro = (locked) => (locked ? '<span class="lock">PRO</span>' : '');
@@ -173,6 +184,26 @@ const ICON = {
   check: '<svg class="ico" viewBox="0 0 12 12"><path d="M2.5 6.4l2.2 2.1 4.8-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   share: '<svg class="ico" viewBox="0 0 12 12"><path d="M6 1.5v6.2M3.6 3.8L6 1.5l2.4 2.3M2.5 6.5v3.2h7V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+// Category + section icons (stroke, currentColor) — the panel is browsed by shape first, words second.
+const CI = {
+  Nature: '<path d="M5 15c0-6 4-10 11-10 0 7-4 11-10 11"/><path d="M5 15l6-6"/>',
+  Places: '<path d="M10 17s5-4.5 5-8.5a5 5 0 0 0-10 0c0 4 5 8.5 5 8.5z"/><circle cx="10" cy="8.5" r="1.8"/>',
+  'Cozy Rooms': '<path d="M7 4h6l2 5H5z"/><path d="M10 9v6M7 15h6"/>',
+  'City Nights': '<path d="M3 17V9h4v8M7 17V5h5v12M12 17v-6h5v6"/><path d="M15 4a2 2 0 0 0 2 2"/>',
+  Journeys: '<rect x="5" y="3.5" width="10" height="10" rx="2"/><path d="M5 9h10M7.5 16.5l-1 1.5M12.5 16.5l1 1.5"/><circle cx="7.5" cy="11.5" r=".6"/><circle cx="12.5" cy="11.5" r=".6"/>',
+  Mindful: '<path d="M10 16c-3 0-6-2-7-5 2 0 4 .6 5 2-1-3 0-6 2-8 2 2 3 5 2 8 1-1.4 3-2 5-2-1 3-4 5-7 5z"/>',
+  Music: '<path d="M8 15V5l8-1.5v10"/><circle cx="6" cy="15" r="2"/><circle cx="14" cy="13.5" r="2"/>',
+  More: '<rect x="4" y="4" width="5" height="5" rx="1"/><rect x="11" y="4" width="5" height="5" rx="1"/><rect x="4" y="11" width="5" height="5" rx="1"/><rect x="11" y="11" width="5" height="5" rx="1"/>',
+  Discover: '<path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z"/>',
+  Custom: '<path d="M3.5 6.5h5l1.5 1.5h6.5v7.5h-13z"/>',
+  scenes: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M3.5 12l3.5-3 3 2.5 2.5-2 4 3"/>',
+  env: '<circle cx="8" cy="8" r="3"/><path d="M8 2.5v1M2.5 8h1M4.1 4.1l.7.7M13 12.5a3 3 0 0 0-5.6-1.2A2.5 2.5 0 0 0 8 16h5a2 2 0 0 0 0-4z"/>',
+  sound: '<path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5"/>',
+  well: '<path d="M10 16s-6-3.6-6-8a3.4 3.4 0 0 1 6-2.2A3.4 3.4 0 0 1 16 8c0 4.4-6 8-6 8z"/>',
+  perf: '<rect x="3" y="6.5" width="12.5" height="7" rx="1.5"/><path d="M17 9v2M5.5 9h4"/>',
+  acct: '<path d="M10 3l2 4 4.5.6-3.3 3.1.8 4.4L10 13l-4 2.1.8-4.4L3.5 7.6 8 7z"/>',
+};
+const icon = (k, sz = 15) => CI[k] ? `<svg class="ci" width="${sz}" height="${sz}" viewBox="0 0 20 20">${CI[k]}</svg>` : '';
 // Quick-bar icons (stroke, currentColor)
 const QI = {
   pause: '<svg viewBox="0 0 20 20"><path d="M7 5v10M13 5v10"/></svg>',
@@ -194,14 +225,14 @@ function render(state) {
   const offers = S.offers || [];
   const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
-  const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
-    ? (c.title === 'Look'
-      ? `<div class="look"><span class="note">${esc(c.title)}</span>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { grid2: true })}</div>`
-      : c.options.length <= 4 && !c.options.some((o) => String(o.label).length > 9)
-      ? `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting')}</div></div>`
-      // many or long options: one compact dropdown instead of a wall of buttons
-      : `<div class="row"><span class="note">${esc(c.title)}</span><span class="sel"><select data-act="pickSetting" aria-label="${esc(c.title)}">${c.options.map((o) => `<option value='${esc(JSON.stringify(o.v))}'${o.on ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></span></div>`)
-    : '').join('');
+  const sceneCtl = S.sceneCtl.map((c) => {
+    if (c.type !== 'choice') return '';
+    const cur = (c.options.find((o) => o.on) || {}).v, opts = c.options.map((o) => [o.v, o.label]);
+    const chars = c.options.reduce((n, o) => n + String(o.label).length, 0);
+    // fits beside its label → one inline segmented row; otherwise its own line of wrapping pills
+    if (c.title !== 'Look' && c.options.length <= 4 && chars <= 22) return `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(opts, cur, 'pickSetting')}</div></div>`;
+    return `<div class="look"><span class="note">${esc(c.title)}</span>${chips(opts, cur, 'pickSetting', { wrap: true })}</div>`;
+  }).join('');
   // Every action the current scene offers (feed, pet, toy, fireworks, play/pause…), as one row.
   const sceneActs = S.sceneCtl.filter((c) => c.type === 'action')
     .map((c) => `<button data-a="runAction" data-v='${esc(JSON.stringify(c.v))}'>${esc(c.title)}</button>`).join('');
@@ -219,9 +250,12 @@ function render(state) {
   ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
 
   ${sec('scenes', 'Scenes', esc(cur.title) + (S.cycle ? ` · changes every ${esc(label(CYCLE, S.cycle))}` : ''), `
-    <div class="tabs">${cats.map((c) => `<button aria-pressed="${c === tab}" data-tab="${esc(c)}">${esc(c)}</button>`).join('')}<button aria-pressed="${tab === 'Discover'}" data-tab="Discover">Discover${offers.length ? ` <em class="count">${offers.length}</em>` : ''}</button>${S.scenes.some((x) => x.custom) || S.pro ? '' : ''}<button aria-pressed="${tab === 'Custom'}" data-tab="Custom">Custom</button></div>
+    <div class="cats">${cats.concat(['Discover', 'Custom']).map((c) => {
+      const n = c === 'Discover' ? offers.length : c === 'Custom' ? S.scenes.filter((x) => x.custom).length : S.scenes.filter((x) => x.cat === c).length;
+      return `<button aria-pressed="${c === tab}" data-tab="${esc(c)}" title="${esc(c)}">${icon(c, 18)}<span>${esc(c === 'Cozy Rooms' ? 'Rooms' : c === 'City Nights' ? 'City' : c)}</span>${n ? `<em>${n}</em>` : ''}</button>`;
+    }).join('')}</div>
     ${tab === 'Discover' ? discover(offers, locked) : tab === 'Custom' ? customTab(locked) : `<div class="grid">${S.scenes.filter((s) => s.cat === tab).map(tile).join('')}</div>`}
-    <div class="row" style="margin-top:9px"><span class="note">Change scene automatically</span><span class="sel"><select data-act="pickSceneCycle" data-tag aria-label="Change scene automatically">${CYCLE.map(([v, l]) => `<option value="${v}"${v === S.cycle ? ' selected' : ''}>${v ? 'Every ' + l : 'Off'}</option>`).join('')}</select></span></div>
+    <div class="look" style="margin-top:9px"><span class="note">Change scene automatically</span>${chips(CYCLE.map(([v, l]) => [v, v ? 'Every ' + l : 'Off']), S.cycle, 'pickSceneCycle', { wrap: true, tag: true })}</div>
     ${S.cycle ? `<div class="row"><div style="width:190px">${chips([['all', 'All scenes'], ['category', 'This category']], S.cycleScope, 'pickSceneCycleScope')}</div><span>Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}`)}
 
   ${sec('env', 'Environment', `${esc(label(CLOCKS.concat(VIEWS), S.timeView).toLowerCase())} time · ${S.weather ? esc(label(WEATHER, S.weather).toLowerCase()) : 'live weather'}`, `
@@ -293,11 +327,11 @@ function render(state) {
 
 // Collapsible sections: each remembers open/closed (per viewer); the summary line shows
 // the current settings while collapsed, so a closed panel still reads at a glance.
-const SEC_DEFAULT = { scenes: true, env: true, sound: false, well: false, perf: false, acct: true };
+const SEC_DEFAULT = { scenes: true, env: false, sound: false, well: false, perf: false, acct: true };
 const secOpen = (() => { try { return JSON.parse(localStorage.getItem('panel.sec') || '{}'); } catch (e) { return {}; } })();
 const isOpen = (k) => (k in secOpen ? secOpen[k] : SEC_DEFAULT[k]);
 const label = (list, v) => ((list.find((x) => String(x[0]) === String(v)) || list[0])[1]);
-const sec = (k, title, hint, body) => `<section><details ${isOpen(k) ? 'open' : ''}><summary data-open="${k}"><h2><span>${title}</span><small>${isOpen(k) ? '' : hint}</small></h2></summary>${body}</details></section>`;
+const sec = (k, title, hint, body) => `<section><details ${isOpen(k) ? 'open' : ''}><summary data-open="${k}"><h2>${icon(k)}<span>${title}</span><small>${isOpen(k) ? '' : hint}</small></h2></summary>${body}</details></section>`;
 
 document.addEventListener('change', (e) => {
   const sel = e.target.closest('select[data-act]'); if (!sel) return;

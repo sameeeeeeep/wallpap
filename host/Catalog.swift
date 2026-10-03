@@ -35,7 +35,7 @@ var addonDir: URL {
 struct Addon { let scene: Scene; let dir: URL; let version: Int }
 
 func validSceneID(_ id: String) -> Bool {
-    !id.isEmpty && id.count <= 40 && id.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" } && !builtinScenes.contains { $0.id == id }
+    !id.isEmpty && id.count <= 40 && id.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" } && !allBuiltinScenes.contains { $0.id == id }
 }
 
 func readManifest(_ dir: URL) -> Addon? {

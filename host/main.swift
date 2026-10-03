@@ -25,8 +25,12 @@ struct Scene {
 /// Menu categories, in order. Music Mode works in every scene; it isn't a category.
 /// "More" collects add-on scenes whose category isn't one of these (Catalog.swift).
 let categories = ["Nature", "Places", "Cozy Rooms", "City Nights", "Journeys", "Mindful", "Music", "More", "Custom"]
+/// Scenes held back from the build until they reach the bar (owner, 2026-10-03): Night Drive and the
+/// Music visualizers except Cymatics. Their files stay in the bundle; they just aren't offered.
+let shelvedScenes: Set<String> = ["drive", "kinetic", "fluids", "skies"]
 /// Scenes shipped inside the app. `scenes` (Catalog.swift) adds the installed add-ons.
-let builtinScenes: [Scene] = [
+let builtinScenes: [Scene] = allBuiltinScenes.filter { !shelvedScenes.contains($0.id) }
+let allBuiltinScenes: [Scene] = [
     Scene(id: "koi", title: "Koi Pond", key: "1", category: "Nature"),
     Scene(id: "grass", title: "Touch Grass", key: "2", category: "Nature"),
     Scene(id: "cats", title: "Santorini Cats", key: "3", category: "Nature"),
@@ -152,7 +156,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     var sceneID: String {
-        get { defaults.string(forKey: "scene") ?? "koi" }
+        get { let v = defaults.string(forKey: "scene") ?? "koi"; return shelvedScenes.contains(v) ? "koi" : v }
         set { defaults.set(newValue, forKey: "scene") }
     }
     var muted: Bool {

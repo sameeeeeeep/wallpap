@@ -13,7 +13,9 @@ Requests use a per-load frame source check. Reload/back/close invalidates outsta
 Use shared card.css tokens (--ink, --muted, --paper, --line, --accent, --soft), system sans plus Georgia headings; restrained green ink, light/dark. Calm premium type, no urgent timers, loud scores, dark patterns, autoplay, emoji or moving artwork. Semantic buttons, visible focus, descriptive labels, aria-live status, labelled cells; feedback needs words/marks as well as colour. Keyboard supports all actions; Escape closes Play, Tab exits the frame naturally. Reduced Motion removes movement. Date changes restart daily content after persisting the old day's progress. Storage/network failures show actionable messages. Completion is idempotent locally.
 
 ## Measurable gates
-1. `node tools/check-card.js <id>`: schema, folder/id, JS syntax, no forbidden capabilities/external resources, <300 KB excluding data/. Zero idle rAF or intervals. Interactions target <2 ms scripting per frame; report measurements in visual QA.
-2. `node tools/check-card.js <id> --visual`: headless WebKit in light/dark with no JS errors (tools/play/verify.py; dev server port 5217). JPEG contact sheets only; delete raw PNGs; abort below 3 GB free.
+1. `node tools/check-card.js <id> --static-only`: schema, folder/id, JS syntax, no forbidden capabilities/external resources, <300 KB excluding data/. Zero idle rAF or intervals. Interaction budget is <2 ms scripting per frame; report measurements in visual QA.
+2. `node tools/check-card.js <id>`: all static gates plus headless file:// WebKit in light/dark with no JS errors (tools/play/verify.py). The optional --static-only shortcut is not the complete gate. JPEG contact sheets only; delete raw PNGs; abort below 3 GB free.
 3. `node --test tests/*.cjs`: deterministic daily rules, content, checks, capability isolation, free/Pro, and failure states.
 4. Inspect screenshots for clipping, readable contrast, focus, offline/loading/error/done/assisted states, and no content on the widget side. Review original clues, no offensive or obscure fill. Document source licences and feed terms checks.
+
+Crossword grids use one keyboard focus stop with labelled gridcells and aria-activedescendant. Arrow keys select squares; Tab advances across clues then down clues and leaves the grid at the boundary.

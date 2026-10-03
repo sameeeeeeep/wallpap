@@ -825,3 +825,8 @@ Grass 4.578→4.289). These are serial isolated-WKWebView batch measurements; sm
 differences are within normal timing noise, not a claim about installed-app FPS. The
 earlier café mask regression was corrected by baking/caching masks, then remeasured.
 No push, release, app rebuild/install/relaunch, host Swift edit or sibling-tree edit.
+
+
+## 2026-10-04 — Play mode overlay (play-mode worktree)
+
+Shared Play shell over cats, koi and train, light/dark: green-ink glass panel, clear-area placement, keyboard-accessible original daily word/crossword cards and permission-aware news. Added shared CSS-screen pet occluders with canvas/mirror coordinate conversion; pets avoid new paths through the panel and existing overlap is clipped. No new scene artwork, actors, sprite assets or image-generation prompts. Headless JPEG evidence: `shots/play/{cats,koi,train}-{light,dark}-{scenes,panels}.jpg`, final crossword sheets, `edge-cases.jpg`, `interactions.jpg`. Mirrored, ultrawide, small viewport and paused/Reduce Motion cases checked. Native visible transitions remain on the owner checklist to respect the prohibition on touching the live screen. Full results and reproduction: `docs/play-verification.md`.

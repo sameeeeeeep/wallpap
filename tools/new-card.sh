@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-case "${1:-}" in ''|*[!a-z0-9-]*|-*) echo 'usage: new-card.sh <lowercase-id> "one line"' >&2; exit 1;; esac
+case "${1:-}" in ''|*[!a-z0-9-]*|-*|*-|*--*) echo 'usage: new-card.sh <lowercase-id> "one line"' >&2; exit 1;; esac
 [ -n "${2:-}" ] || { echo 'A description is required' >&2; exit 1; }
 [ ! -e "scenes/play/cards/$1" ] || { echo 'Card already exists' >&2; exit 1; }
 cp -R scenes/play/cards/_template "scenes/play/cards/$1"

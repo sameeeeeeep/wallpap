@@ -13,6 +13,7 @@ final class PlayAnalytics {
     var enabled = true { didSet { if !enabled { counts.removeAll() } } }
     let version: String
     let endpoint: String
+    private var batchedDays = Set<String>()
     private var timer: Timer?
     private var task: URLSessionDataTask?
     private let redirect = PlayNoRedirect()
@@ -40,7 +41,8 @@ final class PlayAnalytics {
     // Called only at a local-day boundary; at most one attempt for that day's batch.
     func rotate(now: Date) -> PlayAnalyticsBatch? {
         let next = Self.localDay(now); guard next != day else { return nil }
-        let batch = enabled && !counts.isEmpty ? PlayAnalyticsBatch(day: day, appVersion: version, counts: counts) : nil
+        let batch = enabled && !counts.isEmpty && !batchedDays.contains(day) ? PlayAnalyticsBatch(day: day, appVersion: version, counts: counts) : nil
+        if batch != nil { batchedDays.insert(day) }
         day = next; counts.removeAll(); return batch
     }
     func tick(now: Date = Date()) {

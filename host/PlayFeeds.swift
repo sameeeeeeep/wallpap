@@ -14,7 +14,7 @@ final class PlayFeedParser: NSObject, XMLParserDelegate {
     init(_ feed: PlayFeed) { self.feed = feed }
     static func safeLink(_ value: String, hosts: [String]) -> Bool {
         guard let u = URLComponents(string: value), u.scheme == "https", u.user == nil, u.password == nil,
-              u.port == nil || u.port == 443, let h = u.host?.lowercased() else { return false }
+              u.port == nil || u.port == 443, value.count <= 2048, let h = u.host?.lowercased() else { return false }
         return hosts.contains(h)
     }
     static func parse(_ data: Data, feed: PlayFeed) throws -> [PlayHeadline] {
@@ -74,7 +74,7 @@ final class PlayFeedStore {
         guard let feed = feeds.first(where: { $0.id == id }),
               let data = try? Data(contentsOf: directory.appendingPathComponent(id + ".json")), data.count < 500_000,
               var result = try? JSONDecoder().decode(PlayFeedResult.self, from: data) else { return nil }
-        result.items = result.items.filter { PlayFeedParser.safeLink($0.link, hosts: feed.linkHosts) }
+        result.items = Array(result.items.filter { PlayFeedParser.safeLink($0.link, hosts: feed.linkHosts) && PlayFeedParser.date($0.published) != nil && $0.title.count <= 600 && $0.source == feed.outlet }.prefix(100))
         return result
     }
     static func fresh(_ result: PlayFeedResult, now: Date = Date()) -> Bool {

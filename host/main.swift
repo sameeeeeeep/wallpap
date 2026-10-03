@@ -1003,7 +1003,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     // If WebKit kills the page process (memory pressure, crash), the window would stay
     // black — reload the scene instead.
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        decisionHandler(PlayNavigation.allows(sourceMain: action.sourceFrame.isMainFrame, targetMain: action.targetFrame?.isMainFrame, url: action.request.url) ? .allow : .cancel)
+    }
+
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if playHost.window?.web === webView { playHost.close(immediate: true) }
         NSLog("wallpap: scene process terminated — reloading")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.loadScene() }
     }
@@ -1046,7 +1051,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         header.isEnabled = false
         menu.addItem(header)
         let play = NSMenuItem(title: playHost.isOpen ? "Close Play" : "Play…", action: #selector(togglePlay), keyEquivalent: "")
-        play.target = self; play.isEnabled = playHost.unavailableReason == nil; play.toolTip = playHost.unavailableReason
+        play.target = self; if playHost.unavailableReason != nil { play.action = nil }; play.isEnabled = playHost.unavailableReason == nil; play.toolTip = playHost.unavailableReason
         menu.addItem(play)
         let counts = NSMenuItem(title: "Share anonymous usage counts", action: #selector(togglePlayCounts), keyEquivalent: "")
         counts.target = self; counts.state = sharePlayCounts ? .on : .off
@@ -1552,6 +1557,17 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 }
 
+// This command-line check returns before NSApplication, defaults, monitors or windows exist.
+if CommandLine.arguments.contains("--play-resource-check") {
+    guard let root = ProcessInfo.processInfo.environment["LIVEWALL_SCENES"] else { fputs("LIVEWALL_SCENES is required\n", stderr); exit(2) }
+    let url = URL(fileURLWithPath: root)
+    for file in ["play/play.js", "play/card-sdk.js", "play/catalog.js", "play/feeds.json", "play/house-ads.json", "play/cards/word-of-the-day/data/words.json", "play/cards/crossword-of-the-day/data/2026.json"] {
+        guard FileManager.default.fileExists(atPath: url.appendingPathComponent(file).path) else { fputs("Missing Play resource\n", stderr); exit(2) }
+    }
+    guard PlayConfig.analyticsEndpoint.isEmpty else { fputs("Expected unconfigured endpoint\n", stderr); exit(2) }
+    print("Play resource check PASS: bundled shell, SDK, cards, content, feeds and house ads; analytics endpoint empty. No app windows created.")
+    exit(0)
+}
 let app = NSApplication.shared
 let delegate = App()
 app.delegate = delegate

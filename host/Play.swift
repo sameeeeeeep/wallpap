@@ -75,8 +75,9 @@ final class PlayHost {
         guard let w = window, !closing else { return }; closing = true
         if let m = keyMonitor { NSEvent.removeMonitor(m); keyMonitor = nil }
         if let m = outsideMonitor { NSEvent.removeMonitor(m); outsideMonitor = nil }
-        emit("play", ["open": false], to: w.web)
+        emit("play", ["open": false, "immediate": immediate], to: w.web)
         let finish = { [self] in
+            emit("play", ["open": false, "immediate": true], to: w.web)
             w.level = savedLevel; w.collectionBehavior = savedBehavior; w.ignoresMouseEvents = savedIgnore; w.playPresented = false; w.alphaValue = 1
             w.resignKey(); window = nil; closing = false; links.removeAll()
             app.engaged = !savedEngaged; app.setEngaged(savedEngaged)
@@ -92,7 +93,7 @@ final class PlayHost {
         web.evaluateJavaScript("__lw('\(event)',\(json))", completionHandler: nil)
     }
     func handle(_ message: WKScriptMessage, body: [String: Any]) {
-        guard message.frameInfo.isMainFrame, let w = window, message.webView === w.web,
+        guard message.frameInfo.isMainFrame, !closing, let w = window, message.webView === w.web,
               let op = body["op"] as? String else { return }
         let id = body["id"] as? Int ?? 0
         func reply(_ value: Any = NSNull(), error: String? = nil) {

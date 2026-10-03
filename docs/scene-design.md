@@ -1,5 +1,7 @@
 # Scene design — do this BEFORE generating anything
 
+> The generator implements this as stage S0 (`design.json`) of **`tools/plate-scene/SPEC.md`**, which is authoritative; this page explains the thinking behind it.
+
 wallpap makes LIVE wallpapers. A beautiful still photo with a few generic particles is a failure ("boring", the
 owner's word). Every scene must feel like a place going about its life. Speed comes from the pipeline; quality comes
 from this design step. Write `art-src/<id>/design.md` with the sections below and get it right first.

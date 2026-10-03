@@ -4,6 +4,7 @@ pending work (P0 → P2). The live checklist is `docs/backlog.md`; update it as 
 (with any image prompts) in `docs/scene-polish.md`. Don't push, release, or post anything unless the owner says so.
 
 ## Making a new scene
+**The generator's contract is `tools/plate-scene/SPEC.md`** (stages, schema, gates). New owner rules about scenes go into SPEC.md as a stage requirement plus a measurable gate.
 Design first (`docs/scene-design.md`: references, style, a cast of animated actors with variety, clean mask edges), then use the one-command pipeline — `python3 tools/plate-scene/new.py <id> "<description>"` (see
 `tools/plate-scene/QUICKSTART.md`). Same playbook as the Claude skill at `~/.claude/skills/new-scene/SKILL.md`: never
 hand-code a scene; improve `addons/_template` + presets so every scene benefits; render the wkshot matrix and check

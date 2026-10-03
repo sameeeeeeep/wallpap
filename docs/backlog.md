@@ -31,6 +31,10 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Register new scenes + skins: drive, kinetic, fluids, skies, cymatics skins [x]; train skins (pending agent); kit add-ons via catalog [x]
 
 ## Scenes (agents)
+- [ ] **Implement the generator spec** `tools/plate-scene/SPEC.md` — close the gap list at its end (design.json,
+  geometry.json, cast sprite sheets with views, schema v2, measured gates + gates.json). Owner 2026-10-04: "the scene
+  generator needs to keep all this properly documented — specced — so scenes can be generated very fast and perfect
+  every time". Start after the quality run in ../livewall-quality lands (it edits tools/plate-scene too).
 - [ ] **World geometry for actors (polish-brief §13)** — owner 2026-10-04: Santorini cats walk through the stairs;
   pets/people/vehicles must path around props, climb stairs, be occluded by depth, avoid each other. Do it in the shared
   pet engine (scenes/pets.js, in progress) + every scene's stage declaration, and in the plate-scene generator/template.

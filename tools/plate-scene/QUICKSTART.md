@@ -1,5 +1,7 @@
 # Make a scene in one command
 
+> **Authoritative contract: [`SPEC.md`](SPEC.md)** — stages S0–S7, the `scene-config.json` v2 schema, and the quality gates every generated scene must pass. This page only covers running the command.
+
 From the repository root, on macOS with Python 3, Pillow, NumPy, SciPy, and a signed-in
 `codex` CLI that supports built-in image generation:
 

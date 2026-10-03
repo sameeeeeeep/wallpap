@@ -31,6 +31,9 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Register new scenes + skins: drive, kinetic, fluids, skies, cymatics skins [x]; train skins (pending agent); kit add-ons via catalog [x]
 
 ## Scenes (agents)
+- [x] **Pet gaze correction — owner 2026-10-04**: replace all seven animals’ walk/run/jump motion sheets with travel-aligned heads; 315 frames cut, contact registration and JPEG comparisons in `shots/gaze-fix/`; seven old/new comparisons and 112 day/night WebKit snapshots inspected; 61 Node tests pass.
+- [ ] **FOLLOW art — owner addendum 2026-10-04**: front/back runs, side/front/back hunt and pounce, picked-me front sit/perk, drawn angle turns, missing loaf/stretch; dogs get play-bow/bounce equivalents.
+- [ ] **FOLLOW interaction — owner addendum 2026-10-04**: multi-pick/release, projected cursor following, heading/geometry/spacing rules, intentional stalk/wiggle/pounce, wait/resume and pause reset; tests and scripted day/night WebKit evidence.
 - [x] **Shared companions — owner 2026-10-04**: one `pets.js` and seven-member roster; migrate all eight scenes, cross-species avoidance/prop sorting, directional dog art, no-ghost poses, jump-scale continuity. All eight scenes use the shared runtime; 52 dog cuts installed. Day/night, takeoff, prop, crossing, toggle and ultrawide evidence: `shots/pets-shared/`; reproduction: `tools/pets-shared/`. Pandas retain lateral-only sheets.
 - [ ] **Implement the generator spec** `tools/plate-scene/SPEC.md` — close the gap list at its end (design.json,
   geometry.json, cast sprite sheets with views, schema v2, measured gates + gates.json). Owner 2026-10-04: "the scene

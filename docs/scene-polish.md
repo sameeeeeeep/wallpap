@@ -825,3 +825,27 @@ Grass 4.578→4.289). These are serial isolated-WKWebView batch measurements; sm
 differences are within normal timing noise, not a claim about installed-app FPS. The
 earlier café mask regression was corrected by baking/caching masks, then remeasured.
 No push, release, app rebuild/install/relaunch, host Swift edit or sibling-tree edit.
+
+## 2026-10-04 — Travel-aligned pet gaze
+
+Replaced 315 walk/run/jump frames across orange, black, grey, calico, Siamese,
+golden and corgi. Lateral heads use true profile and forward gaze; diagonal heads
+follow their body and landing direction. Idle artwork remains unchanged. Built-in
+ImageGen masters, all exact prompts (including rejected iterations), and provenance
+are in `art-src/gaze-fix/`. The prompt contract requires one visible side eye, forward
+nose/ears, no camera gaze during motion, preserved coat/style and 8/6/5 frame counts.
+
+`install.py` cuts, plants and updates shared geometry. Visual review caught clipped
+rear-jump apex ears and incorrect dog paw identification; corrected row boundaries,
+diagonal landmark splits and gallop/alternating contact chains before acceptance.
+Selected stance contact residuals are below 1e-6 source pixels; this is a landmark
+registration measurement, not an optical-flow guarantee for every painted paw pixel.
+
+LOOKED at all seven old/new JPEG comparisons plus 112 isolated WebKit snapshots in
+Santorini Cats and Speakeasy at noon/midnight: lateral/front/back walks, lateral run,
+and all three jump angles. Final reports have no JS errors or pet overlaps. Evidence
+and reproduction are in `shots/gaze-fix/README.md` and `tools/gaze-fix/`. All 61 Node
+tests pass, including geometry/contact registry checks. Raw generation/capture PNGs
+were removed after lossless WebP/JPEG preservation; approximately 16 GiB remains.
+No app rebuild/install/relaunch, push, release or sibling-tree change. The missing
+angles and FOLLOW addendum are subsequent logical steps.

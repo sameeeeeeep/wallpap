@@ -1,0 +1,29 @@
+// wkshot-only deterministic, continuous sequence. Scene clock is never reset.
+console.error=(...a)=>{const s=a.map(e=>String(e)+' '+(e?.stack||'')).join(' ');if(!__errs.includes(s))__errs.push(s)};
+window.__shotReady=()=>{
+ const P=window.__pets;for(let i=0;i<4;i++)LW.advance(1/30);P.initialized=true;
+ const S=P.stage,G=LW.pets.geometry,hero=P.items.find(p=>p.kind==='dog')||P.items[0],cat=P.items.find(p=>p.kind==='cat')||hero;
+ let time=0,phase=-1,bad=[],traces=[];const step=P.step;
+ const allowed=(x,y)=>S.floor.some(poly=>G.inside([x,y],poly));
+ function hide(){for(const p of P.items){p.away=p.gone=true;p.mission='qa-hidden';p.j=null;p.path=null;p.goal=null;}}
+ const points=[];for(let y=S.bounds[1]+12;y<S.bounds[3]-5;y+=20)for(let x=S.bounds[0]+130;x<S.bounds[2]-130;x+=30)if(allowed(x,y))points.push([x,y]);
+ const routes=(dx,dy)=>points.filter(([x,y])=>{for(let i=0;i<=10;i++)if(!allowed(x+dx*i/10,y+dy*i/10))return false;return true;});
+ const choose=(dx,dy)=>{const a=routes(dx,dy);return a[Math.floor(a.length/2)]||points[0];};
+ function walk(dx,dy){hide();const a=choose(dx,dy);if(!a)throw Error('No QA floor route');P.forceWalk(hero.id,a[0]+dx,a[1]+dy,{from:a});}
+ function start(n){
+  phase=n;hide();
+  const motions=[[180,0,'walk'],[100,55,'walk'],[100,-55,'walk'],[250,0,'run'],[100,0,'jump'],[100,55,'jump'],[100,-55,'jump']];
+  const [dx,dy,gait]=motions[n];const a=choose(dx,dy);if(!a)throw Error('No QA floor route');
+  if(gait==='jump')P.forceJump(hero.id,a[0]+dx,a[1]+dy,{from:a});
+  else P.forceWalk(hero.id,a[0]+dx,a[1]+dy,{from:a,gait});
+ }
+ P.step=(dt,t)=>{time+=dt;const n=Math.min(6,Math.floor(time/3));if(n!==phase)start(n);step(dt,t);const o=P.overlaps();if(o.length&&bad.length<20)bad.push({time,o});};
+ start(0);LW.advance(1/30);
+ function screenPets(){
+  const cv=document.querySelector('canvas'),g=hero.kind==='panda'?null:cv.getContext('2d'),m=g?.getTransform(),r=cv.getBoundingClientRect();
+  return P.items.filter(p=>!p.away).map(p=>{const f=P.frame(p);if(!f)return null;let a=[f.x+Math.min(f.dir*f.sx*f.ox,f.dir*f.sx*(f.ox+f.w)),f.y+f.sy*f.oy],b=[a[0]+f.w*f.sx,f.y+8*p.k];
+   const tr=v=>m?[(m.a*v[0]+m.c*v[1]+m.e)/cv.width*r.width,(m.b*v[0]+m.d*v[1]+m.f)/cv.height*r.height]:[(LW.layout?.side==='left'?r.width-v[0]:v[0]),v[1]];
+   a=tr(a);b=tr(b);return [Math.min(a[0],b[0])-30,Math.min(a[1],b[1])-20,Math.max(a[0],b[0])+30,Math.max(a[1],b[1])+25];}).filter(Boolean);
+ }
+ window.__shotReport=()=>({time,phase,bad,screen:screenPets(),pets:P.items.filter(p=>!p.away).map(p=>({id:p.rosterId,x:p.x,y:p.y,k:p.k,state:p.state,frame:P.frame(p)?.key,path:p.path?.pts})),errors:__errs});
+};

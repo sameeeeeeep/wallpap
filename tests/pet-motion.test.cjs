@@ -310,7 +310,7 @@ test('missing jump view falls back to side; landing starts the matching walk at 
  const C=directionRig(LW);assert.equal(LW.petGait(p,C,17,78,'walk',{vx:0,vy:0}),'walk-b-1');
  assert.equal(p._petDirection.face,-1);
 });
-test('all fifty jump frames share walk geometry and the runtime registry matches the cut manifest',()=>{
+test('all registered jump frames share walk geometry and the runtime registry matches the cut manifest',()=>{
  const {LW}=load(),layout=JSON.parse(fs.readFileSync(require.resolve('../art-src/cycles/jumps-layout.json'),'utf8'));
  Object.assign(layout,JSON.parse(fs.readFileSync(require.resolve('../art-src/pets-shared/jumps-layout.json'),'utf8')));
  assert.deepEqual(JSON.parse(JSON.stringify(LW.PET_JUMP_LAYOUT)),layout);
@@ -323,6 +323,24 @@ test('all fifty jump frames share walk geometry and the runtime registry matches
    assert.equal(png.toString('hex',0,8),'89504e470d0a1a0a');assert.ok(png.length>1000);
    const w=png.readUInt32BE(16),height=png.readUInt32BE(20);h??=height;assert.equal(height,h);
    assert.ok(geom.centers[i-1]>geom.pad&&geom.centers[i-1]<w-geom.pad);
+  }
+ }
+});
+
+test('gaze replacement registers every seven-pet motion cycle with subpixel stance contacts',()=>{
+ const {LW}=load(),reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/gaze-fix/plant-qa.json'),'utf8'));
+ for(const animal of ['orange','black','grey','calico','siamese','golden','corgi']){
+  const set=(['golden','corgi'].includes(animal)?'dogs/':'cats/')+animal;
+  for(const key of ['walk','run','walk-f','walk-b']){
+   const r=reports[animal+'-'+key],g=LW.PET_DIRECTION_LAYOUT[set][key],n=key==='run'?6:8;
+   assert.ok(r&&g,animal+' '+key);assert.equal(g.centers.length,n);
+   assert.equal(r.height,g.height);assert.equal(r.stride,g.stride);
+   assert.ok(r.max_contact_slip_px<1e-6,animal+' '+key+' stance drift');
+   assert.ok(r.stance_chains.every(([group,ids])=>[0,1].includes(group)&&ids.every(i=>i>=0&&i<n)));
+   for(let i=1;i<=n;i++){
+    const png=fs.readFileSync(require.resolve(`../scenes/art/sprites/${set}/cycle/${key}-${i}.png`));
+    assert.ok(png.readUInt32BE(16)>2*g.pad);assert.ok(png.readUInt32BE(20)>2*g.pad);
+   }
   }
  }
 });

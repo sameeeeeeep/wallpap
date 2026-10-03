@@ -17,6 +17,7 @@ existing plate pass it as `-i` and say "preserve all geometry". Cut transparent 
 subtle procedural motion (or a small flipbook) — never flat cartoon shapes.
 
 ## 2. Pets that belong (user chose: integrate + per-scene toggle)
+- Motion gaze (owner 2026-10-04): every walk/run/jump/hunt/pounce head follows its travel heading. Lateral heads are true profile with one eye; diagonal heads align with body/path, jumps watch the landing spot, rear views never look back. Only stationary idle/picked-me poses may look at the viewer. Inspect every generated frame, then old/new JPEGs and day/night WebKit sequences; frame counts or tests alone cannot approve gaze.
 - Lighting: tint each pet by the light at its position (warm lamp pools, cool window light, darkness) — not a flat sprite.
   Soft contact shadow under feet/body; rim light from strong sources when it helps.
 - Scale relative to furniture must be believable; perches must make sense (rug, sofa, cushion, windowsill, shelf, counter).

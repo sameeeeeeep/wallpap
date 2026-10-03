@@ -65,3 +65,20 @@ reproducible cutting/planting, and landmark reports live in `art-src/pets-shared
 Run `python3 art-src/pets-shared/install.py` to regenerate all 52 new cuts and registries.
 A front/back walk uses a .55 ground slope; a side-only panda stays on its lateral lane.
 Pose changes use drawn transitions or one-silhouette tuck-and-cut, never a dissolve.
+
+## Motion gaze correction (2026-10-04)
+
+All seven shared companions now use regenerated side walk (8), run (6), side jump (5),
+front/back walk (8 each), and front/back jump (5 each): 315 motion frames.
+Heads follow travel; lateral faces show one profile eye, diagonal heads follow their
+body axis, jumps watch landing, and rear heads never turn back. Existing stationary
+sit/sleep/loaf and standing references are retained and may look toward the viewer.
+
+Source sheets: `art-src/gaze-fix/<animal>-{side,depth}.webp` (lossless).
+Exact prompts and generation provenance: `prompts.json`, `generations.json` there.
+Run `python3 art-src/gaze-fix/install.py` to cut, register and install the replacement
+frames and refresh the shared geometry manifests. This supersedes the old installers
+for these motion rows. `plant-qa.json` reports selected stance-landmark residuals;
+it is not an all-pixel optical-flow proof. Run `python3 tools/gaze-fix/capture.py`
+for Santorini/Speakeasy day/night sequences. Inspect `shots/gaze-fix/<animal>.jpg`
+(old over new for each frame) and the rendered sequences before accepting any recut.

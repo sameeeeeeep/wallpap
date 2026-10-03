@@ -111,7 +111,7 @@ function create(config) {
   const assets=life.lights&&C.lights?{lights:'art/'+C.lights}:{};
   for(const n of ['road','walk'])if(C.masks[n])assets[n+'Mask']='art/'+C.masks[n];
   if(life.boats)assets.boat='art/shared/fishing-boat.png';
-  const scene=Kit.scene({assets,
+  const scene=Kit.scene({id:config.id,assets,
     setup(k){if(k.assets.boat)boatSheet=k.sheet({boat:k.assets.boat});},
     layers:[sky,plate,moving,weather,grade],ambience,
     exposedAt:(x,y)=>inMask('exposed',x,y),

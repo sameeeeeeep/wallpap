@@ -146,7 +146,7 @@ def assemble(sid, spec):
     if 'walkers' in names: life['walkers'] = {'count': 2, 'period': 300}
     if 'lights' in names: life['lights'] = {'strength': .4}
     title = sid.replace('-', ' ').title()
-    config = {'version': 1, 'title': title, 'layers': layers, 'life': life, 'paths': paths, 'fallbacks': fallbacks}
+    config = {'version': 1, 'id': sid, 'title': title, 'layers': layers, 'life': life, 'paths': paths, 'fallbacks': fallbacks}
     write_json(art / 'scene-config.json', config)
     write_json(dst / 'scene.json', {'id': sid, 'title': title, 'category': spec['generator']['category'],
                'author': 'wallpap', 'version': 1, 'pro': True, 'blurb': spec['scene']})

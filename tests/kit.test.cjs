@@ -81,3 +81,10 @@ test('rain lighting removes the direct sun and blue sky, clear restores them',()
  assert.ok(rain.zenith[2]-rain.zenith[0]<.1,'neutral storm ceiling');
  assert.ok(clear.zenith[2]-clear.zenith[0]>.4,'clear blue restored');
 });
+test('cloud layouts are stable for a scene and distinct across scene ids',()=>{
+ const ids=['airport','harbour','iceland','kyoto','hillside-valley','marine-drive','taj-mahal','sky-kites'];
+ const seeds=ids.map(id=>Array.from(Kit.cloudSeed(id)));
+ assert.equal(new Set(seeds.map(JSON.stringify)).size,ids.length);
+ ids.forEach((id,i)=>assert.deepEqual(Array.from(Kit.cloudSeed(id)),seeds[i]));
+ for(const seed of seeds)assert.ok(seed.every(n=>Number.isFinite(n)&&n>=0&&n<47));
+});

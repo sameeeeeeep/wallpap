@@ -27,7 +27,7 @@ const SHAPES = {
   diamond: { pts: [[0, -1], [0.66, -0.28], [0, 1.15], [-0.66, -0.28]], c: [0, -0.28], tail: [0, 1.15], spars: [[[0, -1], [0, 1.15]], [[-0.66, -0.28], [0.66, -0.28]]] },
   delta:   { pts: [[0, -0.9], [1.05, 0.42], [0, 0.22], [-1.05, 0.42]], c: [0, 0.05], tail: [0, 0.22], spars: [[[0, -0.9], [0, 0.22]], [[-0.62, 0.05], [0.62, 0.05]]] },
 };
-let fabric, clouds, kites = [], flocks = [], grass, u = 1, grabbed = null, birdWait = 6;
+let fabric, kites = [], flocks = [], grass, u = 1, grabbed = null, birdWait = 6;
 
 function setupKites(k) {
   u = Math.min(k.W, k.H) / 1000;
@@ -121,21 +121,12 @@ function drawBirds(b, k, t) {
   }
 }
 
-const skyScene=Kit.scene({
-  assets:{diamond:'art/diamond.webp',delta:'art/delta.webp',cloud:'art/cloud.webp'},onReminder(){},
-  setup(k) { fabric=k.sheet({diamond:k.assets.diamond,delta:k.assets.delta});clouds=k.sheet({cloud:k.assets.cloud}); grass = k.sheet({ a: Kit.paint.grassTuft(256, [60, 80, 40], 34, 11), b: Kit.paint.grassTuft(256, [70, 86, 44], 28, 12) }); },
+const skyScene=Kit.scene({id:'sky-kites',
+  assets:{diamond:'art/diamond.webp',delta:'art/delta.webp'},onReminder(){},
+  setup(k) { fabric=k.sheet({diamond:k.assets.diamond,delta:k.assets.delta});grass = k.sheet({ a: Kit.paint.grassTuft(256, [60, 80, 40], 34, 11), b: Kit.paint.grassTuft(256, [70, 86, 44], 28, 12) }); },
   resize(k) { setupKites(k); },
   layers: [
-    Kit.sky({ cover:-1, place: (k, elev, az) => [k.mx(k.W * (0.4 + Math.sin(az) * 0.3)), k.H * (1.02 - (elev + 0.02) * 1.15)] }),
-    Kit.sprites((b,k,t)=>{
-      b.use(clouds);const f=clouds.f.cloud;
-      for(let i=0;i<3;i++){
-        const span=k.W*1.9,x=((i*.61*k.W+t*(2+i)*k.wind.dir[0]+span)%span)-k.W*.4;
-        const y=k.H*(.14+i*.22),w=k.W*(.58-i*.10),night=k.L.night;
-        const tint=k.L.light.map((v,j)=>v*(.85-night*.7)+k.L.zenith[j]*.12);
-        b.sprite(f,k.mx(x),y,w,w*f.aspect,0,tint,.68*(1-night*.3),.5,.5);
-      }
-    },'painted-clouds'),
+    Kit.sky({ cover:.3, place: (k, elev, az) => [k.mx(k.W * (0.4 + Math.sin(az) * 0.3)), k.H * (1.02 - (elev + 0.02) * 1.15)] }),
     Kit.sprites((b, k, t) => drawBirds(b, k, t), 'birds'),
     Kit.sprites((b, k) => { for (const kt of kites.slice().sort((p, q) => q.L - p.L)) drawKite(b, kt, k); }, 'kites'),
     // foreground: out-of-focus grass blades at the bottom edge (we're lying in the meadow)

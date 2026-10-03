@@ -88,4 +88,6 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [~] Night sky: shared moon composition, real phase in pinned previews, graded exposure and preserved independent stars implemented. Seven horizon add-ons pass visual night review and G1; full ten-scene acceptance pending missing art in beach/garden/sky-kites.
 - [~] Rain scanline banding: replaced the shared 20:1 stretched wet-sheen noise with broad warped patches; hillside rain sequences inspected without stripes. Garden verification awaits its missing plate.
 - [~] Rain lighting implemented in Kit: weather overrides clear-cloud settings, suppresses direct sun/shadows, softens contrast, and restores smoothly. Airport transition and three plate-scene day/rain sequences inspected; sky-kites full-scene verification blocked by missing fabric art.
-- [ ] Clouds: scene-id seed, natural rounded formations and horizon haze, distinct layouts; inspect full before/after matrix.
+- [~] Clouds: shared scene-id seed, bounded perspective, broader formations and horizon haze implemented; template/generator wired and sky-kites migrated off repeated still clouds. Seven full before/after day/night/rain + mirrored/ultrawide sequences inspected. Three-scene acceptance remains blocked by missing art.
+
+- [ ] Audit acceptance: recover the missing beach/garden/sky-kites assets with owner authorization, capture their full before/after sequences, and finish ten-scene signoff. Seven available scenes pass G1 (.187–.245 night luma), zero render errors; 64 Node tests pass. Evidence: `shots/audit-fix/`.

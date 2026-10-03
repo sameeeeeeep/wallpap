@@ -470,9 +470,12 @@ function bakeRoom() {
   f.globalCompositeOperation = 'source-over';
   f.setTransform(U, 0, 0, U, OX, -fy * U);
   if (hasBg()) {
+    // Sample the same blended, graded plate as the room. A night-only cutout
+    // leaves dark seams over the daytime crate, pots and deck.
+    f.save(); f.setTransform(1, 0, 0, 1, 0, 0);
     f.globalCompositeOperation = 'source-in';
-    f.drawImage(ART.bg.night || ART.bg.day, -180, 0, 2400, 1000);
-    f.globalCompositeOperation = 'source-over';
+    f.drawImage(roomCv, 0, -fy * U);
+    f.restore();
   }
   paintFurniture(f);
   paintFrontSnow(f);

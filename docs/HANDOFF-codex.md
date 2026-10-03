@@ -6,6 +6,12 @@ Owner: Sameep (founder; wants calm, premium, cinematic quality — "Anyma-level 
 text bubbles). Latest release: **0.12.1** (notarized). Everything below is committed locally as WIP on `main`
 (`f08e387` + this handoff commit) but **not pushed / not released**.
 
+## Verification update — 2026-10-03
+P0 items 1–3 and P1 items 4–5 below are completed and committed locally. See the priority checklist in
+`docs/backlog.md` and the dated verification entries in `docs/scene-polish.md` for changes, prompts,
+screenshots and test results. The installed/running wallpaper app was not rebuilt, replaced or reloaded.
+Native in-app testing and release remain separate, owner-authorized work.
+
 ## Read first (in order)
 1. `docs/backlog.md` — the full checklist of everything the owner asked for, with status. Source of truth.
 2. `HANDOFF.md` — architecture overview (host Swift app, scenes, lw.js shim, build/dev).

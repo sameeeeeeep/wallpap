@@ -7,7 +7,7 @@ Status: [ ] todo · [~] in progress (agent) · [x] done · owner in brackets
 - [x] P0 Night Drive: continuous distance/detail fades, crest clipping, road-aligned traffic, painted biome/roadside assets. Opened motion contact sheets (66s each), ultrawide left/rain and individual biome shots. Forest 3.88 ms total / 3.08 ms JS at 1440×900.
 - [x] P0 Menu: all 16 scene control sets checked at 340px in light/dark; Bowls timer overflow fixed; expanded shared sections also inspected.
 - [x] P1 Cats + Grass: verified departures/returns, reminder and count changes while off, shared moon, accumulation/melt and mirrored/avoid layouts; fixed mountain seam and painted Cats clouds.
-- [ ] P1 Rooftop + Ramen: verify/fix day/night plate alignment
+- [x] P1 Rooftop + Ramen: source and rendered day/night landmarks align; retained plates. Fixed Rooftop foreground cutouts sampling night art during daylight; day/night/dawn/dusk and wide captures inspected.
 
 Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; inspect `wkshot` screenshots before advancing and commit each finished item locally. No push, release or running-app replacement.
 
@@ -50,7 +50,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [ ] Airport scene (kit plate add-on) — PAUSED for compute (art + kit plate demo ready)
 - [ ] Realistic plate pipeline + Marine Drive, Taj Mahal, Hillside Valley — PAUSED for compute (low priority per user)
 - [ ] Illustrative "SimCity" living city (traffic, day/night)
-- [~] Codex art over procedural fakes: done in cabin/café/records/speakeasy/rooftop/ramen/train/bowls; rooftop + ramen day plates generating
+- [~] Codex art over procedural fakes: done in cabin/café/records/speakeasy/rooftop/ramen/train/bowls; rooftop + ramen day plates aligned and verified
 
 ## Web + marketing
 - [x] Landing page: scroll story, picker above scene, demo songs + player, auto-tour, make-a-scene + community, new pricing/FAQ (local, not pushed)

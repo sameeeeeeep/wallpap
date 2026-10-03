@@ -19,8 +19,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:transparent;color:var(--ink);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
-body{width:340px;background:var(--bg)}
-#root{padding:14px 14px 10px}
+body{width:100%;min-width:300px;background:var(--bg)}
+#root{padding:14px 16px 0}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .logo{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:600;letter-spacing:-.01em}
@@ -100,6 +100,17 @@ details summary h2::after{content:"›";padding-left:8px;transition:transform .2
 details[open] summary h2::after{transform:rotate(90deg)}
 details summary h2{margin-bottom:0}
 details[open] summary h2{margin-bottom:8px}
+.qbar{position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:2px;margin:12px -16px 0;padding:8px 12px 10px;
+  background:var(--bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+.qbar button{width:38px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-2);transition:background .15s,color .15s}
+.qbar button:hover{background:var(--card);color:var(--ink)}
+.qbar button[aria-pressed=true]{background:var(--card-2);color:var(--ink)}
+.qbar button.on-accent[aria-pressed=true]{color:var(--accent)}
+.qbar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.qbar .sep{flex:1}
+.sel{position:relative;flex:none;max-width:60%}
+.sel select{appearance:none;-webkit-appearance:none;font:inherit;font-size:11.5px;color:var(--ink);background:var(--card);border:0;border-radius:7px;padding:4px 24px 4px 9px;max-width:100%;cursor:pointer}
+.sel::after{content:"";position:absolute;right:9px;top:50%;width:5px;height:5px;border-right:1.4px solid var(--ink-3);border-bottom:1.4px solid var(--ink-3);transform:translateY(-70%) rotate(45deg);pointer-events:none}
 .foot{display:flex;gap:2px;margin-top:12px;padding-top:9px;border-top:1px solid var(--line)}
 .foot button{flex:1;padding:5px 4px;border-radius:6px;color:var(--ink-2);font-size:11px}
 .foot button:hover{background:var(--card);color:var(--ink)}
@@ -162,6 +173,18 @@ const ICON = {
   check: '<svg class="ico" viewBox="0 0 12 12"><path d="M2.5 6.4l2.2 2.1 4.8-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   share: '<svg class="ico" viewBox="0 0 12 12"><path d="M6 1.5v6.2M3.6 3.8L6 1.5l2.4 2.3M2.5 6.5v3.2h7V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+// Quick-bar icons (stroke, currentColor)
+const QI = {
+  pause: '<svg viewBox="0 0 20 20"><path d="M7 5v10M13 5v10"/></svg>',
+  play: '<svg viewBox="0 0 20 20"><path d="M7 5l8 5-8 5z"/></svg>',
+  sound: '<svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5M16 5.5a6.5 6.5 0 0 1 0 9"/></svg>',
+  mute: '<svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 8l4 4M18 8l-4 4"/></svg>',
+  music: '<svg viewBox="0 0 20 20"><path d="M8 15V5l8-1.5v10"/><circle cx="6" cy="15" r="2"/><circle cx="14" cy="13.5" r="2"/></svg>',
+  breathe: '<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/><circle cx="10" cy="10" r="6.5" opacity=".55"/></svg>',
+  next: '<svg viewBox="0 0 20 20"><path d="M5 5l7 5-7 5zM15 5v10"/></svg>',
+  reload: '<svg viewBox="0 0 20 20"><path d="M15.5 8A6 6 0 1 0 16 12"/><path d="M16 4v4h-4"/></svg>',
+  more: '<svg viewBox="0 0 20 20"><circle cx="5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15" cy="10" r="1.2"/></svg>',
+};
 const PERKS = ['Every look of every scene', 'Music Mode — your songs in the scene', 'Breathing inside the scene', 'Water & breathe reminders', 'Live weather, real sun and moon', 'Soundscapes · your own scenes'];
 
 function render(state) {
@@ -172,10 +195,12 @@ function render(state) {
   const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
   const sceneCtl = S.sceneCtl.map((c) => c.type === 'choice'
-    ? (c.title === 'Look' || c.options.length > 4 || c.options.some((o) => String(o.label).length > 9)
-      // Long labels and larger choice sets get a full-width, two-column block.
+    ? (c.title === 'Look'
       ? `<div class="look"><span class="note">${esc(c.title)}</span>${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { grid2: true })}</div>`
-      : `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting', { seg: c.options.length <= 4 })}</div></div>`)
+      : c.options.length <= 4 && !c.options.some((o) => String(o.label).length > 9)
+      ? `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting')}</div></div>`
+      // many or long options: one compact dropdown instead of a wall of buttons
+      : `<div class="row"><span class="note">${esc(c.title)}</span><span class="sel"><select data-act="pickSetting" aria-label="${esc(c.title)}">${c.options.map((o) => `<option value='${esc(JSON.stringify(o.v))}'${o.on ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></span></div>`)
     : '').join('');
   // Every action the current scene offers (feed, pet, toy, fireworks, play/pause…), as one row.
   const sceneActs = S.sceneCtl.filter((c) => c.type === 'action')
@@ -196,8 +221,7 @@ function render(state) {
   ${sec('scenes', 'Scenes', esc(cur.title) + (S.cycle ? ` · changes every ${esc(label(CYCLE, S.cycle))}` : ''), `
     <div class="tabs">${cats.map((c) => `<button aria-pressed="${c === tab}" data-tab="${esc(c)}">${esc(c)}</button>`).join('')}<button aria-pressed="${tab === 'Discover'}" data-tab="Discover">Discover${offers.length ? ` <em class="count">${offers.length}</em>` : ''}</button>${S.scenes.some((x) => x.custom) || S.pro ? '' : ''}<button aria-pressed="${tab === 'Custom'}" data-tab="Custom">Custom</button></div>
     ${tab === 'Discover' ? discover(offers, locked) : tab === 'Custom' ? customTab(locked) : `<div class="grid">${S.scenes.filter((s) => s.cat === tab).map(tile).join('')}</div>`}
-    <div class="row" style="margin-top:9px"><span class="note">Change scene</span>${S.cycle ? '<button class="note" data-a="nextSceneNow" style="text-decoration:underline">Next scene now</button>' : ''}</div>
-    ${chips(CYCLE, S.cycle, 'pickSceneCycle', { tag: true })}
+    <div class="row" style="margin-top:9px"><span class="note">Change scene automatically</span><span class="sel"><select data-act="pickSceneCycle" data-tag aria-label="Change scene automatically">${CYCLE.map(([v, l]) => `<option value="${v}"${v === S.cycle ? ' selected' : ''}>${v ? 'Every ' + l : 'Off'}</option>`).join('')}</select></span></div>
     ${S.cycle ? `<div class="row"><div style="width:190px">${chips([['all', 'All scenes'], ['category', 'This category']], S.cycleScope, 'pickSceneCycleScope')}</div><span>Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}`)}
 
   ${sec('env', 'Environment', `${esc(label(CLOCKS.concat(VIEWS), S.timeView).toLowerCase())} time · ${S.weather ? esc(label(WEATHER, S.weather).toLowerCase()) : 'live weather'}`, `
@@ -213,7 +237,6 @@ function render(state) {
     <div class="row"><span>Also avoid my desktop icons</span>${sw(S.avoidIcons, 'toggleAvoidIcons')}</div>`)}
 
   ${sec('sound', 'Sound &amp; Music', [S.muted ? 'muted' : 'sound on', S.music && 'music mode', S.soundscape !== 'off' && label(SCAPES, S.soundscape).toLowerCase()].filter(Boolean).join(' · '), `
-    <div class="row"><span>Sound</span>${sw(!S.muted, 'toggleMute')}</div>
     <div class="row"><span>Music Mode${pro(locked)} <span class="note">Music · Spotify</span></span>${sw(S.music, locked ? 'openPro' : 'toggleMusicMode')}</div>
     ${S.music && !cur.music ? `<p class="note">This scene has no music player. Music Mode shows in scenes marked with a note (${esc(S.scenes.filter((x) => x.music).map((x) => x.title).slice(0, 4).join(', '))}…).</p>` : ''}
     ${S.music && S.musicDenied ? '<button class="warn" data-a="openAutomationSettings">Allow wallpap to control Music/Spotify…</button>' : ''}
@@ -244,7 +267,6 @@ function render(state) {
     <p class="note" style="margin:5px 0 2px">${ENERGY_NOTE[S.energy] || ''}</p>
     ${S.energy === 'away' ? `<div class="row"><span class="note">Pause after</span></div>${chips(S.awayChoices, S.away, 'pickAway', { tag: true })}<p class="note" style="margin-top:3px">${S.away === S.awayRec ? 'Recommended — a good balance of battery and life on screen.' : `Recommended: ${esc(label(S.awayChoices, S.awayRec))}.`}</p>` : ''}
     <div class="row" style="margin-top:8px"><span>Frame rate</span><div style="width:190px">${chips(FPS, S.fps, 'pickFps', { tag: true })}</div></div>
-    <div class="row"><span>Pause animation now</span>${sw(S.paused, 'togglePause')}</div>
     <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>`)}
 
   ${sec('acct', S.pro ? 'wallpap Pro' : 'Free plan', S.pro ? 'all looks and features' : 'every scene, default looks', S.pro ? `
@@ -256,11 +278,16 @@ function render(state) {
     <p class="note" style="margin-top:6px">One purchase, up to 3 Macs. No subscription.</p>
     <div class="row"><button class="note" data-a="shareApp" style="text-decoration:underline">${ICON.share} Share wallpap</button><button class="note" data-a="openSubmitScene" style="text-decoration:underline">Make a scene</button></div>`)}
 
-  <div class="foot">
-    <button data-a="reloadScene">Reload</button>
-    <button data-a="showNativeMenu">All settings…</button>
-    <button data-a="quit">Quit</button>
-  </div>`;
+  <nav class="qbar" aria-label="Quick controls">
+    <button data-a="togglePause" aria-pressed="${!!S.paused}" title="${S.paused ? 'Resume animation' : 'Pause animation'}">${S.paused ? QI.play : QI.pause}</button>
+    <button data-a="toggleMute" aria-pressed="${!S.muted}" title="${S.muted ? 'Sound off' : 'Sound on'}">${S.muted ? QI.mute : QI.sound}</button>
+    <button class="on-accent" data-a="${S.pro ? 'toggleMusicMode' : 'openPro'}" aria-pressed="${!!S.music}" title="Music Mode${S.pro ? '' : ' (Pro)'}">${QI.music}</button>
+    <button class="on-accent" data-a="toggleCalm" aria-pressed="${!!S.calm}" title="Breathe${S.pro ? '' : ' (Pro)'}">${QI.breathe}</button>
+    <button data-a="nextSceneNow" title="Next scene">${QI.next}</button>
+    <span class="sep"></span>
+    <button data-a="reloadScene" title="Reload scene">${QI.reload}</button>
+    <button data-a="showNativeMenu" title="All settings, Quit">${QI.more}</button>
+  </nav>`;
   reportHeight();
 }
 
@@ -272,6 +299,11 @@ const isOpen = (k) => (k in secOpen ? secOpen[k] : SEC_DEFAULT[k]);
 const label = (list, v) => ((list.find((x) => String(x[0]) === String(v)) || list[0])[1]);
 const sec = (k, title, hint, body) => `<section><details ${isOpen(k) ? 'open' : ''}><summary data-open="${k}"><h2><span>${title}</span><small>${isOpen(k) ? '' : hint}</small></h2></summary>${body}</details></section>`;
 
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest('select[data-act]'); if (!sel) return;
+  const v = JSON.parse(sel.value);
+  send(sel.dataset.act, v, sel.hasAttribute('data-tag') ? Number(v) : null);
+});
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab],[data-a],summary');
   if (!t) return;

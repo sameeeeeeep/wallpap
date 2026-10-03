@@ -31,6 +31,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [~] Register new scenes + skins: drive, kinetic, fluids, skies, cymatics skins [x]; train skins (pending agent); kit add-ons via catalog [x]
 
 ## Scenes (agents)
+- [x] Santorini Cats directional walks (Codex): all five coats have 8-frame front/rear cycles; velocity selects views with contact-gated hysteresis, distance planting and side fallback. Diagonal wandering enabled; 40 day/night motion sequences plus vertical/mirror/run checks visually inspected (`shots/cats-dirs/`); 43 tests pass. Directional runs use faster walk cycles.
 - [x] Walk/run cycles + paw planting (17 cycles, planted paw ±1 px, tests) — cats/grass polish beyond that stopped by user (partial edits verified working)
 - [x] Snowy Cabin realism + real fire (painted plates day/night/summer, flipbook fire, snow accumulation, record player, pets lit by room)
 - [x] Corner Café (turntable / Pro jukebox, painted street + cars, day/overcast rooms) + Record Store (painted deck, window mask, dog bed) — records ~6 ms/frame (watch)

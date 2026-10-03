@@ -1,0 +1,225 @@
+TAP version 13
+# Subtest: solar lighting anchors follow local rise/set in summer and winter
+ok 1 - solar lighting anchors follow local rise/set in summer and winter
+  ---
+  duration_ms: 24.889125
+  ...
+# Subtest: moon visibility follows its horizon crossing, independently of night
+ok 2 - moon visibility follows its horizon crossing, independently of night
+  ---
+  duration_ms: 1.728667
+  ...
+# Subtest: polar day/night remain finite without invented rise/set times
+ok 3 - polar day/night remain finite without invented rise/set times
+  ---
+  duration_ms: 9.47375
+  ...
+# Subtest: missing/invalid coordinates fall back and zero coordinates remain valid
+ok 4 - missing/invalid coordinates fall back and zero coordinates remain valid
+  ---
+  duration_ms: 0.492708
+  ...
+# Subtest: palette: day is bright, night is dark and moonlit, golden peaks at sunset
+ok 5 - palette: day is bright, night is dark and moonlit, golden peaks at sunset
+  ---
+  duration_ms: 8.371917
+  ...
+# Subtest: palette: weather dims, wets, snows and covers the sky
+ok 6 - palette: weather dims, wets, snows and covers the sky
+  ---
+  duration_ms: 12.933458
+  ...
+# Subtest: palette: shadows are long at low sun and point away from it
+ok 7 - palette: shadows are long at low sun and point away from it
+  ---
+  duration_ms: 2.024417
+  ...
+# Subtest: steer: seek/flee/bounds/calmZone push the right way
+ok 8 - steer: seek/flee/bounds/calmZone push the right way
+  ---
+  duration_ms: 1.073708
+  ...
+# Subtest: rope: pinned rope keeps its segment length and sags under gravity
+ok 9 - rope: pinned rope keeps its segment length and sags under gravity
+  ---
+  duration_ms: 125.537833
+  ...
+# Subtest: noise is deterministic and bounded
+ok 10 - noise is deterministic and bounded
+  ---
+  duration_ms: 1.509125
+  ...
+# Subtest: path: arc-length parameterisation, ends, heading
+ok 11 - path: arc-length parameterisation, ends, heading
+  ---
+  duration_ms: 1.369541
+  ...
+# Subtest: steer: layout-aware clear band (widgets left or right)
+ok 12 - steer: layout-aware clear band (widgets left or right)
+  ---
+  duration_ms: 0.473125
+  ...
+# Subtest: moon phase modulates night exposure without losing storm shadow detail
+ok 13 - moon phase modulates night exposure without losing storm shadow detail
+  ---
+  duration_ms: 0.768958
+  ...
+# Subtest: gait changes finish a stand-up transition instead of restarting it
+ok 14 - gait changes finish a stand-up transition instead of restarting it
+  ---
+  duration_ms: 18.140792
+  ...
+# Subtest: pose blends conserve opacity and never disappear at their midpoint
+ok 15 - pose blends conserve opacity and never disappear at their midpoint
+  ---
+  duration_ms: 5.375542
+  ...
+# Subtest: walking frames retain animal height despite differing image dimensions
+ok 16 - walking frames retain animal height despite differing image dimensions
+  ---
+  duration_ms: 45.231875
+  ...
+# Subtest: drawn transition paths play forward, reverse and chain through sit
+ok 17 - drawn transition paths play forward, reverse and chain through sit
+  ---
+  duration_ms: 8.430958
+  ...
+# Subtest: in-between layout meets both end poses and mirrors the turn anchor
+ok 18 - in-between layout meets both end poses and mirrors the turn anchor
+  ---
+  duration_ms: 3.975292
+  ...
+# Subtest: a frame carrying its own size overrides the pose scale
+ok 19 - a frame carrying its own size overrides the pose scale
+  ---
+  duration_ms: 3.642208
+  ...
+# Subtest: in-between playback: pose changes, turns (mirrored when facing left) and cancels
+ok 20 - in-between playback: pose changes, turns (mirrored when facing left) and cancels
+  ---
+  duration_ms: 7.231375
+  ...
+# Subtest: standing up while facing the other way plays the stand-up, not the turn
+ok 21 - standing up while facing the other way plays the stand-up, not the turn
+  ---
+  duration_ms: 32.976917
+  ...
+# Subtest: swaps cut into drawn frames, fade quickly out of them
+ok 22 - swaps cut into drawn frames, fade quickly out of them
+  ---
+  duration_ms: 4.584083
+  ...
+# Subtest: pose state cuts into drawn frames and fades quickly out of them
+ok 23 - pose state cuts into drawn frames and fades quickly out of them
+  ---
+  duration_ms: 11.555292
+  ...
+# Subtest: gait cycle phase advances with distance travelled, not with time
+ok 24 - gait cycle phase advances with distance travelled, not with time
+  ---
+  duration_ms: 6.652083
+  ...
+# Subtest: a stopped pet settles on the nearest contact frame instead of freezing mid-stride
+ok 25 - a stopped pet settles on the nearest contact frame instead of freezing mid-stride
+  ---
+  duration_ms: 3.921375
+  ...
+# Subtest: walk and run hand over at the matching phase
+ok 26 - walk and run hand over at the matching phase
+  ---
+  duration_ms: 5.951542
+  ...
+# Subtest: cycle layout: one size for the loop, walking height, torso-pinned anchor
+ok 27 - cycle layout: one size for the loop, walking height, torso-pinned anchor
+  ---
+  duration_ms: 6.97375
+  ...
+# Subtest: cycle frames are gait cuts, sized by their own petK
+ok 28 - cycle frames are gait cuts, sized by their own petK
+  ---
+  duration_ms: 4.743458
+  ...
+# Subtest: petGait: stride from the set, plain walk1 once standing on frame 1, run falls back to the walk
+ok 29 - petGait: stride from the set, plain walk1 once standing on frame 1, run falls back to the walk
+  ---
+  duration_ms: 10.997584
+  ...
+# Subtest: planted paw keeps its world x within ±1 px over a stance (hold still, step at cuts)
+ok 30 - planted paw keeps its world x within ±1 px over a stance (hold still, step at cuts)
+  ---
+  duration_ms: 24.357375
+  ...
+# Subtest: paw planting preserves the average speed and stays within a step of the pet
+ok 31 - paw planting preserves the average speed and stays within a step of the pet
+  ---
+  duration_ms: 14.899667
+  ...
+# Subtest: even plant steps sum to the stride; the offset is periodic and steps only at cuts
+ok 32 - even plant steps sum to the stride; the offset is periodic and steps only at cuts
+  ---
+  duration_ms: 3.784041
+  ...
+# Subtest: installed cycles plant their paws (plant.py QA reports)
+ok 33 - installed cycles plant their paws (plant.py QA reports)
+  ---
+  duration_ms: 14.357958
+  ...
+# Subtest: direction selection uses hysteresis, contact phases and signed ground velocity
+ok 34 - direction selection uses hysteresis, contact phases and signed ground velocity
+  ---
+  duration_ms: 4.302667
+  ...
+# Subtest: diagonal gait keeps distance phase, chooses the same contact index, and plants both axes
+ok 35 - diagonal gait keeps distance phase, chooses the same contact index, and plants both axes
+  ---
+  duration_ms: 4.587375
+  ...
+# Subtest: a missing directional cycle falls back to a complete side loop without resetting phase
+ok 36 - a missing directional cycle falls back to a complete side loop without resetting phase
+  ---
+  duration_ms: 3.44475
+  ...
+# Subtest: directional loading is atomic: one failed frame disables only that view
+ok 37 - directional loading is atomic: one failed frame disables only that view
+  ---
+  duration_ms: 4.656291
+  ...
+# Subtest: all cat directional assets contain eight nonempty PNG frames
+ok 38 - all cat directional assets contain eight nonempty PNG frames
+  ---
+  duration_ms: 22.631208
+  ...
+# Subtest: directional padding never changes the animal scale or foot baseline
+ok 39 - directional padding never changes the animal scale or foot baseline
+  ---
+  duration_ms: 3.487917
+  ...
+# Subtest: 2D planted treadmill holds world contact for front, back, left and vertical movement
+ok 40 - 2D planted treadmill holds world contact for front, back, left and vertical movement
+  ---
+  duration_ms: 9.077333
+  ...
+# Subtest: directional art registration and runtime geometry remain synchronized
+ok 41 - directional art registration and runtime geometry remain synchronized
+  ---
+  duration_ms: 4.079667
+  ...
+# Subtest: rational harmonograph orbits close, including the rotary drop pendulum
+ok 42 - rational harmonograph orbits close, including the rotary drop pendulum
+  ---
+  duration_ms: 76.413959
+  ...
+# Subtest: all fifteen pendulums revive at the phrase period without staying synchronized
+ok 43 - all fifteen pendulums revive at the phrase period without staying synchronized
+  ---
+  duration_ms: 0.83325
+  ...
+1..43
+# tests 43
+# suites 0
+# pass 43
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 575.102875

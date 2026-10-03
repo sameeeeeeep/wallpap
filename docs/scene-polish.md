@@ -648,3 +648,29 @@ Validation so far: `node --test tests/*.cjs` passes **43/43**. New tests cover m
 atomicity, hysteresis, contact-only changes, vertical/left movement, phase continuity, run
 fallback, vector planting, geometry/metadata parity and all 80 installed PNGs. Full day/night
 WebKit matrix and visual findings follow below.
+
+### Final WebKit motion verification
+
+Ran `python3 shots/cats-dirs/verify.py` through the existing `./tools/wkshot`, using
+`WKSHOT_FRAMES`: five coats × lateral/front/back/mid-walk turn × noon/midnight = 40 sequences,
+16 captured frames each. `verify-extra.py` adds 12-frame night sequences for pure vertical
+travel, mirrored-left travel and directional run fallback. All **676 captured frames** have
+empty browser error lists; all five coats load both complete directional sets. Reports and
+contact sheets are retained alongside `summary.json`; temporary full-size frame PNGs were
+removed after composing the contact sheets.
+
+Opened and inspected every final contact sheet and the 80-frame art overview. Front walks
+show chest/near-far leg foreshortening, back walks show rump/back/tail, and neither uses the
+side silhouette on a diagonal. Turn sequences retain body height and ground baseline as the
+body changes view; apparent body length shortens with foreshortening. Night coats remain
+readable, markings remain recognizable across frames, and the final paw registration removes
+the conspicuous sliding seen in the first generated cuts. No obvious height/scale pops in the
+inspected sequences. The landmark-error qualification above still applies outside the sampled
+headings. Running deliberately reuses the eight-frame directional walk at the faster distance
+rate rather than claiming a newly authored run cycle.
+
+An additional 60-second natural-scene self-test covered 1,800 update frames: zero identity
+errors, zero teleports, maximum step 2.6. The noon sample mostly rested, so depth-motion evidence
+comes from the forced-walk matrix rather than that natural sample. `natural-overview.jpg` and
+`natural.log` retain that check. `node --test tests/*.cjs`: **43 passed, 0 failed** (`tests.log`).
+No wallpaper-app rebuild, replacement, relaunch, release or push was performed.

@@ -1,0 +1,402 @@
+{
+  "sequences": 43,
+  "captured_frames": 676,
+  "browser_errors": 0,
+  "tests_passed": 43,
+  "natural_self_test": {
+    "frames": 1800,
+    "idErrors": 0,
+    "teleports": 0,
+    "maxStep": 2.6
+  },
+  "checks": [
+    {
+      "sequence": "orange-lateral-day",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-front-day",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-back-day",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-turn-day",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-lateral-night",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-front-night",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-back-night",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "orange-turn-night",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-lateral-day",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-front-day",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-back-day",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-turn-day",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-lateral-night",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-front-night",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-back-night",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "black-turn-night",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-lateral-day",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-front-day",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-back-day",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-turn-day",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-lateral-night",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-front-night",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-back-night",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "grey-turn-night",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-lateral-day",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-front-day",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-back-day",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-turn-day",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-lateral-night",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-front-night",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-back-night",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "calico-turn-night",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-lateral-day",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-front-day",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-back-day",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-turn-day",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-lateral-night",
+      "frames": 16,
+      "views": [
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-front-night",
+      "frames": 16,
+      "views": [
+        "f"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-back-night",
+      "frames": 16,
+      "views": [
+        "b"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "siamese-turn-night",
+      "frames": 16,
+      "views": [
+        "f",
+        "side"
+      ],
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "extra-vertical",
+      "frames": 12,
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "extra-mirror",
+      "frames": 12,
+      "errors": 0,
+      "visually_inspected": true
+    },
+    {
+      "sequence": "extra-run",
+      "frames": 12,
+      "errors": 0,
+      "visually_inspected": true
+    }
+  ]
+}

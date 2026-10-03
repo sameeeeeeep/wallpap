@@ -438,3 +438,6 @@ svg.pk-mus{width:10px;height:10px;fill:none;stroke:var(--accent);stroke-width:2.
 .playsec-shot img{display:block;width:100%;height:auto}
 @media (max-width:1100px){.playsec-grid{grid-template-columns:1fr;gap:44px}}
 @media (max-width:760px){.playsec{padding:64px var(--gutter)}}
+.petsec-shot{max-width:1100px}
+.petsec-cap{display:grid;grid-template-columns:repeat(3,1fr);font-size:13px;color:var(--ink-2);padding:12px 4px 0;background:var(--bg,transparent)}
+.petsec-cap span{text-align:center}

@@ -11,6 +11,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
     let web: WKWebView
     var nativeMenu = NSMenu()
     var ready = false
+    private var outsideClick: Any?   // global mouse-down monitor while the panel is open
 
     init(app: App) {
         self.app = app
@@ -36,6 +37,19 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         app.setEngaged(true); app.checkEngagement()   // the scene keeps running under the panel
         NSApp.activate(ignoringOtherApps: true)   // so the transient popover closes on an outside click
+        // .transient alone misses clicks on the desktop and other apps when wallpap isn't key, so any
+        // mouse-down outside our own windows closes the panel too.
+        if outsideClick == nil {
+            outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+                self?.popover.performClose(nil)
+            }
+            NotificationCenter.default.addObserver(self, selector: #selector(popoverClosed), name: NSPopover.didCloseNotification, object: popover)
+        }
+    }
+
+    @objc private func popoverClosed(_ n: Notification) {
+        if let m = outsideClick { NSEvent.removeMonitor(m); outsideClick = nil }
+        NotificationCenter.default.removeObserver(self, name: NSPopover.didCloseNotification, object: popover)
     }
 
     func push() {

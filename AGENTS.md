@@ -8,3 +8,5 @@ Design first (`docs/scene-design.md`: references, style, a cast of animated acto
 `tools/plate-scene/QUICKSTART.md`). Same playbook as the Claude skill at `~/.claude/skills/new-scene/SKILL.md`: never
 hand-code a scene; improve `addons/_template` + presets so every scene benefits; render the wkshot matrix and check
 night quality, mirrored/ultrawide duplication, natural clouds, grounded life and exposed-only weather before done.
+
+**Hard rule:** everything that moves is animated from a sprite sheet with frames — never a still image moved along a path (docs/polish-brief.md §12).

@@ -106,3 +106,10 @@ verify with a crop next to a door/person. Same for speed (cars ~30–50 km/h in 
 ## 11. Weather must be visible and right
 Rain reads as rain at wallpaper scale: streaks with depth layers, splashes/ripples on exposed ground and water, wet
 sheen and reflections, darker overcast grade, drops on glass when there's glass. Never "rain" that's just a faint haze.
+
+## 12. Sprite sheets, always (owner: "sprite sheets always, not just still images")
+Anything that moves or lives in a scene — aircraft, cars, buses, boats, people, animals, birds, paragliders, kites,
+trains, flags, laundry, smoke, fire — is drawn from a SPRITE SHEET with animation frames (walk/fly/roll/sway cycles,
+wheel/rotor/propeller turns, turn angles, bobbing), generated with consistent scale/camera/lighting and cut cleanly.
+A single still image translated along a path is not acceptable, ever. If a sheet looks wrong, regenerate it; if it
+can't be made good, leave the actor out rather than faking it.

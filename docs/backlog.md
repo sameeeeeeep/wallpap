@@ -86,6 +86,6 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 
 ## Shared add-on audit fixes — 2026-10-04 (audit-fixes worktree)
 - [~] Night sky: shared moon composition, real phase in pinned previews, graded exposure and preserved independent stars implemented. Seven horizon add-ons pass visual night review and G1; full ten-scene acceptance pending missing art in beach/garden/sky-kites.
-- [ ] Rain scanline banding: shared wet-sheen noise identified as cause; replace and inspect.
+- [~] Rain scanline banding: replaced the shared 20:1 stretched wet-sheen noise with broad warped patches; hillside rain sequences inspected without stripes. Garden verification awaits its missing plate.
 - [ ] Rain lighting: weather must override clear-cloud settings, suppress direct sun/shadows, soften contrast, and restore smoothly.
 - [ ] Clouds: scene-id seed, natural rounded formations and horizon haze, distinct layouts; inspect full before/after matrix.

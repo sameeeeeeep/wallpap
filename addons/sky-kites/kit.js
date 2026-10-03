@@ -1611,7 +1611,10 @@ function plate(o = {}) {
     // weather on exposed ground: wet darkens + sheen, snow settles on the lit, up-facing bits first
     float ground = expM * (1.0 - waterM) * (1.0 - skyM);
     col = mix(col, col * vec3(0.72, 0.74, 0.78) + uSkyRefl * 0.05, uWet * ground * 0.7);
-    float sheen = pow(max(0.0, noise(px * vec2(0.008, 0.16)) - 0.28), 2.0);
+    // Broad irregular wet patches. The old 20:1 noise stretch made a bright scanline every ~6 CSS px.
+    vec2 wetP = px / uView.y * vec2(11.0, 16.0);
+    wetP += vec2(fbm3(wetP * .7), fbm3(wetP * .7 + 8.3)) * 1.5;
+    float sheen = pow(max(0.0, fbm3(wetP) - 0.35), 2.0);
     col += mix(vec3(0.22,0.27,0.32),vec3(0.10,0.15,0.23),uNight) * sheen * uWet * ground;
     float lum = dot(col, vec3(0.3, 0.59, 0.11));
     col = mix(col, vec3(0.9, 0.93, 0.98) * (uAmb * 0.9 + 0.1), uSnow * ground * smoothstep(0.08, 0.5, lum + uSnow * 0.25 + (fbm3(px * 0.02) - 0.5) * 0.3));

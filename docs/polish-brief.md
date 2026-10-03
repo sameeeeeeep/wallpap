@@ -90,3 +90,19 @@ the scene brief says otherwise).
 - Snow ACCUMULATES over time on exposed upward-facing surfaces (ledges, roofs, railings, window sills outside, ground,
   branches) — build up gradually during snowfall, persist a while after, melt/sparkle in sun; snow on glass corners.
 - Fog/haze grows with depth; lights get halos in fog/rain. Wind direction consistent across particles, smoke, foliage.
+
+## 9. Night is moonlight, not black (owner, repeatedly)
+Night must never collapse to near-black or a flat dark slab. Grade toward cool moonlight: overall exposure maybe 25–40%
+of day, blue-silver key light from the moon's direction (strength follows the real moon phase — dimmer on new moon but
+still readable), lifted shadows with detail, silver highlights on water/stone/foliage, stars and the shared moon in a
+graded (not flat) sky, warm practical lights (windows, lamps) as accents. The scene must remain clearly legible at a
+glance. Same for every scene and every add-on.
+
+## 10. Scale & physics sanity (owner: "look at the size of the car, is this a joke?")
+Check every moving or placed object against known sizes in the plate: doors ≈ 2.1–2.2 m, people ≈ 1.7 m, cars ≈ 4.2 m
+long × 1.5 m tall, buses ≈ 12 m, aircraft per type, boats per type. Measure in the plate, set the scale from it, and
+verify with a crop next to a door/person. Same for speed (cars ~30–50 km/h in a city street, people ~1.4 m/s).
+
+## 11. Weather must be visible and right
+Rain reads as rain at wallpaper scale: streaks with depth layers, splashes/ripples on exposed ground and water, wet
+sheen and reflections, darker overcast grade, drops on glass when there's glass. Never "rain" that's just a faint haze.

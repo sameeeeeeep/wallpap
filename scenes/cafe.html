@@ -359,7 +359,7 @@ function computeLayout() {
   o.st.lampX = w.x0 + w.w * 0.9; o.st.lampY = w.y0 + w.h * 0.2;
   // painted street plate (square, top-aligned over the window + its parallax margin)
   o.plate = { x: w.x0 - 12, y: w.y0 - 12, s: w.w + 24 };
-  o.mU = 26;   // world units per metre over there (a shop door ≈ 2.2 m)
+  o.mU = 46;   // world units per metre over there — measured off the painted street: a shop door ≈ 2.2 m ≈ 100 units
   o.lanes = null;
   if (streetArt()) {
     const P = o.plate, py = (f) => P.y + f * P.s;

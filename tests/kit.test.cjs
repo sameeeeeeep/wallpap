@@ -74,3 +74,10 @@ test('pinned-hour sky still uses the real lunar phase without a location',()=>{
  assert.equal(p.moonFrac,.21);assert.equal(p.moonPhase,.84);
  delete window.SunCalc;
 });
+test('rain lighting removes the direct sun and blue sky, clear restores them',()=>{
+ const clear=Kit.palette({hour:15,weather:'clear'}),rain=Kit.palette({hour:15,weather:'rain',intensity:.7});
+ assert.equal(clear.direct,1);assert.equal(rain.direct,0);
+ assert.equal(rain.overcast,1);assert.equal(rain.golden,0);
+ assert.ok(rain.zenith[2]-rain.zenith[0]<.1,'neutral storm ceiling');
+ assert.ok(clear.zenith[2]-clear.zenith[0]>.4,'clear blue restored');
+});

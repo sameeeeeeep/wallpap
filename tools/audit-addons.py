@@ -17,7 +17,7 @@ out.mkdir(parents=True, exist_ok=True)
 ids = a.ids or sorted(d.name for d in (ROOT/'addons').iterdir() if (d/'scene.json').exists())
 cases = {'day': (12,'clear',1600,1000), 'night': (23,'clear',1600,1000),
          'rain': (15,'rain',1600,1000), 'wide': (23,'clear',3440,1440),
-         'left': (23,'clear',1600,1000)}
+         'left': (23,'clear',1600,1000), 'start-rain': (15,'clear',1600,1000), 'stop-rain': (15,'rain',1600,1000)}
 results = json.loads((out/'results.json').read_text()) if (out/'results.json').exists() else []
 results = [r for r in results if r['id'] not in ids]
 for sid in ids:
@@ -29,8 +29,13 @@ for sid in ids:
         png = out/f'{sid}-{case}.png'
         query = f'virtual=1&muted=1&hour={hour}&weather={weather}' + ('&side=left' if case in ('wide','left') else '')
         js = "window.__shotReport=()=>({ready:!!window.KIT?.ready,light:KIT.L,moon:KIT.layer('sky')?.moon});"
-        run = subprocess.run([str(ROOT/'tools/wkshot'), f'http://127.0.0.1:5214/addons/{sid}/index.html?{query}',str(png),str(w),str(h),'4',js],
-                             env={**os.environ,'WKSHOT_FRAMES':'0,3,6'},capture_output=True,text=True,timeout=65)
+        frames = '0,3,6'
+        if case in ('start-rain','stop-rain'):
+            target = 'rain' if case == 'start-rain' else 'clear'
+            js += f"LW.advance(4);LW.setEnv({{weather:'{target}',intensity:1}});"
+            frames = '0,6,30'
+        run = subprocess.run([str(ROOT/'tools/wkshot'), f'http://127.0.0.1:5214/addons/{sid}/index.html?{query}',str(png),str(w),str(h),'0' if case in ('start-rain','stop-rain') else '4',js],
+                             env={**os.environ,'WKSHOT_FRAMES':frames},capture_output=True,text=True,timeout=65)
         (out/f'{sid}-{case}.log').write_text(run.stdout+run.stderr)
         reports=[json.loads(s.removeprefix('result: ')) for s in run.stdout.splitlines() if s.startswith('result: ')]
         if run.returncode or len(reports)!=3 or any(r.get('errors') or not r.get('report',{}).get('ready') for r in reports) or 'js error:' in run.stdout:
@@ -43,7 +48,7 @@ for sid in ids:
                 luma=sum(c*k for c,k in zip(mean,(.2126,.7152,.0722)))/255
                 im.thumbnail((640,400))
                 tile=Image.new('RGB',(640,426),'#141923');tile.paste(im,(0,26))
-                ImageDraw.Draw(tile).text((10,7),f'{sid} / {case} / +{i*3}s / luma {luma:.3f}',fill='white')
+                ImageDraw.Draw(tile).text((10,7),f'{sid} / {case} / +{frames.split(',')[i]}s / luma {luma:.3f}',fill='white')
                 tiles.append(tile)
                 results.append({'id':sid,'case':case,'frame':i,'luma':luma,**reports[i]})
             raw.unlink()

@@ -153,7 +153,7 @@ const SKINS = {
       drink: { x: 778, base: 616, w: 44, tea: [73.5, 34, 52, 15] }, glass: { x: 834, y: 617 } },
     lamps: [[374, 398], [1048, 398]], light: [0.92, 0.76, 0.58],
     track: {
-      trees: { speed: 0.42, ground: 0.7, gap: 320, chance: 0.55, kinds: [['tree1', 0.2, 0.55], ['tree2', 0.17, 0.45]] },
+      trees: { speed: 0.68, ground: 0.93, gap: 320, chance: 0.55, kinds: [['tree1', 0.14, 0.55], ['tree2', 0.13, 0.45]] },
       poles: { speed: 0.95, ground: 1.12, gap: 560, chance: 1, kinds: [['pole', 0.43, 1]], ins: [12.6, 49, 87.5, 127.4], insY: 21 },
       scrub: { speed: 1.25, ground: 1.05, gap: 190, chance: 0.7, kinds: [['scrub', 0.34, 0.9], ['marker', 0.34, 0.1]] },
     },
@@ -170,7 +170,7 @@ const SKINS = {
       drink: { x: 806, base: 600, w: 30, sx: 0.5, sy: 0.06 }, extra: { x: 842, base: 604, w: 62 }, glass: { x: 872, y: 608 } },
     lamps: [[520, 180], [960, 180]], light: [0.95, 0.9, 0.8],
     track: {
-      trees: { speed: 0.42, ground: 0.7, gap: 300, chance: 0.6, kinds: [['tree1', 0.18, 0.6], ['tree2', 0.16, 0.4]] },
+      trees: { speed: 0.68, ground: 0.93, gap: 300, chance: 0.6, kinds: [['tree1', 0.13, 0.6], ['tree2', 0.12, 0.4]] },
       poles: { speed: 0.95, ground: 1.12, gap: 420, chance: 1, kinds: [['pole', 0.37, 1]], wire: [[40, 0]] },
       scrub: { speed: 1.25, ground: 1.05, gap: 200, chance: 0.6, kinds: [['scrub', 0.4, 0.85], ['marker', 0.3, 0.15]] },
     },
@@ -187,7 +187,7 @@ const SKINS = {
       drink: { x: 846, base: 577, w: 90, sx: 0.36, sy: 0.05 }, extra: { x: 902, base: 589, w: 60 }, glass: { x: 940, y: 590 } },
     lamps: [[217, 232], [1286, 232]], light: [0.96, 0.78, 0.55],
     track: {
-      trees: { speed: 0.42, ground: 0.72, gap: 260, chance: 0.7, kinds: [['tree1', 0.2, 0.65], ['tree2', 0.2, 0.35]] },
+      trees: { speed: 0.68, ground: 0.93, gap: 260, chance: 0.7, kinds: [['tree1', 0.14, 0.65], ['tree2', 0.14, 0.35]] },
       poles: { speed: 0.95, ground: 1.12, gap: 480, chance: 1, kinds: [['pole', 0.36, 1]], wire: [[38, 0]] },
       scrub: { speed: 1.25, ground: 1.05, gap: 210, chance: 0.6, kinds: [['scrub', 0.3, 0.85], ['marker', 0.25, 0.15]] },
     },
@@ -204,7 +204,7 @@ const SKINS = {
       drink: { x: 822, base: 600, w: 72, sx: 0.4, sy: 0.08 }, extra: { x: 884, base: 588, w: 56 }, glass: { x: 905, y: 600 } },
     lamps: [[368, 257], [1145, 257]], light: [1.0, 0.76, 0.5],
     track: {
-      trees: { speed: 0.42, ground: 0.7, gap: 300, chance: 0.65, kinds: [['tree1', 0.18, 0.6], ['tree2', 0.17, 0.4]] },
+      trees: { speed: 0.68, ground: 0.93, gap: 300, chance: 0.65, kinds: [['tree1', 0.13, 0.6], ['tree2', 0.13, 0.4]] },
       poles: { speed: 0.95, ground: 1.12, gap: 560, chance: 1, kinds: [['pole', 0.37, 1]], ins: [12, 56, 112, 156], insY: 22 },
       scrub: { speed: 1.25, ground: 1.05, gap: 200, chance: 0.6, kinds: [['scrub', 0.2, 0.85], ['marker', 0.22, 0.15]] },
     },
@@ -377,7 +377,8 @@ function computeLayout() {
     { x: tcx, y: 690, rx: tw * 0.8, ry: 240, k: 0.38, c: [1.0, 0.8, 0.58], kind: 'lamp' },
   ];
   // the outside view box (a hair bigger than the glass)
-  const vw = artMode() && S.win.view ? S.win.view : [wx0, o.win.y0, wx1, o.win.y1];
+  const mask = artMode() && A('mask');
+  const vw = mask ? glassBounds(mask) : S.win.view || [wx0, o.win.y0, wx1, o.win.y1];
   o.V = { x0: vw[0] - 10, x1: vw[2] + 10, y0: vw[1] - 10, y1: vw[3] + 10 };
   o.V.ww = o.V.x1 - o.V.x0; o.V.wh = o.V.y1 - o.V.y0; o.V.cx = (o.V.x0 + o.V.x1) / 2;
   L = o;
@@ -473,6 +474,16 @@ function roomPlate(g, im) {
   }
   g.drawImage(im, 0, 0, 1600, 1000);
 }
+// Use actual alpha bounds, including secondary openings, so rocking and surge never expose placeholder glass.
+const glassRects = new WeakMap();
+function glassBounds(im) {
+  if (glassRects.has(im)) return glassRects.get(im);
+  const c = newCanvas(im.naturalWidth, im.naturalHeight), g = c.getContext('2d');
+  g.drawImage(im, 0, 0); const p = g.getImageData(0, 0, c.width, c.height).data;
+  let x0=c.width,y0=c.height,x1=0,y1=0;
+  for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(p[(y*c.width+x)*4+3]>0){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x+1);y1=Math.max(y1,y+1);}
+  const r=[x0*1600/c.width,y0*1000/c.height,x1*1600/c.width,y1*1000/c.height];glassRects.set(im,r);return r;
+}
 function winPath(g, inset = 0) { const w = L.win; rr(g, w.x0 + inset, w.y0 + inset, w.w - 2 * inset, w.h - 2 * inset, w.r - inset); }
 function winHole(g) {
   g.globalCompositeOperation = 'destination-out'; g.fillStyle = '#000';
@@ -481,7 +492,7 @@ function winHole(g) {
   g.globalCompositeOperation = 'source-over';
 }
 // clip to the glass: the mask's bounding box is enough for things drawn under the room plate
-function winClip(g) { if (S.win.mask && artMode() && A('mask')) { const v = L.win; g.beginPath(); g.rect(v.x0, v.y0, v.w, v.h); } else winPath(g); g.clip(); }
+function winClip(g) { if (S.win.mask && artMode() && A('mask')) { const v = L.V; g.beginPath(); g.rect(v.x0, v.y0, v.ww, v.wh); } else winPath(g); g.clip(); }
 
 // ----- albedo -------------------------------------------------------------------
 function woodGrain(g, x, y, w, h, seed, a = 0.08) {
@@ -1273,17 +1284,22 @@ const countrysideLayers = new WeakMap();
 function prepareCountryside(im) {
   if(countrysideLayers.has(im))return countrysideLayers.get(im);
   const iw=Math.min(1200,im.naturalWidth),ih=Math.round(iw*im.naturalHeight/im.naturalWidth);
+  // A single cached grade brings the saturated landscape into the interior's muted painted palette.
+  const plate=newCanvas(iw,ih),pg=plate.getContext('2d');pg.drawImage(im,0,0,iw,ih);
+  const pixels=pg.getImageData(0,0,iw,ih),p=pixels.data;
+  for(let i=0;i<p.length;i+=4){const l=p[i]*.2126+p[i+1]*.7152+p[i+2]*.0722;for(let j=0;j<3;j++)p[i+j]=(l+(p[i+j]-l)*.72)*.94+3;}
+  pg.putImageData(pixels,0,0);
   const bands=S.pano.bands.map(([start,speed])=>({start,speed})).map(spec=>{
     const sy=Math.floor(ih*spec.start),bh=ih-sy,cv=newCanvas(iw*2,bh),c=cv.getContext('2d');
-    c.drawImage(im,0,im.naturalHeight*sy/ih,im.naturalWidth,im.naturalHeight*(1-sy/ih),0,0,iw,bh);
+    c.drawImage(plate,0,sy,iw,bh,0,0,iw,bh);
     c.save();c.translate(iw*2,0);c.scale(-1,1);
-    c.drawImage(im,0,im.naturalHeight*sy/ih,im.naturalWidth,im.naturalHeight*(1-sy/ih),0,0,iw,bh);c.restore();
+    c.drawImage(plate,0,sy,iw,bh,0,0,iw,bh);c.restore();
     const mask=c.createLinearGradient(0,0,0,Math.max(6,ih*.035));
     mask.addColorStop(0,'rgba(0,0,0,0)');mask.addColorStop(1,'rgba(0,0,0,1)');
     c.globalCompositeOperation='destination-in';c.fillStyle=mask;c.fillRect(0,0,cv.width,cv.height);
     return {...spec,start:sy/ih,cv};
   });
-  const land={image:im,bands};countrysideLayers.set(im,land);return land;
+  const land={image:plate,bands};countrysideLayers.set(im,land);return land;
 }
 function drawPaintedCountryside(g,T) {
   const moonless=A('panoNight');
@@ -1300,7 +1316,7 @@ function drawPaintedCountryside(g,T) {
     if(c.width!==Math.ceil(w)||c.height!==Math.ceil(h)){c.width=Math.ceil(w);c.height=Math.ceil(h);}
     const f=c.getContext('2d');f.clearRect(0,0,c.width,c.height);
     const cropW=Math.min(im.naturalWidth,im.naturalHeight*w/h);
-    f.drawImage(im,0,0,cropW,im.naturalHeight,0,0,w,h);
+    f.drawImage(land.image,0,0,cropW/im.naturalWidth*land.image.width,land.image.height,0,0,w,h);
     const tileW=2*h*im.naturalWidth/im.naturalHeight;
     for(const layer of land.bands){
       // motion blur: average copies spread along the travel (running average → exact mean)
@@ -1413,7 +1429,9 @@ function drawTrackside(g, layers, blurLen) {
       const lit = tsLit.get(it.name); if (!lit) continue;
       const dw = lit.w * it.sc * hs, dh = lit.h * it.sc * hs, x = v.x0 + i * L0.gap * hs + it.dx * hs - off, y = gy - dh;
       if (x > v.x1 + 10 || x + dw + len < v.x0 - 10) continue;
-      if (layer === 'scrub' && onBridge(x + dw / 2)) continue;   // nothing grows beside the track on a bridge
+      if (layer !== 'poles' && onBridge(x + dw / 2)) continue;   // nothing grows beside the track on a bridge
+      // Feet belong to the near field band and travel at its speed. A low contact shadow anchors the cutout.
+      if(layer==='trees'){g.fillStyle=rgba([18,25,16],.20+.14*E.day);g.beginPath();g.ellipse(x+dw*.5,gy-1,dw*.30,Math.max(1.2,dh*.018),0,0,TAU);g.fill();}
       // motion blur: a pre-smeared copy (true horizontal box blur, cached per blur level), trailing the motion
       const bl = len > 3 ? tsBlurred(it.name, len, it.sc * hs) : null, im = bl ? bl.c : lit.c, sw = bl ? dw + bl.len : dw;
       if (it.flip) { g.save(); g.translate(x + sw, y); g.scale(-1, 1); g.drawImage(im, 0, 0, sw, dh); g.restore(); }

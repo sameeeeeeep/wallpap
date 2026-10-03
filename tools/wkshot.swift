@@ -18,6 +18,7 @@ final class Shot: NSObject, WKNavigationDelegate {
     let web: WKWebView; let win: NSWindow
     override init() {
         let cfg = WKWebViewConfiguration()
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));addEventListener('unhandledrejection',e=>__errs.push(String(e.reason)));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: W, height: H), configuration: cfg)
         win = NSWindow(contentRect: NSRect(x: -20000, y: -20000, width: W, height: H), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
@@ -30,15 +31,17 @@ final class Shot: NSObject, WKNavigationDelegate {
     }
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            self.run("window.__errs=[];addEventListener('error',e=>__errs.push(String(e.message)));1") { _ in
-                self.run(pre.isEmpty ? "1" : pre) { _ in
-                    self.run("(()=>{const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)LW.advance(1/30);return n})()") { _ in
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            w.takeSnapshot(with: nil) { img, _ in
-                                if let img, let t = img.tiffRepresentation, let r = NSBitmapImageRep(data: t), let png = r.representation(using: .png, properties: [:]) {
-                                    try? png.write(to: URL(fileURLWithPath: out)); print("saved", out)
-                                } else { print("snapshot failed") }
-                                self.run("JSON.stringify(window.__errs||[])") { r in print("errors:", r ?? "[]"); exit(0) }
+            self.run("1") { _ in
+                self.run(pre.isEmpty ? "1" : pre + ";void 0") { _ in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        self.run("(()=>{const n=Math.round(\(steps)*30);for(let i=0;i<n;i++)if(window.LW)LW.advance(1/30);return n})()") { _ in
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                w.takeSnapshot(with: nil) { img, _ in
+                                    if let img, let t = img.tiffRepresentation, let r = NSBitmapImageRep(data: t), let png = r.representation(using: .png, properties: [:]) {
+                                        try? png.write(to: URL(fileURLWithPath: out)); print("saved", out)
+                                    } else { print("snapshot failed") }
+                                    self.run("JSON.stringify({errors:window.__errs||[],report:window.__shotReport?window.__shotReport():null})") { r in print("result:", r ?? "{}"); exit(0) }
+                                }
                             }
                         }
                     }

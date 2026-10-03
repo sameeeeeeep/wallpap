@@ -418,3 +418,20 @@ this session cannot request elevated execution. Browser inventory returned no co
 `cua.getApp("com.apple.Safari")` returned “Computer Use was not approved to use Safari”.
 Resume with an externally started dev server and an approved browser connection. No later priority item
 has been marked complete or substituted for the required browser verification.
+
+# 2026-10-03 — P0 Train verified with wkshot
+
+- Existing regenerated masks inspected and retained: no remaining navy placeholder rim in all four looks.
+  Renderer now derives coverage from the actual mask alpha plus a 10-unit rocking margin; effects cover
+  Shinkansen's second opening too. Day/night, click surge and full tunnel (rain requested) all fill the glass.
+- Reduced panorama saturation to 72%, softened brightness in a cached paint pass to match the carriage.
+  Retained the existing generated art; no new image prompt needed for this item.
+- Trees moved from the distant lake/field line to 93% of the view height, scaled down, and move at the
+  foreground band's 0.68 speed. Soft contact shadows; trees and scrub suppressed over bridge spans.
+  Poles remain planted below the sill and bridge piers extend beyond the visible opening.
+- Opened and inspected `shots/p0-train-{day,night,surge,tunnel}-grid.jpg` (all 16 underlying
+  `p0-train-<skin>-<state>.png` captures), plus before window crops. All scene error arrays empty.
+  Surge reports true and tunnel coverage reports 1 for each skin. Node suite: 32/32 passing.
+- `wkshot` now records errors from document start, gives settings-triggered assets one second to load
+  before stepping, accepts non-LW pages, and prints an optional `__shotReport()` diagnostic.
+  Recompiled only this screenshot helper; no installed/running wallpaper app touched.

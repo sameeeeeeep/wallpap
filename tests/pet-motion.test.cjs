@@ -8,9 +8,10 @@ test('gait changes finish a stand-up transition instead of restarting it',()=>{
  tick(180);const halfway=LW.poseState(pet,'walk2');assert.equal(halfway.from,'sleep');assert.equal(halfway.mix,.5);
  tick(180);const done=LW.poseState(pet,'walk1');assert.equal(done.layers.length,1);assert.equal(done.layers[0].pose,'walk1');
 });
-test('pose blends conserve opacity and never disappear at their midpoint',()=>{
- const {LW}=load();for(let i=0;i<=100;i++){const layers=LW.poseFrame('sleep','sit',i/100).layers;assert.ok(Math.abs(layers.reduce((n,l)=>n+l.alpha,0)-1)<1e-9);}
- assert.equal(LW.poseFrame('sleep','sit',.5).layers[0].alpha,.5);
+test('pose changes never dissolve two silhouettes: one opaque layer, tuck then cut at the midpoint',()=>{
+ const {LW}=load();for(let i=0;i<=100;i++){const layers=LW.poseFrame('sleep','sit',i/100).layers;assert.equal(layers.length,1);assert.equal(layers[0].alpha,1);}
+ assert.equal(LW.poseFrame('sleep','sit',.4).layers[0].pose,'sleep');assert.equal(LW.poseFrame('sleep','sit',.6).layers[0].pose,'sit');
+ assert.ok(LW.poseFrame('sleep','sit',.5).sy<1);
 });
 test('walking frames retain animal height despite differing image dimensions',()=>{
  const {LW}=load(),walk={naturalHeight:242},next={naturalHeight:197};
@@ -66,12 +67,12 @@ test('swaps cut into drawn frames, fade quickly out of them',()=>{
  assert.equal(LW.petSwap(walk,f('stand-sit-1'),true,false),'cut');assert.equal(LW.petSwap(f('stand-sit-4'),f('stand-sit-5')),'cut');
  assert.equal(LW.petSwap(f('stand-sit-5'),sit),'quick');assert.equal(LW.petSwap(walk,f('jump-1'),true,false),'quick');
 });
-test('pose state cuts into drawn frames and fades quickly out of them',()=>{
+test('pose state cuts into and out of drawn frames with a single layer',()=>{
  const {LW,tick}=load(),pet={};LW.poseState(pet,'sit');tick(1000);
  let f=LW.poseState(pet,'stand-sit-5');assert.equal(f.layers.length,1);assert.equal(f.layers[0].pose,'stand-sit-5');
  tick(75);f=LW.poseState(pet,'stand-sit-4');assert.equal(f.layers.length,1);
- tick(75);f=LW.poseState(pet,'walk1');assert.equal(f.layers.length,2);tick(130);assert.equal(LW.poseState(pet,'walk1').layers.length,1);
- f=LW.poseState(pet,'jump-1');assert.equal(f.layers.length,2);
+ tick(75);f=LW.poseState(pet,'walk1');assert.equal(f.layers.length,1);tick(130);assert.equal(LW.poseState(pet,'walk1').layers.length,1);
+ f=LW.poseState(pet,'jump-1');assert.equal(f.layers.length,1);
 });
 test('gait cycle phase advances with distance travelled, not with time',()=>{
  const {LW,tick}=load(),pet={},seen=[];
@@ -197,8 +198,8 @@ test('direction selection uses hysteresis, contact phases and signed ground velo
  assert.equal(LW.petDirection(p,10,0,0).view,'side');
  assert.equal(LW.petDirection(p,10,12,.25).view,'side'); // raised paw: defer
  assert.equal(LW.petDirection(p,10,12,.5).view,'f');
- assert.equal(LW.petDirection(p,10,7,.5).view,'f'); // inside dead band
- assert.equal(LW.petDirection(p,10,5,0).view,'side');
+ assert.equal(LW.petDirection(p,10,2.3,.5).view,'f'); // inside dead band (10–16°)
+ assert.equal(LW.petDirection(p,10,1.5,0).view,'side');
  assert.equal(LW.petDirection(p,-10,-20,.25).face,1);
  assert.equal(LW.petDirection(p,-10,-20,.5).view,'b');
  assert.equal(p._petDirection.face,-1);

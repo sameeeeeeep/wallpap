@@ -59,10 +59,9 @@
 // globally from the menu): white | pink | brown | rain | ocean | fire | stream | off.
 //   LW.soundscape  {kind, volume}     — lw.js plays it; scenes don't need to do anything.
 // AI companions (host watches Claude Code / Codex session activity):
-//   LW.agents   {style:'native'|'characters'|'off', list:[{id, kind:'claude'|'codex', project, state:'working'|'idle'}]}
-//   LW.on('agents', a => ...)
-//   A scene that draws its own in-world companions sets LW.nativeAgents = true;
-//   otherwise (or in 'characters' style) lw.js draws Clawd + a Codex bot along the bottom.
+//   LW.agents   {style:'native'|'off', list:[{id, kind:'claude'|'codex', project, state:'working'|'idle'|'attention'}]}
+//   LW.on('agents', a => ...)   'attention' = finished or blocked, waiting for the user.
+//   Only scenes that give companions an in-world form draw them (Koi Pond); others ignore this.
 // Energy: lw.js governs requestAnimationFrame for every scene.
 //   LW.fps       target frame rate while the desktop is in use (host setting: 20/30/60)
 //   LW.focused   false when the user hasn't touched the desktop for a while → the
@@ -524,108 +523,14 @@
     if (on) LW._resumeFrames();
   }
 
-  // ─── AI companions: generic character overlay (Clawd + Codex bot) ────────
+  // ─── AI companions ────────────────────────────────────────────────────────
+  // Only scenes with an in-world form for them (Koi Pond) show companions; there is no generic overlay.
   LW.agents = { style: 'native', list: [] };
   LW.nativeAgents = false;
-  const CO = { cv: null, ctx: null, bots: new Map(), running: false, lastT: 0 };
-  function companionsVisible() { return LW.agents.style === 'characters' || (LW.agents.style === 'native' && !LW.nativeAgents); }
   function setAgents(a) {
     LW.agents = { style: (a && a.style) || 'native', list: (a && a.list) || [] };
     LW.emit('agents', LW.agents);
-    const want = companionsVisible() ? LW.agents.list : [];
-    const ids = new Set(want.map((x) => x.id));
-    for (const [id, b] of CO.bots) if (!ids.has(id)) b.leaving = true;
-    want.forEach((x, i) => {
-      let b = CO.bots.get(x.id);
-      if (!b) {
-        const fromLeft = true;   // their spot is lower-left, so they walk in from the left
-        b = { id: x.id, kind: x.kind, x: fromLeft ? -40 : innerWidth + 40, dir: fromLeft ? 1 : -1, phase: Math.random() * 6, bubble: 0, wave: 0 };
-        CO.bots.set(x.id, b);
-      }
-      Object.assign(b, { state: x.state, project: x.project || '', leaving: false });
-    });
-    // Spread the companions along the lower-left of the screen.
-    let k = 0;
-    for (const b of CO.bots.values()) if (!b.leaving) b.home = 70 + 150 * k++;
-    if (CO.bots.size && !CO.running) { CO.running = true; requestAnimationFrame(drawCompanions); }
   }
-  function ensureCanvas() {
-    if (CO.cv) return;
-    const cv = document.createElement('canvas');
-    cv.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:110px;pointer-events:none;z-index:50;transition:filter 1.1s ease';
-    document.documentElement.appendChild(cv);   // outside <body>: immune to scene layout
-    CO.cv = cv; CO.ctx = cv.getContext('2d');
-  }
-  function drawClawd(c, t, working, wave) {
-    // Claude Code's little terracotta companion, drawn on a 2px grid.
-    const P = 3.2, bob = working ? Math.round(Math.sin(t * 9) * 0.6) : 0;
-    const R = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(Math.round(x * P), Math.round((y + bob) * P), Math.ceil(w * P), Math.ceil(h * P)); };
-    const body = '#d97757', dark = '#b35d42';
-    const step = working ? Math.floor(t * 8) % 2 : 0;
-    R(-6, -2, 2, 3 + step, dark); R(-3, -2, 2, 3 - step + 1, dark); R(1, -2, 2, 3 + step, dark); R(4, -2, 2, 3 - step + 1, dark);   // legs
-    R(-7, -10, 14, 8, body);                                            // body
-    R(-9, -8 - (wave ? Math.round(Math.sin(t * 14)) + 1 : 0), 2, 3, body); R(7, -8, 2, 3, body);   // arms
-    const blink = (t % 4) < 0.12;
-    R(-4, -8, 1.4, blink ? 0.6 : 3, '#1a1311'); R(2.6, -8, 1.4, blink ? 0.6 : 3, '#1a1311');   // eyes
-  }
-  function drawCodex(c, t, working, wave) {
-    const s = 1, bob = working ? Math.sin(t * 7) * 1.2 : 0;
-    c.save(); c.translate(0, bob);
-    c.fillStyle = '#20252b'; c.strokeStyle = '#e8eef0'; c.lineWidth = 1.6;
-    c.beginPath(); c.roundRect(-17 * s, -34 * s, 34 * s, 26 * s, 8); c.fill(); c.stroke();          // head/screen
-    c.fillStyle = '#7fe0d0'; c.font = 'bold 13px ui-monospace, Menlo, monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText((t % 1) < 0.55 || !working ? '>_' : '> ', 0, -21);                                     // blinking prompt
-    c.strokeStyle = '#e8eef0'; c.beginPath(); c.moveTo(0, -34); c.lineTo(0, -40); c.stroke();
-    c.fillStyle = working ? '#7fe0d0' : '#9aa5ab'; c.beginPath(); c.arc(0, -42, 2.6, 0, Math.PI * 2); c.fill();   // antenna
-    c.fillStyle = '#e8eef0'; c.beginPath(); c.roundRect(-10, -8, 20, 6, 3); c.fill();                // base
-    const w = wave ? Math.sin(t * 14) * 0.6 : 0;
-    c.strokeStyle = '#e8eef0'; c.lineWidth = 2.4; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(-17, -18); c.lineTo(-23, -12 - w * 10); c.stroke(); c.beginPath(); c.moveTo(17, -18); c.lineTo(23, -12); c.stroke();
-    c.restore();
-  }
-  function drawCompanions(ts) {
-    if (!CO.bots.size) { CO.running = false; if (CO.ctx) CO.ctx.clearRect(0, 0, CO.cv.width, CO.cv.height); return; }
-    requestAnimationFrame(drawCompanions);
-    ensureCanvas();
-    const t = ts / 1000, dt = Math.min(0.1, CO.lastT ? t - CO.lastT : 0.016); CO.lastT = t;
-    const dpr = Math.min(2, devicePixelRatio || 1), cv = CO.cv;
-    if (cv.width !== Math.round(innerWidth * dpr)) { cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(110 * dpr); }
-    cv.style.top = (innerHeight - 110) + 'px';
-
-    const c = CO.ctx;
-    c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, innerWidth, 110);
-    for (const [id, b] of CO.bots) {
-      const target = b.leaving ? (b.dir > 0 ? -60 : innerWidth + 60) : b.home;
-      const d = target - b.x, moving = Math.abs(d) > 2;
-      if (moving) { const v = Math.sign(d) * Math.min(Math.abs(d) * 3, 90); b.x += v * dt; b.face = Math.sign(d); }
-      else if (b.leaving) { CO.bots.delete(id); continue; }
-      b.bubble = Math.max(0, b.bubble - dt); b.wave = Math.max(0, b.wave - dt);
-      const working = b.state === 'working';
-      c.save(); c.translate(b.x, 96);
-      // soft ground shadow
-      c.fillStyle = 'rgba(0,0,0,0.22)'; c.beginPath(); c.ellipse(0, 0, 22, 4, 0, 0, Math.PI * 2); c.fill();
-      if ((b.face || 1) < 0) c.scale(-1, 1);
-      if (b.kind === 'codex') drawCodex(c, t + b.phase, working || moving, b.wave > 0); else drawClawd(c, t + b.phase, working || moving, b.wave > 0);
-      c.restore();
-      // tiny status chip
-      const label = (b.kind === 'codex' ? 'codex' : 'claude') + (b.project ? ' · ' + b.project : '') + (working ? '' : ' · idle');
-      const show = b.bubble > 0 || working;
-      if (show && !moving) {
-        c.font = '500 11px -apple-system, system-ui, sans-serif';
-        const w = c.measureText(label).width + 16, x = b.x - w / 2, y = 30;
-        c.globalAlpha = b.bubble > 0 ? 0.95 : 0.7;
-        c.fillStyle = 'rgba(14,16,20,0.62)'; c.beginPath(); c.roundRect(x, y, w, 20, 10); c.fill();
-        c.fillStyle = working ? (b.kind === 'codex' ? '#7fe0d0' : '#f0a07f') : '#c9ced2';
-        c.beginPath(); c.arc(x + 9, y + 10, 2.6, 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#eef1f3'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(label, x + 15, y + 10.5);
-        c.globalAlpha = 1;
-      }
-    }
-  }
-  LW.on('down', (x, y) => {   // click a companion → it waves and shows what it's up to
-    if (y < innerHeight - 110) return;
-    for (const b of CO.bots.values()) if (Math.abs(b.x - x) < 26 && y > innerHeight - 70) { b.wave = 1.2; b.bubble = 4; }
-  });
 
   // Shared illustrated-pose timing. Never dissolve two animal silhouettes.
   // The old pose tucks, changes at the lowest point, then settles into the new pose.
@@ -701,8 +606,11 @@
       if (e.key === 't') LW.setView('custom', (LW.env.hour + 3) % 24);
       if (e.key === 'r') window.__lw('reminder', 'water');
       if (e.key === 'b') window.__lw('calm', !LW.calm);
-      if (e.key === 'a') window.__lw('agents', CO.bots.size ? { style: LW.agents.style, list: [] } :
-        { style: LW.agents.style, list: [{ id: 'c1', kind: 'claude', project: 'visuals', state: 'working' }, { id: 'x1', kind: 'codex', project: 'nia', state: 'idle' }] });
+      if (e.key === 'a') {   // cycle: working + idle → one waiting for you → none
+        const n = LW.agents.list, waiting = n.some((x) => x.state === 'attention');
+        window.__lw('agents', { style: LW.agents.style, list: !n.length ? [{ id: 'c1', kind: 'claude', project: 'visuals', state: 'working' }, { id: 'x1', kind: 'codex', project: 'nia', state: 'idle' }]
+          : !waiting ? [{ id: 'c1', kind: 'claude', project: 'visuals', state: 'attention' }, { id: 'x1', kind: 'codex', project: 'nia', state: 'working' }] : [] });
+      }
       if (e.key === 'n') window.__lw('nowplaying', LW.nowPlaying && LW.nowPlaying.playing ? { ...LW.nowPlaying, playing: false } :
         { title: 'Moon River', artist: 'Lo-fi Dev Trio', album: 'Late Night Tests', artwork: '', playing: true, app: 'Music' });
     });

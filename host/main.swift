@@ -359,14 +359,28 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     // MARK: AI companions — Claude Code / Codex appear while they work.
-    // Watches only file-change *events* in their session-log folders (never reads contents).
+    // Watches file-change events in their session-log folders. To know when one is waiting for you it reads
+    // only the structural markers of the newest log entries (Claude's stop_reason, Codex's event type),
+    // never message text.
     var companionStyle: String {
-        get { defaults.string(forKey: "companions") ?? "native" }
+        // Companions live only in scenes that give them an in-world form (Koi Pond); the old
+        // "characters" overlay is gone, so that stored choice maps to on.
+        get { let v = defaults.string(forKey: "companions") ?? "native"; return v == "characters" ? "native" : v }
         set { defaults.set(newValue, forKey: "companions") }
     }
-    var agentSessions: [String: (kind: String, project: String, last: Date)] = [:]
+    var agentSessions: [String: (kind: String, project: String, last: Date, waiting: Date?)] = [:]
+    static let attentionSeconds: TimeInterval = 240   // how long a finished/waiting agent asks for you
     var fsStream: FSEventStreamRef?
     var lastAgentsJSON = ""
+    var automatedSessions: [String: Bool] = [:]   // headless SDK runs (hooks, reviews) never get a companion
+
+    /// Agent SDK runs (entrypoint "sdk-…") are automation such as review hooks, not sessions the user is in.
+    static func isAutomated(_ path: String) -> Bool {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return false }
+        defer { try? fh.close() }
+        guard let data = try? fh.read(upToCount: 8192), let head = String(data: data, encoding: .utf8) else { return false }
+        return head.contains("\"entrypoint\":\"sdk-")
+    }
 
     func startCompanions() {
         if let s = fsStream { FSEventStreamStop(s); FSEventStreamInvalidate(s); FSEventStreamRelease(s); fsStream = nil }
@@ -402,9 +416,43 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
                 key = dir + "/" + session
                 project = App.prettyProject(dir)
             }
-            agentSessions[key] = (kind, project, Date())
+            // Subagent logs keep the session alive but only the main log says whose turn it is.
+            let isMain = kind == "codex" || !p.contains("/subagents/")
+            if kind == "claude" {
+                if automatedSessions[key] == nil, isMain { automatedSessions[key] = App.isAutomated(p) }
+                if automatedSessions[key] ?? false { continue }
+            }
+            var waiting = agentSessions[key]?.waiting
+            if isMain { waiting = App.agentWaiting(p, kind) ? (waiting ?? Date()) : nil }
+            agentSessions[key] = (kind, project, Date(), waiting)
         }
         pushAgents()
+    }
+
+    /// True when the newest entry in a session log means the agent is done or blocked on you.
+    /// Reads the last 64 KB and looks only at structural fields.
+    static func agentWaiting(_ path: String, _ kind: String) -> Bool {
+        guard let fh = FileHandle(forReadingAtPath: path) else { return false }
+        defer { try? fh.close() }
+        let size = (try? fh.seekToEnd()) ?? 0
+        try? fh.seek(toOffset: size > 65536 ? size - 65536 : 0)
+        guard let data = try? fh.readToEnd(), let text = String(data: data, encoding: .utf8) else { return false }
+        for line in text.split(separator: "\n").reversed() {
+            guard let j = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any] else { continue }
+            let type = j["type"] as? String ?? ""
+            if kind == "codex" {
+                guard type == "event_msg", let ev = (j["payload"] as? [String: Any])?["type"] as? String else { continue }
+                if ev == "task_complete" || ev.hasSuffix("approval_request") { return true }
+                if ev == "task_started" || ev == "user_message" { return false }
+            } else {
+                if type == "user" { return false }
+                if type == "assistant" {
+                    let stop = (j["message"] as? [String: Any])?["stop_reason"] as? String
+                    return stop == "end_turn" || stop == "stop_sequence"
+                }
+            }
+        }
+        return false
     }
 
     /// "-Users-me-Documents-Projects-nia--claude-worktrees-x" → "nia"
@@ -417,13 +465,15 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     func pushAgents(force: Bool = false) {
         let now = Date()
-        agentSessions = agentSessions.filter { now.timeIntervalSince($0.value.last) < 90 }
+        agentSessions = agentSessions.filter { now.timeIntervalSince($0.value.last) < 90
+            || ($0.value.waiting.map { now.timeIntervalSince($0) < App.attentionSeconds } ?? false) }
         var perKind: [String: Int] = [:]
         let list: [[String: Any]] = agentSessions.sorted { $0.key < $1.key }.compactMap { key, v in
             perKind[v.kind, default: 0] += 1
             guard perKind[v.kind]! <= 3 else { return nil }
             return ["id": String(UInt32(truncatingIfNeeded: key.hashValue), radix: 36), "kind": v.kind, "project": v.project,
-                    "state": now.timeIntervalSince(v.last) < 12 ? "working" : "idle"]
+                    "state": v.waiting.map { now.timeIntervalSince($0) < App.attentionSeconds } == true ? "attention"
+                        : now.timeIntervalSince(v.last) < 12 ? "working" : "idle"]
         }
         let payload: [String: Any] = ["style": isPro ? companionStyle : "off", "list": isPro ? list : []]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
@@ -1018,7 +1068,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         menu.addItem(cyItem)
         let compItem = NSMenuItem(title: "AI Companions", action: nil, keyEquivalent: "")
         let compMenu = NSMenu()
-        for (label, v) in [("Off", "off"), ("In the Scene", "native"), ("As Characters (Clawd & Codex)", "characters")] {
+        for (label, v) in [("Off", "off"), ("On (Koi Pond)", "native")] {
             let it = NSMenuItem(title: label, action: #selector(pickCompanions(_:)), keyEquivalent: "")
             it.representedObject = v
             it.state = companionStyle == v ? .on : .off

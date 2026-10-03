@@ -915,6 +915,7 @@ LW.on('agents', (A) => {
     const f = fish.find((g) => g.agent && g.agent.id === a.id);
     if (f) { f.agent = a; f.leaving = false; } else { fish.push(companionKoi(a)); added = true; }
   }
+  fish.filter((f) => f.agent && !f.leaving).forEach((f, i) => { f.homeIdx = i; });
   if (added) buildPatterns();
 });
 
@@ -976,7 +977,7 @@ LW.on('down', (x, y) => {
   lastInput = now;
   if (frogHit(x, y)) { frogJump(true); return; }
   const fh = fish.slice().reverse().find((f) => hitKoi(f, x, y));
-  if (fh) { boop(fh, x, y); return; }
+  if (fh) { if (fh.agent && fh.agent.state === 'attention') fh.ack = true; boop(fh, x, y); return; }
   const pad = pads.find((p) => Math.hypot(p.x - x, p.y - y) < p.r * 0.95);
   if (pad) { padPoke(pad, x, y); return; }
   addDrop(x, y, 14, -1.3);
@@ -1204,9 +1205,28 @@ function updateFish(dt, t) {
       if (d > f.L * 1.1) { dx += ((reminder.x - f.x) / d) * 1.4; dy += ((reminder.y - f.y) / d) * 1.4; }
     }
 
-    // Companions: busy while their agent works, lazy when idle, and swim off when done.
+    // Companions keep to their own corner of the pond (away from the widgets), circling it busily while
+    // their agent works and lazily when idle. When the agent needs you they come out and follow the
+    // cursor (or wait mid-pond if the cursor is elsewhere) until it's done or you tap them.
     if (f.agent) {
-      targetSpeed *= f.agent.state === 'working' ? 1.45 : 0.55;
+      const st = f.agent.state;
+      if (st !== 'attention') f.ack = false;
+      const calling = st === 'attention' && !f.ack;
+      let tx, ty, ring;
+      if (calling) {
+        const near = cur.inside && t - cur.lastMove < 25;
+        tx = near ? cur.x : W * 0.5; ty = near ? cur.y : H * 0.5; ring = f.L * 0.55;
+      } else {
+        const rightSide = (LW.layout && LW.layout.side) === 'left';
+        const k = f.homeIdx || 0;
+        tx = rightSide ? W * 0.86 - k * f.L * 0.9 : W * 0.14 + k * f.L * 0.9; ty = H * 0.8; ring = f.L * 0.6;
+      }
+      const rx = tx - f.x, ry = ty - f.y, d = Math.hypot(rx, ry) || 1;
+      const inward = clamp((d - ring) / ring, -1, 2.5);
+      const sx = (rx / d) * inward * 1.6 + (-ry / d) * f.orbitDir, sy = (ry / d) * inward * 1.6 + (rx / d) * f.orbitDir;
+      dx = lerp(dx, sx * 2, 0.85); dy = lerp(dy, sy * 2, 0.85);
+      targetSpeed = calling ? f.L * (d > ring * 2 ? 0.95 : 0.5) : f.cruise * (st === 'working' ? 1.25 : 0.55);
+      if (calling) turn = Math.max(turn, 2.4);
       if (f.leaving) { dx = -4; dy = Math.sin(t * 0.3 + f.seed) * 0.5; targetSpeed = f.L * 0.8; turn = 2; }
     }
     const want = Math.atan2(dy, dx);
@@ -1816,20 +1836,25 @@ function drawOverlay(dt, t) {
   // (constant during hold/rest), so the rings freeze exactly when the breath holds.
   if (calmFade > 0.01) drawBreathRings(c, calmFade);
 
-  // Companion name chips riding on the water above their koi.
+  // Companions carry their own light under the water: a slow breathing glow while their agent works,
+  // a brighter pulse (and rings on the surface) while it waits for you, nothing when idle. No labels.
+  c.save(); c.globalCompositeOperation = 'lighter';
   for (const f of fish) {
-    if (!f.agent || f.x < -20 || f.x > W + 20) continue;
-    const working = f.agent.state === 'working';
-    const label = f.agent.kind + (f.agent.project ? ' · ' + f.agent.project : '') + (working ? '' : ' · resting');
-    c.font = '500 11px -apple-system, system-ui, sans-serif';
-    const w = c.measureText(label).width + 18, x = f.x - w / 2, y = f.y - f.L * 0.32 - 22;
-    c.globalAlpha = (f.leaving ? 0.35 : working ? 0.9 : 0.6);
-    c.fillStyle = 'rgba(10,22,24,0.55)'; c.beginPath(); c.roundRect(x, y, w, 20, 10); c.fill();
-    c.fillStyle = f.agent.kind === 'codex' ? '#7fe0d0' : '#f0a07f';
-    c.beginPath(); c.arc(x + 10, y + 10, working ? 2.8 + Math.sin(t * 6) * 0.6 : 2.4, 0, TAU); c.fill();
-    c.fillStyle = '#eef3f2'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(label, x + 17, y + 10.5);
-    c.globalAlpha = 1;
+    if (!f.agent || f.leaving || f.x < -f.L || f.x > W + f.L) continue;
+    const st = f.agent.state, calling = st === 'attention' && !f.ack;
+    f.glow = lerp(f.glow || 0, calling ? 1 : st === 'working' ? 0.55 : 0, 1 - Math.exp(-dt * 1.5));
+    if (f.glow < 0.02) continue;
+    const pulse = calling ? 0.65 + 0.35 * Math.sin(t * 3.2 + f.seed) : 0.75 + 0.25 * Math.sin(t * 1.4 + f.seed);
+    const col = f.agent.kind === 'codex' ? '127,224,208' : '240,150,110';
+    for (const [i, w] of [[2, 0.8], [5, 1], [9, 0.6]]) {   // a halo that hugs the whole body
+      const m = f.p[i], R = f.L * (0.42 + 0.22 * f.glow) * (0.8 + 0.2 * w);
+      const g = c.createRadialGradient(m[0], m[1], 0, m[0], m[1], R), a = f.glow * pulse * w;
+      g.addColorStop(0, `rgba(${col},${0.42 * a})`); g.addColorStop(0.45, `rgba(${col},${0.16 * a})`); g.addColorStop(1, `rgba(${col},0)`);
+      c.fillStyle = g; c.beginPath(); c.arc(m[0], m[1], R, 0, TAU); c.fill();
+    }
+    if (calling && t - (f.lastCall || 0) > 1.6) { f.lastCall = t; addDrop(f.x, f.y, f.L * 0.12, -0.9); }
   }
+  c.restore();
 
   // Reminder text floating on the water.
   if (reminder) {

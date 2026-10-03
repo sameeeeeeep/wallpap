@@ -6,11 +6,11 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const svg=(kind)=>`<svg viewBox="0 0 20 20" aria-hidden="true">${kind==='news'?'<path d="M3 3h14v14H3zM6 6h8M6 10h8M6 14h5"/>':kind==='back'?'<path d="m12 4-6 6 6 6"/>':kind==='close'?'<path d="m5 5 10 10M15 5 5 10"/>':'<rect x="3" y="3" width="14" height="14" rx="3"/><path d="M3 10h14M10 3v14"/>'}</svg>`;
 const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('play.css',base);document.head.append(css);
 function script(name){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=new URL(name,base);s.onload=resolve;s.onerror=()=>reject(Error('Play content could not load'));document.head.append(s);});}
-const loaded=Promise.all([script('core.js'),script('catalog.js'),script('config.js')]);
+const loaded=Promise.all([script('core.js'),script('catalog.js'),script('config.js').then(()=>script('ad-source.js'))]);
 function theme(){return {mode:config.theme|| (themeQuery.matches?'dark':'light'),accent:'#3a6352'};}
 function localGet(key){try{return JSON.parse(localStorage.getItem('wallpap.play.'+key));}catch{return null;}}
 function localSet(key,value){localStorage.setItem('wallpap.play.'+key,JSON.stringify(value));}
-function send(op,args={}){if(!LW.isHost){if(op==='fetchFeed'){const fixture=LW.virtual&&window.PlayFixtures?.feeds?.[args.id];return Promise.resolve(fixture||{items:[],updated:null,offline:true,error:'Headlines are available in the Mac app.'});}return Promise.resolve(null);}return new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('The host did not respond. Try again.'));},16000);pending.set(id,{resolve,reject,timer});LW.post({type:'play',op,id,...args});});}
+function send(op,args={}){if(!LW.isHost){if(op==='fetchFeed'){const fixture=LW.virtual&&window.PlayFixtures?.feeds?.[args.feed];return Promise.resolve(fixture||{items:[],updated:null,offline:true,error:'Headlines are available in the Mac app.'});}return Promise.resolve(null);}return new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('The host did not respond. Try again.'));},16000);pending.set(id,{resolve,reject,timer});LW.post({type:'play',op,id,...args});});}
 LW.on('playReply',m=>{const p=pending.get(m.id);if(p){clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(Error(m.error)):p.resolve(m.value);}});
 function tell(op,value){frame?.contentWindow?.postMessage({wallpapShell:1,op,value},'*');}
 function setTheme(){if(!root)return;root.dataset.theme=theme().mode;tell('theme',theme());}

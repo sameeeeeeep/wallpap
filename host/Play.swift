@@ -118,7 +118,11 @@ final class PlayHost {
         case "houseAd":
             guard !app.isPro, let category = body["category"] as? String, ["News", "Puzzles"].contains(category) else { reply(error: "Ad not permitted"); return }
             // A separate, fixed first-party action; never widens the feed-link capability.
-            reply(); close(restoreFocus: false); app.openPro()
+            let data = try? Data(contentsOf: app.scenesDir.appendingPathComponent("play/house-ads.json"))
+            let ads = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [[String: String]] } ?? []
+            guard let ad = ads.first(where: { $0["category"] == category }), let link = ad["url"],
+                  ["https://wallpap.live/#pro", "https://wallpap.live/#scenes"].contains(link), let url = URL(string: link) else { reply(error: "Ad unavailable"); return }
+            reply(); close(restoreFocus: false); NSWorkspace.shared.open(url)
         default: reply(error: "Capability not permitted")
         }
     }

@@ -1236,7 +1236,7 @@ const Try = {
     const h = PG.host;
     if (this.run) this.run.cancel();
     const r = this.run = newRun();
-    Tour.userActivity(); Tour.stop();                     // the visitor is driving now
+    Tour.userActivity();                                  // the visitor is driving: tour stops, resumes after a lull
     PG.goLive(true);
     if (PG.setSheet) PG.setSheet(false);
     PG.sec.scrollIntoView({ behavior: smooth(), block: 'start' });

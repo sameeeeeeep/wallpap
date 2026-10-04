@@ -228,12 +228,13 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     /// holds page updates (env, layout, companions) — then catches the page up in one go on resume.
     func engagementChanged() {
         if engaged {
+            setMoveMonitors(true)
             if NSApp.isActive { startActivePointerPoll() }
             if musicMode && isPro { startMusicMode() } else { updateBeatSync() }
             flushAgentActivity()
             pushEnv(); pushLayout(); pushAgents()
         } else {
-            stopActivePointerPoll()
+            stopActivePointerPoll(); setMoveMonitors(false)
             musicTimer?.invalidate(); musicTimer = nil
             updateBeatSync()
         }
@@ -776,21 +777,29 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     var pendingMove = false
 
     func installMonitors() {
-        let moveMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
-        if let m = NSEvent.addGlobalMonitorForEvents(matching: moveMask, handler: { [weak self] _ in self?.onMove() }) { monitors.append(m) }
+        setMoveMonitors(engaged)
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in self?.onButton("down") }) { monitors.append(m) }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in self?.onButton("up") }) { monitors.append(m) }
         // Global monitors only see events posted to OTHER apps. Right after the user picks a scene in
         // our panel or menu, wallpap is the active app, so hover went dead until something else took
-        // focus. Also watch our own events, and poll the pointer while we're active as a backstop
-        // (some moves reach neither monitor when the active app has no key window).
-        if let m = NSEvent.addLocalMonitorForEvents(matching: moveMask, handler: { [weak self] e in self?.onMove(); return e }) { monitors.append(m) }
+        // focus. setMoveMonitors also watches our own events, and we poll the pointer while we're active
+        // as a backstop (some moves reach neither monitor when the active app has no key window).
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.startActivePointerPoll() }
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.stopActivePointerPoll() }
         if NSApp.isActive { startActivePointerPoll() }
     }
 
+    /// Cursor-move monitors exist only while the wallpaper is engaged: a paused scene ignores hover (only a
+    /// click continues it), and a global move monitor would wake the app for every move in every other app.
+    private var moveMonitors: [Any] = []
+    func setMoveMonitors(_ on: Bool) {
+        guard on != !moveMonitors.isEmpty else { return }
+        if !on { moveMonitors.forEach(NSEvent.removeMonitor); moveMonitors = []; return }
+        let moveMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+        if let m = NSEvent.addGlobalMonitorForEvents(matching: moveMask, handler: { [weak self] _ in self?.onMove() }) { moveMonitors.append(m) }
+        if let m = NSEvent.addLocalMonitorForEvents(matching: moveMask, handler: { [weak self] e in self?.onMove(); return e }) { moveMonitors.append(m) }
+    }
     private var activePointerPoll: Timer?
     private var lastPolledPointer = NSPoint(x: -1, y: -1)
     func startActivePointerPoll() {

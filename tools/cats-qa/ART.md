@@ -24,6 +24,8 @@ Frames are packed to actual maximum dimensions with four pixels of padding. All 
 
 `coats.py` preserves the exact alpha and geometry for black, grey, calico and siamese. It edits the painted palette and view-specific masks: amber eyes on black, grey tabby, orange/black/white calico, cream/dark points and blue eyes on siamese. This avoids independently generated motion drift. Calico patches may mirror. Marking masks are approximate and may shift during strong deformation; they are not anatomical UV maps.
 
+The final encoded coat review exposed a fixed-mask error in deep crouches: the Siamese face whitened and calico facial patches slipped toward the jaw. Facial masks now track the source's painted eye pixels and keep radii in source-pixel scale across a clip. Closed-eye stretch/sleep poses use explicit face centers; side tail and extended takeoff paw points were corrected separately. Calico face colors fully replace the underlying body mask. This fixes the most conspicuous face drift without changing any silhouette or registration. Approximate body-patch movement and faint Siamese tabby texture remain documented limitations.
+
 ## Stride and numerical review
 
 In the registered side walk, the near forepaw sweeps approximately +65 to +20 atlas pixels during its five-frame stance. With the runtime unit near .52, this gives roughly `45 × .52 / .625 ≈ 37` scene units/cycle; the selected stride is 36. Other views were calibrated against their projected paw sweep: near 42, toward 35, far 36, away 37; run 110. Phase advances by traveled FLOOR distance divided by stride, including slope and depth scale. These are artistic calibrations, not a claim of zero residual foot slip.

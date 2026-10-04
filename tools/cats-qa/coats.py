@@ -9,7 +9,7 @@ from scipy import ndimage
 from PIL import Image,ImageFilter
 ROOT=Path(__file__).resolve().parents[2];base=ROOT/'scenes/art/sprites/cats/orange/atlas'
 
-def recolor(im,coat,key,index):
+def recolor(im,coat,key,index,reference_size=None):
  a=np.array(im).astype(float);rgb=a[:,:,:3];r,g,b=rgb.transpose(2,0,1);h,w=r.shape;y,x=np.mgrid[:h,:w];x=x/w;y=y/h
  lum=.3*r+.59*g+.11*b;orange=np.clip((r-b-12)/55,0,1);white=(1-orange)*np.clip((lum-120)/90,0,1)
  # Greens belong to the iris; pinks to nose/ears. Preserve highlights and dark linework.
@@ -26,6 +26,17 @@ def recolor(im,coat,key,index):
  # Closed curled poses expose the cream flank and dark tail as a low crescent.
  if key=='rest' and index>=5:hx,hy,rx,ry=.65,.56,.34,.31;tail=y>.80
  if key=='stretch':hx,hy,rx,ry=.5,.64,.44,.29
+ # Track the painted eyes, not the changing whole-cat bounding box. A raised tail
+ # otherwise moves the face mask off the face during crouch/landing/stretch.
+ # Keep mask radii in source pixels across the clip, including foreshortening.
+ if coat in ['calico','siamese'] and view not in ['away','far']:
+  rw,rh=reference_size or (w,h);rx*=rw/w;ry*=rh/h
+  ey,ex=np.where(eye)
+  if len(ex)>=4:
+   hx=float(ex.mean()/w)-(rx*.30 if view=='side' else rx*.12 if view=='near' else 0)
+   hy=float(ey.mean()/h)-ry*.06
+  elif key=='stretch' and index in [3,4]:hx,hy=.59,.68
+  elif key=='rest' and index==7:hx,hy=.61,.67
  head=np.clip(1-(((x-hx)/rx)**2+((y-hy)/ry)**2),0,1)
  if coat=='grey':
   value=lum*.73+19;out=np.stack([value*.98,value,value*1.045],2);out=out*(1-white[:,:,None])+rgb*white[:,:,None]
@@ -38,8 +49,8 @@ def recolor(im,coat,key,index):
   field=np.sin(x*9+y*4)+.48*np.cos(y*12-x*5)
   patch=np.clip((field-.38)*7,0,1);dark=np.clip((-field-.55)*7,0,1)
   # Keep chest and paws white. Orange face with one charcoal ear/temple.
-  faceOrange=head*.75;darkFace=head*np.clip((x-hx)*18,0,1)
-  patch=np.maximum(patch*(1-head),faceOrange);dark=np.maximum(dark*(1-head),darkFace)
+  face=np.clip(head*4,0,1);faceOrange=face*.85;darkFace=face*np.clip((x-hx)*18+.12,0,1)
+  patch=patch*(1-face)+faceOrange;dark=dark*(1-face)+darkFace
   patch*=orange;dark*=orange
   charcoal=np.stack([lum*.22+12,lum*.22+13,lum*.22+15],2)
   out=ivory*(1-patch[:,:,None])+rgb*patch[:,:,None];out=out*(1-dark[:,:,None])+charcoal*dark[:,:,None]
@@ -58,6 +69,10 @@ def recolor(im,coat,key,index):
   # Broad painted sock gradients also cover short foreshortened paws, which have
   # too little geodesic length to register as an extremity.
   points=np.maximum(points,np.clip((y-.77)*7,0,1))
+  if view=='side':
+   points=np.maximum(points,np.clip((.25-x)*16,0,1))
+   if key=='jump-side' and index in [2,3]:
+    points=np.maximum(points,np.clip((x-.72)*16,0,1)*np.clip((y-.55)*12,0,1))
   if view=='toward':points=np.maximum(points,np.clip((.30-y)*15,0,1))
   if view=='away':points=np.maximum(points,np.clip((.43-x)*12,0,1)*np.clip((y-.43)*10,0,1))
   if key=='rest' and index>=5:points=np.maximum(head,np.clip((y-.78)*7,0,1))
@@ -80,7 +95,7 @@ def build():
   for key,c in manifest.items():
    src=Image.open(base/(key+'.webp')).convert('RGBA');sheet=Image.new('RGBA',src.size)
    for i,(x,y,w,h,ax,ay) in enumerate(c['frames']):
-    piece=recolor(src.crop((x,y,x+w,y+h)),coat,key,i);sheet.alpha_composite(piece,(x,y))
+    piece=recolor(src.crop((x,y,x+w,y+h)),coat,key,i,c['frames'][0][2:4]);sheet.alpha_composite(piece,(x,y))
    sheet.save(out/(key+'.webp'),quality=90,method=3);data[key]={**c,'src':c['src'].replace('/orange/','/'+coat+'/')}
   (out/'manifest.json').write_text(json.dumps(data,indent=2)+'\n')
 if __name__=='__main__':build()

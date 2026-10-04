@@ -29,7 +29,7 @@ test('schedule ranges, calm departure and boundary-crossing ticks remain finite'
 test('station assets stay unloaded at cruise, release after departure, and reject stale skin loads',async()=>{
  const images=[];const ctx=new Proxy({}, {get:()=>()=>{}});
  const document={createElement:()=>({width:1,height:1,getContext:()=>ctx})};
- class Image {constructor(){this.width=1440;this.height=480;images.push(this);}set src(value){this.path=value;}}
+ class Image {constructor(){this.width=1440;this.height=480;images.push(this);}set src(value){this.path=value;}removeAttribute(name){assert.equal(name,'src');this.path=null;}}
  const box={module:{exports:{}},document,Image,console};vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../scenes/train-stations.js'),'utf8'),box);
  const train={d:1000,v:260},view={x0:0,x1:500,cx:250,ww:500,wh:250,y0:0,y1:250};
  const stations=box.module.exports.create({train,skin:()=> 'indian',view:()=>view,env:()=>({}),snow:()=>0,segments:[{t:'country',a:0,b:20000}],routeLength:()=>20000});
@@ -38,6 +38,7 @@ test('station assets stay unloaded at cruise, release after departure, and rejec
  stations.force(24);images.slice(2).forEach(i=>i.onload());await new Promise(r=>setImmediate(r));assert.equal(stations.report().loaded,true);
  for(let i=0;i<2300;i++)stations.update(1/30,260);
  assert.equal(stations.report().phase,'cruise');assert.equal(stations.report().bytes,0);assert.equal(stations.report().loaded,false);assert.equal(images.length,4,'departure must not repeatedly reload art');
+ assert.ok(images.every(im=>im.path===null&&im.onload===null&&im.onerror===null),'detach decoded sources and handlers on departure and stale-load cancellation');
 });
 test('actor feet remain above the platform fascia and outside all fixture footprints',()=>{
  const {specs}=sandbox.module.exports;

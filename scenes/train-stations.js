@@ -60,12 +60,13 @@ function create(api) {
  const calls=new Calls(), art={skin:null,images:null,lit:null,key:'',loading:false,generation:0,bytes:0,loads:0,releases:0,error:null};
  let clock=0;
  const canvas=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c;};
- function release(){art.generation++;if(art.images||art.loading)art.releases++;if(art.lit)for(const c of Object.values(art.lit))c.width=c.height=1;art.images=art.lit=null;art.loading=false;art.key='';art.bytes=0;art.skin=null;}
+ const detach=images=>{for(const im of images){im.onload=im.onerror=null;im.removeAttribute('src');}};
+ function release(){art.generation++;if(art.images||art.loading)art.releases++;if(art.images)detach(Object.values(art.images));if(art.lit)for(const c of Object.values(art.lit))c.width=c.height=1;art.images=art.lit=null;art.loading=false;art.key='';art.bytes=0;art.skin=null;}
  function load(){
   if(art.images||art.loading)return;
   const token=++art.generation,skin=api.skin();art.skin=skin;art.loading=true;art.error=null;art.loads++;
   Promise.all([skin,'life'].map(name=>new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Station art missing: '+name));im.src='art/train/stations/'+name+'.webp';}))).then(images=>{
-   if(token!==art.generation)return;art.images={plate:images[0],life:images[1]};art.loading=false;art.bytes=images.reduce((sum,im)=>sum+im.width*im.height*4,0);
+   if(token!==art.generation){detach(images);return;}art.images={plate:images[0],life:images[1]};art.loading=false;art.bytes=images.reduce((sum,im)=>sum+im.width*im.height*4,0);
   }).catch(e=>{if(token!==art.generation)return;release();art.error=e.message;calls.reset();console.warn(e.message);});
  }
  function box(){const v=api.view(),h=v.wh*.94,w=h*3,s=specs[api.skin()];return {x:v.cx-s.focus*w+(calls.stop-api.train.d)*.95,y:v.y1-h*.97,w,h,s};}
@@ -121,7 +122,7 @@ function create(api) {
   const elapsed=calls.phase==='approach'?0:calls.phase==='dwell'?calls.age:calls.dwell;
   const walkX=-.10+elapsed*(.11/3);
   if(walkX>.02&&walkX<.98)actor(1,walkX,s.walkFeet,.29,Math.floor(elapsed*3.8)%6);
-  if(E.day>.25&&E.snow<.2)actor(3,.84,s.feet+.010,.052,[0,0,1,2,3,4,5,0][Math.floor(clock*1.6)%8]);
+  if(E.day>.25&&E.snow<.2)actor(3,.59,s.feet+.003,.070,[0,0,1,2,3,4,5,0][Math.floor(clock*1.6)%8]);
   if(s.barrier){ // The photographic barrier is in front: restore its exact pixels over legs.
    const im=art.lit.plate,sy=Math.round(s.barrier*im.height);
    g.drawImage(im,0,sy,im.width,im.height-sy,b.x,b.y+b.h*sy/im.height,b.w,b.h*(1-sy/im.height));

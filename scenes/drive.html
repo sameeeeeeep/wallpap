@@ -58,7 +58,7 @@
 //  the ambience bus, wet-tyre hiss + rain on the weather bus, horn on fx.
 //
 //  ART SLOTS (optional; procedural fallback): scenes/art/drive/
-//    car.png  rear view of the player car, transparent PNG, ~1200 px
+//    car.webp  rear view of the player car, transparent WebP, ~1200 px
 //             wide, wheels touching the bottom edge, car centred. Drawn
 //             at the procedural car's width (1.92 m); tail-light glows
 //             are added at 30–60% height, ±40% width.
@@ -186,10 +186,10 @@ const CONE = (() => {      // volumetric streetlight cone (head at top centre)
 const ART = { car: null, plates: {}, trees: {} };
 // Generated transparent landscapes and existing painted tree cutouts; all lighting is baked offscreen.
 for(const id of ['coast','forest','desert']){
-  const im=new Image();im.onload=()=>{ART.plates[id]=im;if(E&&W>1)requestBake(false);};im.src='art/drive/'+id+'-painted.png';
+  const im=new Image();im.onload=()=>{ART.plates[id]=im;if(E&&W>1)requestBake(false);};im.src='art/drive/'+id+'-painted'+'.webp';
 }
 for(const [id,path] of Object.entries({fir:'swiss/tree1',tpine:'swiss/tree2',pine:'shinkansen/tree1',cypressW:'orient/tree2',bush:'scrub',rock:'swiss/scrub'})){
-  const im=new Image();im.onload=()=>{ART.trees[id]=im;if(E&&W>1)bakeSprites();};im.src='art/train/'+path+'.png';
+  const im=new Image();im.onload=()=>{ART.trees[id]=im;if(E&&W>1)bakeSprites();};im.src='art/train/'+path+'.webp';
 }
 (()=>{const im=new Image();im.onload=()=>{
   const full=newCanvas(im.width,im.height),g=full.getContext('2d');g.drawImage(im,0,0);
@@ -202,7 +202,7 @@ for(const [id,path] of Object.entries({fir:'swiss/tree1',tpine:'swiss/tree2',pin
     c.naturalWidth=c.width;c.naturalHeight=c.height;ART.trees[name]=c;
   });if(E&&W>1)bakeSprites();
 };im.src='art/drive/roadside-painted.png';})();
-(() => { try { const im = new Image(); im.onload = () => { if (im.naturalWidth) { ART.car = im; if (E && W > 1) bakeCar(); } }; im.onerror = () => {}; if (!/[?&]noart=1/.test(location.search)) im.src = 'art/drive/car.png'; } catch (e) {} })();
+(() => { try { const im = new Image(); im.onload = () => { if (im.naturalWidth) { ART.car = im; if (E && W > 1) bakeCar(); } }; im.onerror = () => {}; if (!/[?&]noart=1/.test(location.search)) im.src = 'art/drive/car.webp'; } catch (e) {} })();
 
 // =====================================================================
 //  environment: time of day + weather (glides 20–40 s, never pops)
@@ -1183,7 +1183,7 @@ function signSpr(lines, style) {   // green route sign / blue service sign (pict
 }
 
 // =====================================================================
-//  the car (procedural painted rear view, or art/drive/car.png)
+//  the car (procedural painted rear view, or art/drive/car.webp)
 // =====================================================================
 let carCv = newCanvas(1, 1), carU = 1;   // css px per car unit (car = 100 units wide)
 const CAR_BODY = [30, 44, 60];

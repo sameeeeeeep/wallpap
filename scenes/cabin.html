@@ -52,10 +52,10 @@
                                     ultrawide screens (coat rack / snowshoes left, bench right)
      outside-{winter,summer}-{night,day}.jpg  1254² window views
      fire.jpg        8-frame flame flipbook on black (420×400 cells, base at y 372), added with 'lighter'
-     logs.png        burning log grate (transparent)
+     logs.webp        burning log grate (transparent)
      smoke.jpg       4 smoke wisps on black (screen)
-     turntable.png   record player without tonearm (transparent; tonearm + label art are live)
-     bowl.png, mug.png, glass.png, slippers.png   small lived-in props (transparent)
+     turntable.webp   record player without tonearm (transparent; tonearm + label art are live)
+     bowl.webp, mug.webp, glass.webp, slippers.webp   small lived-in props (transparent)
    Pets use the shared sprites in scenes/art/sprites/ (dogs/golden, cats/orange).
    ===================================================================== */
 (() => {
@@ -129,7 +129,7 @@ const noise1 = (x) => { const i = Math.floor(x), f = x - i, h = (n) => { const s
 const ART = {};
 let artDirty = false;
 const ART_FILES = ['room-night.jpg', 'room-day.jpg', 'room-night-wide.jpg', 'room-day-wide.jpg', 'outside-winter-night.jpg', 'outside-winter-day.jpg', 'outside-summer-night.jpg',
-  'outside-summer-day.jpg', 'fire.jpg', 'logs.png', 'smoke.jpg', 'turntable.png', 'bowl.png', 'mug.png', 'glass.png', 'slippers.png'];
+  'outside-summer-day.jpg', 'fire.jpg', 'logs.webp', 'smoke.jpg', 'turntable.webp', 'bowl.webp', 'mug.webp', 'glass.webp', 'slippers.webp'];
 function loadArtFiles() {
   for (const f of ART_FILES) {
     const im = new Image(), name = f.replace(/\.\w+$/, '');

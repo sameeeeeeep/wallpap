@@ -23,6 +23,9 @@
 import sys,os,json,itertools
 import numpy as np
 from PIL import Image
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 from scipy import ndimage as nd
 D=os.path.dirname(os.path.abspath(__file__)); ROOT=os.path.abspath(D+'/../..')
 slug,cyc=sys.argv[1:3]; dry='--dry' in sys.argv; prev=next((a[10:] for a in sys.argv if a.startswith('--preview=')),None); N=8 if cyc=='walk' else 6
@@ -35,7 +38,7 @@ st=dict((k,float(v)) for k,v in re.findall(r"(walk|run):([\d.]+)",m.group(1))) i
 stride=st.get(cyc,{'walk':.85,'run':1.6}[cyc])
 TOL=.035
 def load(i):
-    return np.array(Image.open(f'{D}/cut/{slug}-{cyc}-{i}.png').convert('RGBA')).astype(np.float32)
+    return np.array(Image.open(asset_path(f'{D}/cut/{slug}-{cyc}-{i}.png')).convert('RGBA')).astype(np.float32)
 def measure(a):
     al=a[:,:,3]>127; ys=np.where(al.any(1))[0]; t,b=ys[0],ys[-1]; h=b-t+1
     y0,y1=int(round(t+(b-t)*.3)),int(round(t+(b-t)*.65)); cx=np.where(al[y0:y1+1])[1].mean()
@@ -190,11 +193,11 @@ def warp(a,m,uh,uf):
     xs=np.where((o[:,:,3]>0).any(0))[0]; return o[:,xs[0]:xs[-1]+1]
 if prev:
     os.makedirs(prev,exist_ok=True)
-    for i in range(N): Image.fromarray(warp(A[i],M[i],U[i,0],U[i,1])).save(f'{prev}/{slug}-{cyc}-{i+1}.png')
+    for i in range(N): save_art(Image.fromarray(warp(A[i],M[i],U[i,0],U[i,1])),f'{prev}/{slug}-{cyc}-{i+1}.png')
 elif not dry:
     dst=f'{ROOT}/scenes/art/sprites/{kind}s/{name}/cycle'; os.makedirs(dst,exist_ok=True)
     for i in range(N):
-        Image.fromarray(warp(A[i],M[i],U[i,0],U[i,1])).save(f'{dst}/{cyc}-{i+1}.png')
+        save_art(Image.fromarray(warp(A[i],M[i],U[i,0],U[i,1])),f'{dst}/{cyc}-{i+1}.png')
     rep=f'{D}/plant/{slug}-{cyc}.json'; os.makedirs(os.path.dirname(rep),exist_ok=True)
     json.dump(dict(H=H,stride=stride,step=e,solution=how,overlap_before=before_s,overlap_after=after_s,offsets=U.round(2).tolist(),
                    slip_before=fmt(before),slip_after=fmt(after),paws=[[round(p,1) for p,_ in g] for g in G]),open(rep,'w'))

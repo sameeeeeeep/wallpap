@@ -41,22 +41,18 @@
 //  small baked layer in front, so the animals can pass behind them.
 //
 //  ART SLOTS (all optional; missing files fall back to the procedural
-//  painting quietly). Drop PNGs into scenes/art/rooftop/:
-//    bg-night.png / bg-day.png   design x −180–2220 × y 0–1000
+//  painting quietly). Bundled art in scenes/art/rooftop/:
+//    bg-night.webp / bg-day.webp   design x −180–2220 × y 0–1000
 //                   at 2×; replaces the procedural sky + city + rooftop
 //                   (crossfades by time of day). Keep these live areas simple:
 //      projected wall panel x 444–836, y 150–520 (art square x 520–760, y 176–416)
 //      boombox: base centre (585, 800), 200×108; projector lens derived from aim
-//    chairs.png: two equal atlas cells; rear three-quarter view toward the wall
-//    boombox.png 900×561 (cassette window px 327–573 × 242–381, live tape inside)
-//    projector.png 493×997 projector on its side table (lens at px 47,75)
+//    chairs.webp: two equal atlas cells; rear three-quarter view toward the wall
+//    boombox.webp 900×561 (cassette window px 327–573 × 242–381, live tape inside)
+//    projector.webp 493×997 projector on its side table (lens at px 47,75)
 //      string-light strands: (860,132)→(1320,300)→(2070,272), (860,268)→(1320,306)
 //      sky above the parapet (y < 640, x > 860): planes + fireworks drawn live
-//    Animals (side view, facing RIGHT, feet on the bottom edge, centred):
-//      cat-<pose>.png / dog-<pose>.png, poses: walk1, walk2, sit, loaf, sleep,
-//      stretch (dog: play-bow). They override the shared illustrated sprites
-//      in scenes/art/sprites/ (cats/orange, dogs/corgi); with neither, a
-//      procedural rig draws them.
+//    Animals use shared registered WebP frames through pets.js.
 //    ?noart=1 skips slot loading.
 // =====================================================================
 const cv = document.getElementById('c');
@@ -246,10 +242,9 @@ function loadSlot(group, key, file, sub) {
 }
 const NOART = new URLSearchParams(location.search).get('noart') === '1';
 if (!NOART) {
-  loadSlot('props', 'chairs', 'chairs.png');
-  loadSlot('props', 'projector', 'projector.png'); loadSlot('props', 'boombox', 'boombox.png');
-  loadSlot('bg', 'night', 'bg-night.png'); loadSlot('bg', 'day', 'bg-day.png');
-  for (const id of ['cat', 'dog']) for (const k of ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch', 'play-bow']) loadSlot('pets', k, `${id}-${k}.png`, id);
+  loadSlot('props', 'chairs', 'chairs.webp');
+  loadSlot('props', 'projector', 'projector.webp'); loadSlot('props', 'boombox', 'boombox.webp');
+  loadSlot('bg', 'night', 'bg-night.webp'); loadSlot('bg', 'day', 'bg-day.webp');
 }
 const hasBg = () => !!(ART.bg.night || ART.bg.day);
 
@@ -285,7 +280,7 @@ function computeLayout() {
   o.blanket = { x0: 690, x1: 1010, y0: 884, y1: 970 };
   // Home cinema staging: two deck chairs side by side on the open deck, both turned toward the
   // projection wall; the projector stands on a little table just behind and between them, its
-  // beam passing over their backs to the wall. (art/rooftop/projector.png: 493×997, lens at px 47,75)
+  // beam passing over their backs to the wall. (art/rooftop/projector.webp: 493×997, lens at px 47,75)
   o.proj = { x: 1208, base: 858, h: 288 };
   { const P = o.proj, s = P.h / 997; P.s = s; P.w = 493 * s; P.x0 = P.x - P.w / 2; P.top = P.base - P.h;
     P.lens = { x: P.x0 + 44 * s, y: P.top + 75 * s }; P.body = { x0: P.x0, x1: P.x0 + 430 * s, y0: P.top + 10 * s, y1: P.top + 300 * s }; }
@@ -1067,7 +1062,7 @@ function drawProjector(g, T) {
   drawSprite(g, GLOW_WARM, vx, vy, 12, 0.18 * lv);
   g.globalCompositeOperation = 'source-over';
 }
-// The boombox (art/rooftop/boombox.png 900×561; cassette window px 327–573 × 242–381) with a
+// The boombox (art/rooftop/boombox.webp 900×561; cassette window px 327–573 × 242–381) with a
 // live cassette: its reels turn while playing and coast to a stop when paused.
 const BB = { w: 900, h: 561, win: [327, 242, 573, 381], spk: [[161, 340], [740, 340]], spkR: 70 };
 function radioGeo() {

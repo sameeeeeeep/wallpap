@@ -201,7 +201,7 @@ function layoutFor(W, rFrac) {
   Lr.horizon = 452;
   Lr.parTop = 584; Lr.parCap = 600; Lr.floorBack = 664;
   Lr.floorTop = 712; Lr.floorBot = 972;
-  const bx1 = 300;   // fixed: the painted house (art/cats/terrace.png) has one width
+  const bx1 = 300;   // fixed: the painted house (art/cats/terrace.webp) has one width
   Lr.bld = { x1: bx1, top: 300, front: 905 };
   Lr.dome = { x: bx1 * 0.5, y: 300, r: bx1 * 0.3 };
   Lr.win = { x0: bx1 * 0.22, x1: bx1 * 0.6, y0: 418, y1: 520 };
@@ -592,8 +592,8 @@ function paintBougainvillea(g, x, y) {
 
 // ----- painted plates (art/cats/) -----------------------------------------
 // The terrace is painted (Codex, from this file's own geometry — docs/scene-polish.md):
-//   terrace.png  1536×1024 — house, dome, window, door, awnings, stairs, parapet, floor (no props)
-//   props.png    1536×1024 — bench, canopy, bowls, pot, mat, lanterns where they stand at 1500 wide
+//   terrace.webp  1536×1024 — house, dome, window, door, awnings, stairs, parapet, floor (no props)
+//   props.webp    1536×1024 — bench, canopy, bowls, pot, mat, lanterns where they stand at 1500 wide
 // both painted in flat neutral daylight over the world 1500×1000 units (PLATE_W). The vector shapes
 // below still define every silhouette (so ledges and depth sorting stay exact); the plates replace
 // their colours (source-atop), then the scene light multiplies them — night, dusk, rain and lamp
@@ -605,7 +605,7 @@ for (const n of ['terrace', 'props', 'clouds']) {
   if (ARTREF || new URLSearchParams(location.search).get('procedural') === '1') break;
   const im = new Image();
   im.onload = () => { if (im.naturalWidth > 0) { PLATES[n] = im; if (L) bake(true); } };
-  im.src = 'art/cats/' + n + '.png';
+  im.src = 'art/cats/' + n + '.webp';
 }
 // paint a plate over what is already drawn on g (world transform set), only inside the drawn alpha,
 // then light it: pieces = [{src:[x,y,w,h] in plate units, dst:[x,y,w,h] in world, clip?:[x,y,w,h]}]

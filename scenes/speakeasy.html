@@ -43,15 +43,14 @@
 //  few moving things on top.
 //
 //  ART SLOTS (all optional; missing files fall back to the procedural
-//  painting quietly). Drop PNGs into scenes/art/speakeasy/:
-//    bg-night.png   4800×2000 px = design x 0–2400 × y 0–1000 at 2×, the whole
+//  painting quietly). Bundled art in scenes/art/speakeasy/:
+//    bg-night.webp   4800×2000 px = design x 0–2400 × y 0–1000 at 2×, the whole
 //                   room at night WITHOUT the live parts listed below (and
 //                   without the two booths, which are painted in front).
 //                   The high window glass must be TRANSPARENT (alpha 0) so the
 //                   live street/rain shows through.
-//    bg-day.png     same framing, daytime (crossfades by time of day; a sunbeam
-//                   from the high window is added live).
-//    piano.png      1030×946 the player piano, straight-on, on transparency
+//    Daylight and the sunbeam from the high window are added live.
+//    piano.webp      1030×946 the player piano, straight-on, on transparency
 //                   (drawn at x 900–1148, y 465–693 over the painted one; key,
 //                   paper-roll and pedal geometry: PIANO_ART below)
 //    street-night.jpg / street-day.jpg  ≈2.4:1 painted view through the high
@@ -68,8 +67,6 @@
 //      booths (front layer): left x ≤ 720, right x 1130–1480, y 776–930
 //      stage spotlight from (1176, 30) to a pool at (1176, 684)
 //    Animals (side view, facing RIGHT, feet on the bottom edge, centred):
-//      cat-<pose>.png  340×340 px, drawn as a 170×170-unit box
-//      dog-<pose>.png  420×420 px, drawn as a 210×210-unit box
 //      <pose> = stand, walk1…walk4 (walk cycle), sit, loaf, sleep, stretch.
 //      Missing poses fall back to stand; no files → procedural rig. Sprites
 //      are tinted by the room light, breathe, and flip/foreshorten as they turn.
@@ -251,11 +248,10 @@ function loadSlot(group, key, file, sub) {
 // The player piano (art px; see PIANO_ART) and the painted street through the high window.
 const PIANO = { im: null, cv: null }, STREET = {};
 if (new URLSearchParams(location.search).get('noart') !== '1') {
-  loadSlot('bg', 'night', 'bg-night.png'); loadSlot('bg', 'day', 'bg-day.png');
-  for (const id of ['cat', 'dog']) for (const k of ['walk1', 'walk2', 'sit', 'loaf', 'sleep', 'stretch', 'lie', 'belly-up']) loadSlot('pets', k, `${id}-${k}.png`, id);
+  loadSlot('bg', 'night', 'bg-night.webp');
   const pim = new Image();
   pim.onload = () => { if (!pim.naturalWidth) return; PIANO.im = pim; PIANO.cv = gradePiano(pim); clearTimeout(rsT); rsT = setTimeout(rebuild, 30); };
-  pim.src = 'art/speakeasy/piano.png';
+  pim.src = 'art/speakeasy/piano.webp';
   for (const k of ['night', 'day']) { const im = new Image(); im.onload = () => { if (im.naturalWidth) { STREET[k] = im; if (L) bake(false); } }; im.src = `art/speakeasy/street-${k}.jpg`; }
 }
 // the room's jukebox is decor now (beat-sync scene: no player, LW.settings.player is ignored)
@@ -879,7 +875,7 @@ function paintKeys(g) {
   g.fillStyle = '#141010'; for (const [x, y, w, h] of kr.black) g.fillRect(x, y, w, h);
   if (!PIANO.im) L.keyR = kr;
 }
-// ---- the painted player piano: geometry measured on art/speakeasy/piano.png (px) ----
+// ---- the painted player piano: geometry measured on art/speakeasy/piano.webp (px) ----
 const PIANO_ART = {
   w: 1030, h: 946,
   keys: { x0: 84, x1: 946, n: 47, top: 416, front: 444, y1: 478 },   // 47 white keys; the ivory lip is front…y1

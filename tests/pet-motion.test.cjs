@@ -2,6 +2,9 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
+const imageSize=require('./helpers/image-size.cjs');
+const spritePath=stem=>require.resolve('../scenes/art/sprites/'+stem+(spritePNG.has(stem)?'.png':'.webp'));
+const spritePNG=new Set(require('../scenes/art/sprites/formats.json').png);
 function load(){let time=0;const LW={};vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/pet-motion.js'),'utf8'),{LW,performance:{now:()=>time}});return {LW,tick:ms=>time+=ms};}
 test('gait changes finish a stand-up transition instead of restarting it',()=>{
  const {LW,tick}=load(),pet={};LW.poseState(pet,'sleep');LW.poseState(pet,'walk1');
@@ -244,15 +247,15 @@ test('directional loading is atomic: one failed frame disables only that view',(
  vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/pet-motion.js'),'utf8'),{LW,Image});
  let done=0;const C=LW.petCycleLoad('art/sprites/','cats/orange',()=>done++);
  assert.equal(images.length,60);
- for(const im of images){if(im.url.endsWith('walk-f-4.png'))im.onerror();else im.onload();}
+ for(const im of images){if(/walk-f-4\.(png|webp)$/.test(im.url))im.onerror();else im.onload();}
  assert.equal(done,1);assert.equal(C.left,0);assert.equal(C.raw['walk-f'],undefined);
  assert.equal(C.raw.walk.length,8);assert.equal(C.raw['walk-b'].length,8);assert.equal(C.raw.run.length,6);
  assert.ok(LW.PET_DIRECTION_HAS['dogs/corgi']);
 });
-test('all cat directional assets contain eight nonempty PNG frames',()=>{
+test('all cat directional assets contain eight nonempty registered image frames',()=>{
  for(const coat of ['orange','black','grey','calico','siamese'])for(const view of ['f','b'])for(let i=1;i<=8;i++){
-  const b=fs.readFileSync(require.resolve(`../scenes/art/sprites/cats/${coat}/cycle/walk-${view}-${i}.png`));
-  assert.equal(b.toString('hex',0,8),'89504e470d0a1a0a');assert.ok(b.readUInt32BE(16)>50);assert.ok(b.readUInt32BE(20)>50);
+  const b=fs.readFileSync(spritePath(`cats/${coat}/cycle/walk-${view}-${i}`));
+  assert.ok(imageSize(b).width>50);assert.ok(imageSize(b).height>50);
  }
 });
 test('directional padding never changes the animal scale or foot baseline',()=>{
@@ -320,9 +323,9 @@ test('all registered jump frames share walk geometry and the runtime registry ma
   assert.equal(geom.centers.length,5);
   let h;
   for(let i=1;i<=5;i++){
-   const png=fs.readFileSync(require.resolve(`../scenes/art/sprites/${coat}/t/${name}-${i}.png`));
-   assert.equal(png.toString('hex',0,8),'89504e470d0a1a0a');assert.ok(png.length>1000);
-   const w=png.readUInt32BE(16),height=png.readUInt32BE(20);h??=height;assert.equal(height,h);
+   const png=fs.readFileSync(spritePath(`${coat}/t/${name}-${i}`));
+   assert.ok(png.length>1000);
+   const w=imageSize(png).width,height=imageSize(png).height;h??=height;assert.equal(height,h);
    assert.ok(geom.centers[i-1]>geom.pad&&geom.centers[i-1]<w-geom.pad);
   }
  }
@@ -339,8 +342,8 @@ test('gaze replacement registers every seven-pet motion cycle with subpixel stan
    assert.ok(r.max_contact_slip_px<1e-6,animal+' '+key+' stance drift');
    assert.ok(r.stance_chains.every(([group,ids])=>[0,1].includes(group)&&ids.every(i=>i>=0&&i<n)));
    for(let i=1;i<=n;i++){
-    const png=fs.readFileSync(require.resolve(`../scenes/art/sprites/${set}/cycle/${key}-${i}.png`));
-    assert.ok(png.readUInt32BE(16)>2*g.pad);assert.ok(png.readUInt32BE(20)>2*g.pad);
+    const png=fs.readFileSync(spritePath(`${set}/cycle/${key}-${i}`));
+    assert.ok(imageSize(png).width>2*g.pad);assert.ok(imageSize(png).height>2*g.pad);
    }
   }
  }
@@ -351,13 +354,30 @@ test('FOLLOW art has complete registered run, stalk, hunt, pounce and social seq
  for(const [set,seqs] of Object.entries(LW.PET_FOLLOW_LAYOUT)){
   for(const key of ['perk','turn-f','turn-b','loaf-stretch','hunt','hunt-f','hunt-b','pounce','pounce-f','pounce-b']){
    assert.equal(seqs[key].centers.length,5);
-   for(let i=1;i<=5;i++){const b=fs.readFileSync(require.resolve(`../scenes/art/sprites/${set}/t/${key}-${i}.png`));assert.ok(b.length>1000);assert.ok(b.readUInt32BE(20)>2*seqs[key].pad);}
+   for(let i=1;i<=5;i++){const b=fs.readFileSync(spritePath(`${set}/t/${key}-${i}`));assert.ok(b.length>1000);assert.ok(imageSize(b).height>2*seqs[key].pad);}
   }
   for(const key of ['run-f','run-b',...(set.startsWith('cats/')?['stalk','stalk-f','stalk-b']:[])]){
    const g=LW.PET_DIRECTION_LAYOUT[set][key],r=reports[set.split('/')[1]+'-'+key];
    assert.equal(g.centers.length,6);assert.ok(r.max_contact_slip_px<1e-6);
    assert.ok(Math.abs(g.height*g.stride-r.height*r.stride)<1e-8);
-   for(let i=1;i<=6;i++)assert.ok(fs.statSync(require.resolve(`../scenes/art/sprites/${set}/cycle/${key}-${i}.png`)).size>1000);
+   for(let i=1;i<=6;i++)assert.ok(fs.statSync(spritePath(`${set}/cycle/${key}-${i}`)).size>1000);
+  }
+ }
+});
+
+test('bundled art matches audited bytes and original canvas dimensions',()=>{
+ const crypto=require('node:crypto'),path=require('node:path');
+ const rows=require('../tools/webp/report.json');
+ const {LW}=load();
+ for(const r of rows){
+  const target=r.path.replace(/\.png$/,r.webp_bytes?'.webp':'.png');
+  const b=fs.readFileSync(path.join(__dirname,'../scenes/art',target));
+  assert.deepEqual(imageSize(b),{width:r.size[0],height:r.size[1]},target);
+  assert.equal(crypto.createHash('sha256').update(b).digest('hex'),r.webp_bytes?r.webp_sha256:r.source_sha256,target);
+  if(r.webp_bytes){assert.ok(r.webp_bytes<=r.original_bytes*.7);assert.ok(r.psnr_db===null||r.psnr_db>=40);assert.equal(r.max_alpha_error,0);}
+  if(r.path.startsWith('sprites/')){
+   const rel=r.path.slice(8,-4),[kind,animal,...name]=rel.split('/');
+   assert.equal(LW.petArtPath('art/sprites/',kind+'/'+animal,name.join('/')),'art/'+target);
   }
  }
 });

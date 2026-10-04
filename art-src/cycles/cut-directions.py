@@ -6,11 +6,14 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage as nd
 from PIL import Image, ImageDraw
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 root=Path(__file__).resolve().parents[2]
 for coat in ['orange','black','grey','calico','siamese']:
  for view in ['f','b']:
   src=root/f'art-src/cycles/cat-{coat}-walk-{view}.png'
-  im=Image.open(src).convert('RGBA');a=np.array(im)
+  im=Image.open(asset_path(src)).convert('RGBA');a=np.array(im)
   if a[:,:,3].min()==255:
    raise ValueError('Expected generated alpha; use cut.py for an opaque grey strip')
   labels,n=nd.label(a[:,:,3]>100)
@@ -28,7 +31,7 @@ for coat in ['orange','black','grey','calico','siamese']:
    cut=a[top:baseline,x0:x1].copy()
    mask=nd.binary_dilation(labels[top:baseline,x0:x1]==ids[i-1],iterations=2)
    cut[:,:,3]=np.where(mask,cut[:,:,3],0)
-   Image.fromarray(cut).save(out/f'walk-{view}-{i}.png')
+   save_art(Image.fromarray(cut),out/f'walk-{view}-{i}.png')
   print(coat,view,'height',baseline-top)
 # Three views side by side at runtime-normalized heights; every phase is visible.
 canvas=Image.new('RGB',(1440,5*3*150),'#c9c8c6');draw=ImageDraw.Draw(canvas)
@@ -37,6 +40,6 @@ for row,coat in enumerate(['orange','black','grey','calico','siamese']):
   y=(row*3+v)*150;draw.text((5,y+2),f'{coat} {view}',fill='black')
   for i in range(1,9):
    prefix='walk' if view=='side' else f'walk-{view}'
-   im=Image.open(root/f'scenes/art/sprites/cats/{coat}/cycle/{prefix}-{i}.png');im.thumbnail((170,120))
+   im=Image.open(asset_path(root/f'scenes/art/sprites/cats/{coat}/cycle/{prefix}-{i}.png'));im.thumbnail((170,120))
    canvas.paste(im,((i-1)*180+(180-im.width)//2,y+145-im.height),im)
-canvas.save(root/'shots/cats-dirs/installed-contact.jpg')
+save_art(canvas,root/'shots/cats-dirs/installed-contact.jpg')

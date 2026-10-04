@@ -28,24 +28,24 @@
 //  handful of animated things: pets, record, tonearm, steam, rain, cars.
 //
 //  ART SLOTS (all optional — anything missing falls back to the procedural
-//  painting). Drop PNGs into scenes/art/cafe/:
-//    bg-night.png   the whole room at night, 16:10, 3200×2000 px (min 1600×1000)
-//    bg-day.png     same framing in daylight (crossfades with bg-night by time of day)
+//  painting). Bundled art in scenes/art/cafe/:
+//    bg-night.webp   the whole room at night, 16:10, 3200×2000 px (min 1600×1000)
+//    bg-day.webp     same framing in daylight (crossfades with bg-night by time of day)
 //                   → The window glass must be TRANSPARENT (alpha 0) so the live street,
 //                     rain, cars and lightning show through. When a bg is present the
 //                     scene uses a fixed 1600×1000 world, "cover"-fitted to the screen,
 //                     and props sit at the LAYOUT_1600 positions below. Paint the room
 //                     WITHOUT the record console / jukebox: they're mode-dependent and
 //                     are drawn over the painting.
-//    bg-overcast.png  the day room under cloud / rain (no sun patches), blended over bg-day by cloud
-//    bg-{night,day,overcast}-jukebox.png  the same room without the record console (jukebox skin)
-//    street-night.png / street-night-dry.png / street-day.png  1024² painted views through the
+//    bg-overcast.webp  the day room under cloud / rain (no sun patches), blended over bg-day by cloud
+//    bg-{night,day,overcast}-jukebox.webp  the same room without the record console (jukebox skin)
+//    street-night.png / street-night-dry.png / street-day.webp  1024² painted views through the
 //                   window (wet / dry night, day); the night sky above the roofs is cut out at load and
 //                   replaced by the live sky + the shared moon (moon.js); weather grades the plate
-//    car-1..3.png   passing cars, side view facing right (lit per bake, headlights at night)
-//    turntable.png  the record player (plinth + platter + arm pillar; record, tonearm, lamp are live)
-//    jukebox.png    the Pro skin (tubes painted unlit; a mask of them is lit live), crate.png beside it
-//    bowls.png      the pets' bowls by the door
+//    car-1..3.webp   passing cars, side view facing right (lit per bake, headlights at night)
+//    turntable.webp  the record player (plinth + platter + arm pillar; record, tonearm, lamp are live)
+//    jukebox.png    the Pro skin (tubes painted unlit; a mask of them is lit live), crate.webp beside it
+//    bowls.webp      the pets' bowls by the door
 //  LAYOUT: LW.layout side 'left' → the whole café is drawn mirrored (MIR, see upright());
 //    pets only rest inside LW.layout.clear and outside its avoid boxes; re-laid out on 'layout'.
 //  PETS on/off (LW.settings.pets): they walk out past the right edge and stay away; back in from there.
@@ -66,7 +66,7 @@
 //    ~28% (x > 0.72·W) is a calm door, floor lamp and plant only.
 //  PLAYER: LW.settings.player = 'record' (default) | 'jukebox'; click it = play/pause,
 //    the record crate/shelf = next; switching crossfades; dev key 'j' toggles.
-//  LAYOUT_1600 (world units, 1600×1000, i.e. the bg-*.png at 1×):
+//  LAYOUT_1600 (world units, 1600×1000, i.e. the bg-*.webp at 1×):
 //    window glass x 64–618, y 92–596 · seat x 30–652, cushion top y≈612, cat home (374, 628)
 //    nook (dog bed) centre x 230, 222 wide, y 672–772 · mug (552, 626)
 //    record console x 698–1120, top y 604 · platter centre (822, 543) r 84
@@ -259,18 +259,18 @@ function loadSlot(group, key, file) {
   img.onerror = () => {};
   img.src = 'art/cafe/' + file;
 }
-loadSlot('bg', 'night', 'bg-night.png'); loadSlot('bg', 'day', 'bg-day.png'); loadSlot('bg', 'over', 'bg-overcast.png');
+loadSlot('bg', 'night', 'bg-night.webp'); loadSlot('bg', 'day', 'bg-day.webp'); loadSlot('bg', 'over', 'bg-overcast.webp');
 // the street through the window: night (wet / dry) and day, crossfaded by daylight and wetness
-loadSlot('street', 'night', 'street-night.png'); loadSlot('street', 'dry', 'street-night-dry.png'); loadSlot('street', 'day', 'street-day.png');
-for (const i of [1, 2, 3]) loadSlot('car', i, 'car-' + i + '.png');
-loadSlot('obj', 'tt', 'turntable.png'); loadSlot('obj', 'crate', 'crate.png'); loadSlot('obj', 'bowls', 'bowls.png');
+loadSlot('street', 'night', 'street-night.png'); loadSlot('street', 'dry', 'street-night-dry.png'); loadSlot('street', 'day', 'street-day.webp');
+for (const i of [1, 2, 3]) loadSlot('car', i, 'car-' + i + '.webp');
+loadSlot('obj', 'tt', 'turntable.webp'); loadSlot('obj', 'crate', 'crate.webp'); loadSlot('obj', 'bowls', 'bowls.webp');
 // the jukebox skin (and the room without the record console behind it) only load once it's chosen
 let jukeArt = false;
 function loadJukeArt() {
   if (jukeArt) return; jukeArt = true;
-  loadSlot('obj', 'juke', 'jukebox.png'); loadSlot('bgJ', 'night', 'bg-night-jukebox.png'); loadSlot('bgJ', 'day', 'bg-day-jukebox.png'); loadSlot('bgJ', 'over', 'bg-overcast-jukebox.png');
+  loadSlot('obj', 'juke', 'jukebox.png'); loadSlot('bgJ', 'night', 'bg-night-jukebox.webp'); loadSlot('bgJ', 'day', 'bg-day-jukebox.webp'); loadSlot('bgJ', 'over', 'bg-overcast-jukebox.webp');
 }
-const hasBg = () => !!(ART.bg.night || ART.bg.day);   // (bg-overcast.png only ever blends over bg-day)
+const hasBg = () => !!(ART.bg.night || ART.bg.day);   // (bg-overcast.webp only ever blends over bg-day)
 const streetArt = () => !!(ART.street.night || ART.street.dry || ART.street.day);
 const jukeSprite = () => (L && L.mode === 'jukebox' && ART.obj.juke) || null;
 function computeLayout() {
@@ -308,7 +308,7 @@ function computeLayout() {
   o.tt.piv = { u: R + 42, v: -R * 0.52 };
   o.tt.arm = R * 1.32;
   o.tt.a0 = 0; o.tt.pz = 6; o.tt.rz = 4; o.tt.spr = null;
-  // painted record player (art/cafe/turntable.png): the plinth, platter and arm pillar are the
+  // painted record player (art/cafe/turntable.webp): the plinth, platter and arm pillar are the
   // painting; the record, the tonearm and the pilot lamp stay live. Geometry is measured on the art.
   const TS = ART.obj.tt;
   if (TS && hasBg()) {
@@ -443,14 +443,8 @@ function applyPlayer() {
   layoutPlayer(L);
   bake(true);                 // the room crossfades (console ↔ jukebox); live parts follow music.jk
   marqueeKey = ''; buildMarquee();
-  // anyone up on (or heading for) the old player hops down first
-  for (const p of pets) {
-    const bound = p.plat === 'player' || (p.act && p.act.plat === 'player') || p.plan.some((a) => a.plat === 'player');
-    if (!bound) continue;
-    p.plan = []; p.doing = null;
-    if (p.plat === 'player' || (p.act && p.act.t === 'hop')) { p.act = null; p.plat = 'player'; p.plan = [{ t: 'hop', plat: 'floor', x: floorX(p.x + 60), y: 820 }]; }
-    else p.act = null;
-  }
+  // Shared pets read the updated player spot from petStage() on their next step.
+
 }
 LW.on('settings', () => applyPlayer());
 // the jukebox marquee (title / artist), baked when the track changes
@@ -524,7 +518,7 @@ function paintJukeSprite(g) {
 function drawJukeSprite(g, T) { upright(g, L.juke.x, () => drawJukeSprite1(g, T)); }
 function drawJukeSprite1(g, T) {
   const j = L.juke, A = JB_ART, x0 = j.x - j.w / 2, P = (fx, fy) => [x0 + fx * j.w, j.top + fy * j.h];
-  const playing = isPlaying(), p = music.pal || DEFAULT_PAL, lvl = clamp((LW.music && LW.music.level) || 0, 0, 1);
+  const playing = music.playing, p = music.pal || DEFAULT_PAL, lvl = clamp((LW.music && LW.music.level) || 0, 0, 1);
   const k = music.lv, lvB = 1 - 0.55 * calm.lv;
   const on = (playing ? 0.74 + 0.22 * lvl + 0.2 * beat.pulse : (music.ever ? 0.36 : 0.45) + 0.05 * Math.sin(T * 0.9)) * lvB;
   // a warm bloom on the wall behind, tinted by the album
@@ -602,7 +596,7 @@ function paintJukeboxBody(g) {
   g.restore();
 }
 function drawJukebox(g, T) {
-  const j = L.juke, G = L.jb, playing = isPlaying(), p = music.pal || DEFAULT_PAL, lvl = clamp((LW.music && LW.music.level) || 0, 0, 1);
+  const j = L.juke, G = L.jb, playing = music.playing, p = music.pal || DEFAULT_PAL, lvl = clamp((LW.music && LW.music.level) || 0, 0, 1);
   const k = music.lv, lvB = 1 - 0.55 * calm.lv;
   const on = (playing ? 0.74 + 0.22 * lvl + 0.2 * beat.pulse : (music.ever ? 0.4 : 0.5) + 0.06 * Math.sin(T * 0.9)) * lvB;
   const lt = lightAt(j.x, j.base - 200), chrome = rgba(mul([220, 214, 204], lt.map((v) => 0.55 + 0.45 * v)));
@@ -1107,7 +1101,7 @@ function paintCrate(g) {
   g.fillStyle = 'rgba(255,230,190,0.22)'; g.fillRect(x0, top, cw, 2);
   g.fillStyle = '#3a2414'; rr(g, x0 + cw / 2 - 16, top + 10, 32, 9, 4); g.fill();
 }
-// measured on art/cafe/turntable.png (fractions of its width / height; z = height above the plate,
+// measured on art/cafe/turntable.webp (fractions of its width / height; z = height above the plate,
 // in widths): platter centre + record radius + its ellipse ratio, arm pivot, arm rest, pilot lamp
 const TT_ART = { cx: 0.4113, cy: 0.2371, r: 0.272, q: 0.358, piv: [0.7718, 0.2294, 0.0705], rest: [0.8358, 0.3346, 0.0764], led: [0.8596, 0.8088] };
 // the painted record player, lit by the room (baked with the room)
@@ -1441,7 +1435,7 @@ function skyCut(im) {
   } catch (e) { im._sky = im; }
   return im._sky;
 }
-// ---- passing cars: three painted cars (art/cafe/car-N.png, facing right), re-lit per bake --------
+// ---- passing cars: three painted cars (art/cafe/car-N.webp, facing right), re-lit per bake --------
 const CAR_LEN = { 1: 3.0, 2: 3.1, 3: 3.7 };   // metres
 let carTint = {};
 function bakeCars() {
@@ -2205,7 +2199,7 @@ let ptrSpeed = 0, ptrLast = null, ptrStillSince = 0;
 // =====================================================================
 const beat = { pulse: 0, level: 0, n: 0, lastNote: -9 };
 LW.on('beat', (st) => {
-  if (!isPlaying()) return;
+  if (!music.playing) return;
   st = clamp(+st || 0.4, 0, 1);
   beat.pulse = Math.max(beat.pulse, st); beat.n++;
   const T = nowS();

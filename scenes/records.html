@@ -23,13 +23,13 @@
    display (big lit sleeve + letter board), turntable on the counter.
 
    ART SLOTS (optional; everything is procedural until these exist)
-   Put PNGs in scenes/art/records/. Each is tried once at startup with
+   Bundled WebP/PNG art in scenes/art/records/. Each is tried once at startup with
    new Image(); a 404 is silently ignored and the procedural drawing stays.
 
-     bg-night.png   3200×2000  full painted shop interior at night (16:10).
+     bg-night.webp   3200×2000  full painted shop interior at night (16:10).
                                The shop-window GLASS must be fully transparent
                                (alpha 0) so the live street/rain shows through.
-     bg-day.png     3200×2000  same framing in daylight. Crossfades with
+     bg-day.webp     3200×2000  same framing in daylight. Crossfades with
                                bg-night by time of day; either alone is fine.
        When a bg is present the scene switches to a fixed 1600×1000 reference
        layout (world units), cover-fit to the screen. Paint the room EMPTY at
@@ -43,21 +43,19 @@
          counter top         y 690…712, x ≥ 750 (cat sits at x ≈ 794)
          turntable platter   centre (958, 651), radius 88 (seen at 0.34 tilt)
          dog bed             centre (200, 824); dog lanes on the rug y ≈ 958
-     bg-overcast.png  day shop under cloud (blended over bg-day by cloud cover)
+     bg-overcast.webp  day shop under cloud (blended over bg-day by cloud cover)
      glass-mask.png   alpha = the painted window glass (cut from both paintings)
-     street-night.png / street-night-dry.png / street-day.png   1024² views through the window
-                      (night sky cut at load → live sky + shared moon.js); car-1..3.png passing cars
-     turntable.png    the deck on the counter (record, tonearm, lamp live); dogbed.png, bowls.png
+     street-night.png / street-night-dry.png / street-day.webp   1024² views through the window
+                      (night sky cut at load → live sky + shared moon.js); car-1..3.webp passing cars
+     turntable.webp    the deck on the counter (record, tonearm, lamp live); dogbed.webp, bowls.webp
      LAYOUT: LW.layout side 'left' → drawn mirrored (MIR, upright() for text/art/deck/street); pets only
      rest inside LW.layout.clear / outside avoid boxes. PETS on/off (LW.settings.pets): they walk out
      off the left edge along the front of the shop and stay away; back in from there.
      ANIMALS — illustrated sprites come from the shared library
-       art/sprites/cats/black/{walk1,walk2,sit,loaf,sleep,stretch}.png  (cat "Licorice")
-       art/sprites/dogs/golden/{walk1,walk2,sit,lie,belly-up}.png      (pup "Biscuit")
-     (transparent PNG, facing RIGHT, bottom-centre = paw contact; any size —
-     scaled so walk1's width = the animal's body length). Per-scene overrides
-     win if present: art/records/cat-<pose>.png, art/records/dog-<pose>.png
-     with the same pose names. Procedural rigs draw until a full set loads.
+       art/sprites/cats/black/{walk1,walk2,sit,loaf,sleep,stretch}.webp  (cat "Licorice")
+       art/sprites/dogs/golden/{walk1,walk2,sit,lie,belly-up}.webp      (pup "Biscuit")
+     (transparent WebP, facing RIGHT, bottom-centre = paw contact; any size —
+     registered by pet-motion.js and rendered by the shared pets.js engine).
    ===================================================================== */
 'use strict';
 (() => {
@@ -154,7 +152,7 @@ function loadArtSlots() {
       const im = new Image();
       im.onload = () => { if (!im.naturalWidth) return; ART.img[name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(rebuild, 60); };
       im.onerror = () => {};
-      im.src = ART.dir + name + '.png';
+      im.src = ART.dir + name + (["glass-mask", "street-night", "street-night-dry"].includes(name)?'.png':'.webp');
     } catch (e) { /* never let a missing asset matter */ }
   }
 }
@@ -323,7 +321,7 @@ function computeLayout() {
   o.lamp = { x: o.tt.px1 + 112, y: o.counter.back + 6 };
   o.phones = { x: o.lamp.x + 128, y: o.counter.back + 16 };
   o.till = W - 84 > o.phones.x + 170 ? { x: W - 84, y: o.counter.back + 8 } : null;
-  // the painted deck (art/records/turntable.png) standing on the counter: its record, tonearm and
+  // the painted deck (art/records/turntable.webp) standing on the counter: its record, tonearm and
   // pilot lamp stay live; geometry measured on the art
   o.tt.a0 = 0; o.tt.pz = 6; o.tt.rz = 4; o.tt.spr = null; o.ledPosA = null;
   const TS = ART.img.turntable;
@@ -982,7 +980,7 @@ function paintCounter(g) {
   g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(x0 - 6, c.top + 12, w + 6, 6);
 }
 const ttP = (u, v, z = 0) => [L.tt.cx + u, L.tt.cy + v * L.tt.q - z];
-// measured on art/records/turntable.png (fractions of its width / height; z = height above the top
+// measured on art/records/turntable.webp (fractions of its width / height; z = height above the top
 // plate in widths): platter centre, record radius, ellipse ratio, arm pivot, arm rest, pilot lamp
 const TT_ART = { cx: 0.425, cy: 0.283, r: 0.262, q: 0.383, piv: [0.76, 0.184, 0.04], rest: [0.867, 0.324, 0.06], led: [0.772, 0.599] };
 function litSprite(im, x, y, w, h) {

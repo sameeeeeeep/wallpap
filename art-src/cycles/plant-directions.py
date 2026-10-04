@@ -9,6 +9,9 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage as nd
 from PIL import Image
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 ROOT=Path(__file__).resolve().parents[2]
 STRIDES=dict.fromkeys(['orange','black','grey','calico','siamese'],.5)
 metadata={};reports={}
@@ -16,7 +19,7 @@ for coat,stride in STRIDES.items():
  metadata['cats/'+coat]={}
  for view in ['f','b']:
   folder=ROOT/f'scenes/art/sprites/cats/{coat}/cycle'
-  frames=[np.array(Image.open(folder/f'walk-{view}-{i}.png')).astype(float) for i in range(1,9)]
+  frames=[np.array(Image.open(asset_path(folder/f'walk-{view}-{i}.png'))).astype(float) for i in range(1,9)]
   h=frames[0].shape[0];ms=[]
   for a in frames:
    al=a[:,:,3]>127;ys=np.where(al.any(1))[0];top,bot=ys[0],ys[-1]
@@ -82,7 +85,7 @@ for coat,stride in STRIDES.items():
    labels,_=nd.label(clean[:,:,3]>8);counts=np.bincount(labels.ravel());counts[0]=0
    keep=nd.binary_dilation(labels==counts.argmax(),iterations=1)
    clean[:,:,3]=np.where(keep,clean[:,:,3],0)
-   Image.fromarray(clean).save(folder/f'walk-{view}-{i+1}.png')
+   save_art(Image.fromarray(clean),folder/f'walk-{view}-{i+1}.png')
    # Measured forward-warp displacement at the actual input paw landmarks.
    residuals.append(np.array([displacement(np.array(p[0]),np.array(p[1])) for p in paws[i]]))
   corrected=rel+np.array(residuals);slips=[]

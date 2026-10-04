@@ -1,9 +1,12 @@
 /* Shared scale and pose composition for illustrated scene pets. */
 (() => {
   'use strict';
+  // PNG exceptions did not meet the release size/quality gate. See art/sprites/formats.json.
+  const PET_ART_PNG=new Set([]);
+  LW.petArtPath=(base,set,name)=>base+set+'/'+name+(PET_ART_PNG.has(set+'/'+name)?'.png':'.webp');
   const clamp=t=>Math.max(0,Math.min(1,t));
   const ease=t=>{t=clamp(t);return t*t*(3-2*t);};
-  const name=p=>typeof p==='string'?p:((p&&p.src||'').split('/').pop()||'').replace(/\.png.*$/,'');
+  const name=p=>typeof p==='string'?p:((p&&p.src||'').split('/').pop()||'').replace(/\.(?:png|webp).*$/,'');
   // walk1/walk2 and the drawn gait-cycle frames (walk-1..8, run-1..6): swapped as hard cuts
   const walking=p=>/^(walk[12]|walk-(?:[fb]-)?\d+|run-(?:[fb]-)?\d+)$/.test(name(p));
   LW.petUnit=(kind,walk)=>(kind==='dog'?96:78)/(walk.naturalHeight||walk.height);
@@ -35,7 +38,7 @@
     }
     return LW.poseFrame(s.from,s.to,(now-s.at)/(s.d||duration));
   };
-  // Drawn in-between frames (art/sprites/<kind>/<name>/t/<seq>-1..5.png). Returns the
+  // Drawn in-between frames (art/sprites/<kind>/<name>/t/<seq>-1..5.webp). Returns the
   // frame names to play for a pose-family change, or null → fall back to the crossfade.
   // Sheets: stand-sit (walk→sit), sit-sleep (sit→lying→curled; frame 3 ≈ loaf).
   const PATHS={'walk1>sit':[['stand-sit',1,5]],'sit>sleep':[['sit-sleep',1,5]],'walk1>sleep':[['stand-sit',1,5],['sit-sleep',2,5]],
@@ -49,7 +52,7 @@
     return rev?out.reverse():out;
   };
   // ---- drawn in-between frames: shared loader, layout and player -------------------
-  // Which animals have sheets (art/sprites/<set>/t/<seq>-1..5.png). Update when a sheet ships.
+  // Which animals have sheets (art/sprites/<set>/t/<seq>-1..5.webp). Update when a sheet ships.
   const ALL=['stand-sit','sit-sleep','turn','jump'];
   LW.PET_SEQ_HAS={'cats/orange':ALL,'cats/black':ALL,'cats/grey':ALL,'cats/calico':ALL,'cats/siamese':ALL,'dogs/golden':ALL,'dogs/corgi':ALL,'pandas/mei':ALL,'pandas/bao':ALL,'pandas/cub':ALL};
   // The pose family each sheet starts and ends on (the scene maps its own poses onto these).
@@ -66,7 +69,7 @@
         const im=new Image();
         im.onload=()=>{if(bad)return;if(!(im.naturalWidth>0)){bad=true;fin();return;}if(++n===5){T.raw[q]=ims;fin();}};
         im.onerror=()=>{if(!bad){bad=true;fin();}};
-        im.src=base+set+'/t/'+q+'-'+i+'.png';ims.push(im);
+        im.src=LW.petArtPath(base,set,'t/'+q+'-'+i);ims.push(im);
       }
     }
     return T;
@@ -148,7 +151,7 @@
   };
   // jump frames for a hop's phases: 'crouch' → 1, 'air' (u 0…1) → 2-4, 'land' → 5
   LW.petJumpFrame=(ph,u)=>'jump-'+(ph==='crouch'?1:ph==='land'?5:u<.36?2:u<.64?3:4);
-  // ---- drawn gait cycles: art/sprites/<set>/cycle/walk-1..8.png, run-1..6.png ------------
+  // ---- drawn gait cycles: art/sprites/<set>/cycle/walk-1..8.webp, run-1..6.webp ------------
   // One full stride each (walk: R contact, down, passing, up, L contact, down, passing, up;
   // run: one gallop/trot stride), facing right, frame 1 ≈ walk1. The frame shown is chosen
   // by DISTANCE travelled (LW.petGaitFrame), so planted paws stay put on the ground.
@@ -207,7 +210,7 @@
         const im=new Image();
         im.onload=()=>{if(bad)return;if(!(im.naturalWidth>0)){bad=true;fin();return;}if(++n===N){C.raw[g]=ims;fin();}};
         im.onerror=()=>{if(!bad){bad=true;fin();}};
-        im.src=base+set+'/cycle/'+g+'-'+i+'.png';ims.push(im);
+        im.src=LW.petArtPath(base,set,'cycle/'+g+'-'+i);ims.push(im);
       }
     }
     return C;

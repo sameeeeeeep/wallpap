@@ -95,7 +95,7 @@ uniform vec3 uSkyTop, uSkyHor, uSun, uAmbC, uHaze, uCloudLit, uCloudDark, uSnowC
 uniform vec3 uSunP, uMoonP;
 uniform sampler2D uMoonTex;   // the shared photoreal moon (moon.js), uploaded only when its key changes
 uniform float uMoonOn;
-uniform sampler2D uMtnTex;    // painted distant ridges (art/grass/mountains.png), uploaded once
+uniform sampler2D uMtnTex;    // painted distant ridges (art/grass/mountains.webp), uploaded once
 uniform float uMtnOn, uMtnH;
 out vec4 o;
 void main(){
@@ -1096,7 +1096,7 @@ for (const name of ['sparrow','kite']) {
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,im);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.generateMipmap(gl.TEXTURE_2D);
     birdArt[name]={tex,ratio:im.naturalHeight/(im.naturalWidth/4)};
-  }; im.src='art/birds/'+name+'.png';
+  }; im.src='art/birds/'+name+'.webp';
 }
 const birdQuad=new Float32Array(10);
 function drawBirdSprite(b) {
@@ -2103,7 +2103,7 @@ const mtn = { tex: null, on: 0, H: 0.16 };
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     mtn.on = 1;
   };
-  if (new URLSearchParams(location.search).get('procedural') !== '1') im.src = 'art/grass/mountains.png';
+  if (new URLSearchParams(location.search).get('procedural') !== '1') im.src = 'art/grass/mountains.webp';
 })();
 function syncMoonTex() {
   if (!LW.moonCanvas || Lt.moonP[2] < 0.01) return;

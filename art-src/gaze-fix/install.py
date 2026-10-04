@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reproducible gaze-sheet cut, two-axis paw registration and old/new review.
 
-Masters are lossless WebP; only installed runtime frames are retained as PNG.
+Masters are lossless WebP; installed runtime frames follow the PNG/WebP release registry.
 Every stance chain is registered in the runtime's torso-pinned coordinates.
 """
 import io, json, re, shutil, subprocess, sys, tempfile
@@ -9,6 +9,9 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage as nd
 from PIL import Image, ImageDraw
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = Path(__file__).resolve().parent
@@ -142,13 +145,13 @@ def main():
         with tempfile.TemporaryDirectory(prefix='gaze-cut-') as temp:
             temp = Path(temp)
             for sheet,rows in ROWS.items():
-                im = Image.open(BASE/f'{animal}-{sheet}.webp')
+                im = Image.open(asset_path(BASE/f'{animal}-{sheet}.webp'))
                 for row,(key,n) in enumerate(rows):
                     bounds = [0,.25,.49,.72,1] if sheet == 'depth' else [0,1/3,2/3,1]
                     strip = im.crop((0,round(bounds[row]*im.height),im.width,round(bounds[row+1]*im.height)))
-                    strip.save(temp/'strip.png')
+                    save_art(strip,temp/'strip.png')
                     subprocess.run([sys.executable,str(ROOT/'art-src/cycles/cut.py'),str(temp/'strip.png'),str(temp),key,str(n)],check=True,stdout=subprocess.DEVNULL)
-                    cut_rows[key] = [Image.open(temp/f'{key}-{i}.png').convert('RGBA') for i in range(1,n+1)]
+                    cut_rows[key] = [Image.open(asset_path(temp/f'{key}-{i}.png')).convert('RGBA') for i in range(1,n+1)]
         for key,cuts in cut_rows.items():
             if key.startswith('jump') or jumps_only: continue
             if only_cycle and key != only_cycle: continue
@@ -156,7 +159,7 @@ def main():
             frames,geom,report = plant(cuts,key,stride,animal)
             registry['PET_DIRECTION_LAYOUT'][animal_id][key] = geom
             reports[animal+'-'+key] = report
-            for i,im in enumerate(frames,1): im.save(folder/'cycle'/f'{key}-{i}.png')
+            for i,im in enumerate(frames,1): save_art(im,folder/'cycle'/f'{key}-{i}.png')
             print(animal,key,'contact slip',report['max_contact_slip_px'],flush=True)
         for key,cuts in cut_rows.items():
             if not key.startswith('jump'): continue
@@ -167,7 +170,7 @@ def main():
             pad = 12; height = max(max(c.height for c in resized)+2*pad,round(H*1.6)+2*pad); centers=[]
             for i,c in enumerate(resized,1):
                 _,bot,cx = measure(np.array(c)); cv = Image.new('RGBA',(c.width+2*pad,height))
-                cv.paste(c,(pad,height-pad-1-int(bot))); cv.save(folder/'t'/f'{key}-{i}.png'); centers.append(cx+pad)
+                cv.paste(c,(pad,height-pad-1-int(bot))); save_art(cv,folder/'t'/f'{key}-{i}.png'); centers.append(cx+pad)
             registry['PET_JUMP_LAYOUT'][animal_id][key] = dict(height=H,pad=pad,centers=centers)
         review(animal,folder,cut_rows)
     for name in ['PET_DIRECTION_LAYOUT','PET_JUMP_LAYOUT']:
@@ -185,13 +188,13 @@ def review(animal,folder,rows):
     for row,(key,cuts) in enumerate(rows.items()):
         for i in range(1,len(cuts)+1):
             path=folder/('t' if key.startswith('jump') else 'cycle')/f'{key}-{i}.png'
-            old=Image.open(io.BytesIO(subprocess.check_output(['git','show',BEFORE+':'+str(path.relative_to(ROOT))],cwd=ROOT))).convert('RGBA')
-            for v,im in enumerate([old,Image.open(path).convert('RGBA')]):
+            old=Image.open(asset_path(io.BytesIO(subprocess.check_output(['git','show',BEFORE+':'+str(path.relative_to(ROOT))],cwd=ROOT)))).convert('RGBA')
+            for v,im in enumerate([old,Image.open(asset_path(path)).convert('RGBA')]):
                 im=im.crop(im.getbbox());im.thumbnail((190,95),Image.Resampling.LANCZOS)
                 x=(i-1)*200;y=row*240+v*120
                 cv.paste(im,(x+(200-im.width)//2,y+117-im.height),im)
                 d.text((x+4,y+3),f'{key}-{i} '+('OLD' if v==0 else 'NEW'),fill='#202028')
     (ROOT/'shots/gaze-fix').mkdir(exist_ok=True)
-    cv.save(ROOT/'shots/gaze-fix'/f'{animal}.jpg',quality=88)
+    save_art(cv,ROOT/'shots/gaze-fix'/f'{animal}.jpg',quality=88)
 
 if __name__=='__main__': main()

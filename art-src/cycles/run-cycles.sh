@@ -29,7 +29,7 @@ Hard rules (this is a game sprite sheet, it is cut up automatically):
 ${NOTE}
 Save the final PNG at exactly: $PWD/$out . Do NOT modify anything under scenes/ or any code or other files. When done, print the saved path."
     echo "=== $slug-$cyc $(date +%T)"
-    echo "$prompt" | codex exec -s workspace-write --skip-git-repo-check -i "art-src/$ref,$sp/walk1.png,$sp/walk2.png" - > "art-src/cycles/codex-$slug-$cyc.log" 2>&1
+    echo "$prompt" | codex exec -s workspace-write --skip-git-repo-check -i "art-src/$ref,$(python3 tools/webp/assets.py "$sp/walk1.png"),$(python3 tools/webp/assets.py "$sp/walk2.png")" - > "art-src/cycles/codex-$slug-$cyc.log" 2>&1
     echo "--- $slug-$cyc exit $? $( [[ -f $out ]] && echo ok || echo MISSING ) $(date +%T)"
   done
 done

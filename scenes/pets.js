@@ -76,11 +76,11 @@ function sprContact(im) {
 }
 function asset(spec) {
  const s={spec,img:{},seq:{},seqRaw:{},ready:false};
- for(const p of spec.poses){const im=new Image();im.onload=()=>{if(im.naturalWidth)s.img[p]=defringe(im)};im.src='art/sprites/'+spec.set+'/'+p+'.png'}
+ for(const p of spec.poses){const im=new Image();im.onload=()=>{if(im.naturalWidth)s.img[p]=defringe(im)};im.src=LW.petArtPath('art/sprites/',spec.set,p)}
  s.cyc=LW.petCycleLoad('art/sprites/',spec.set);
  for(const q of [...(LW.PET_SEQ_HAS[spec.set]||[]),...Object.keys(LW.PET_JUMP_LAYOUT[spec.set]||{}),...Object.keys(LW.PET_FOLLOW_LAYOUT?.[spec.set]||{})]){
   const ims=[];let n=0;
-  for(let i=1;i<=5;i++){const im=new Image();im.onload=()=>{if(im.naturalWidth&&++n===5)s.seqRaw[q]=ims};im.src='art/sprites/'+spec.set+'/t/'+q+'-'+i+'.png';ims.push(im)}
+  for(let i=1;i<=5;i++){const im=new Image();im.onload=()=>{if(im.naturalWidth&&++n===5)s.seqRaw[q]=ims};im.src=LW.petArtPath('art/sprites/',spec.set,'t/'+q+'-'+i);ims.push(im)}
  }
  return s;
 }

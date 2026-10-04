@@ -1,6 +1,6 @@
 # Character sprites (AI-generated in Google Vids, cut out on-device with macOS Vision)
 
-All sprites face RIGHT (flip horizontally for left), transparent PNG, ~130–450 px.
+All sprites face RIGHT (flip horizontally for left), transparent WebP, ~130–450 px.
 Walking plays the drawn gait cycles in `cycle/` (below), chosen by distance travelled; walk1/walk2 remain the
 standing reference poses. The shared runtime holds still if a complete walking cycle is missing.
 
@@ -18,7 +18,7 @@ Sources (full sheets): livewall/art-src/*.jpg
 
 ## Drawn in-between frames (`<kind>/<name>/t/`)
 
-Every set above also has `t/<seq>-1..5.png`: five drawn frames per transition (Codex image
+Every set above also has `t/<seq>-1..5.webp`: five drawn frames per transition (Codex image
 generation from `art-src/transitions/<kind>-<name>-<seq>.png` strips, cut with
 `swift tools/cutout.swift <strip> <out> <prefix> strip`, installed with `art-src/transitions/install.sh`).
 Same facing (RIGHT), tightly cropped, transparent.
@@ -38,8 +38,8 @@ body length).
 
 ## Gait cycles (`<kind>/<name>/cycle/`)
 
-`walk-1..8.png`: one full walking stride (R contact, down, passing, up, L contact, down, passing, up), frame 1 ≈ walk1.
-`run-1..6.png`: one gallop/trot stride (cats and dogs only). Facing RIGHT, tightly cropped, transparent.
+`walk-1..8.webp`: one full walking stride (R contact, down, passing, up, L contact, down, passing, up), frame 1 ≈ walk1.
+`run-1..6.webp`: one gallop/trot stride (cats and dogs only). Facing RIGHT, tightly cropped, transparent.
 
 | set | walk | run |
 |---|---|---|
@@ -91,3 +91,22 @@ Turns play forward/reverse; only the stationary perk may look at the viewer.
 `PET_FOLLOW_LAYOUT` registers sequence anatomical height, foot padding and torso
 centers. New cycle geometry is in `art-src/follow/cycle-layout.json`; prompts and
 masters are beside it. JPEG cut reviews are in `shots/follow/`.
+
+
+## Release 0.13.5 encoding (2026-10-04)
+
+All 1,080 bundled pet frames use WebP at unchanged pixel dimensions. Alpha is
+byte-for-byte identical to the PNG masters, preserving torso centroids, foot
+baselines, contact spans and all frame registration. `formats.json` lists any PNG
+exceptions; `LW.petArtPath` is the shared loader used by both pet runtimes.
+
+Each conversion saves at least 30% and passes alpha-weighted RGB PSNR >= 40 dB.
+The release uses method-6 lossy WebP where it passes, otherwise bounded
+near-lossless RGB with exact alpha. The complete per-file size, hash and quality
+report is `tools/webp/report.json`; source PNGs remain in the baseline Git commit
+recorded in `tools/webp/baseline.json`.
+
+Installers resolve bundled destinations through `tools/webp/assets.py` and write
+replacement WebP frames losslessly. PNG master sheets and scratch cuts retain their
+original filenames. After changing artwork, rerun its quality/registration review
+and refresh the release audit; never rename a PNG without actually transcoding it.

@@ -5,6 +5,9 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage as nd
 from PIL import Image, ImageDraw
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 root=Path(__file__).resolve().parents[2]
 base=root/'art-src/cycles'
 layout=json.loads((base/'directions-layout.json').read_text())
@@ -13,7 +16,7 @@ for job in json.loads((base/'jumps-prompts.json').read_text()):
  coat,view=job['coat'],job['view'];name=f'cat-{coat}-jump-{view}'
  original=base/f'{name}-original.png'
  if not original.exists():shutil.copyfile(job['source'],original)
- im=Image.open(original).convert('RGBA');a=np.array(im)
+ im=Image.open(asset_path(original)).convert('RGBA');a=np.array(im)
  out=root/f'scenes/art/sprites/cats/{coat}/t';prefix=f'jump-{view}'
  if a[:,:,3].min()<255:
   lab,n=nd.label(a[:,:,3]>100);sizes=np.bincount(lab.ravel());sizes[0]=0
@@ -23,17 +26,17 @@ for job in json.loads((base/'jumps-prompts.json').read_text()):
    yy,xx=np.where(lab==k);box=(max(0,xx.min()-2),max(0,yy.min()-2),min(im.width,xx.max()+3),min(im.height,yy.max()+3))
    x0,y0,x1,y1=box;cut=a[y0:y1,x0:x1].copy()
    cut[:,:,3]=np.where(nd.binary_dilation(lab[y0:y1,x0:x1]==k,iterations=2),cut[:,:,3],0)
-   Image.fromarray(cut).save(out/f'{prefix}-{i}.png')
-  bg=Image.new('RGBA',im.size,'#e6e6e6');bg.alpha_composite(im);bg.convert('RGB').save(base/f'{name}.png')
+   save_art(Image.fromarray(cut),out/f'{prefix}-{i}.png')
+  bg=Image.new('RGBA',im.size,'#e6e6e6');bg.alpha_composite(im);save_art(bg.convert('RGB'),base/f'{name}.png')
  else:
   shutil.copyfile(original,base/f'{name}.png')
   subprocess.run([sys.executable,str(base/'cut.py'),str(original),str(out),prefix,'5'],check=True)
- cuts=[Image.open(out/f'{prefix}-{i}.png').convert('RGBA') for i in range(1,6)]
+ cuts=[Image.open(asset_path(out/f'{prefix}-{i}.png')).convert('RGBA') for i in range(1,6)]
  # Prepared one-row master has an exactly flat grey backdrop; unmodified generation is retained above.
  cell=max(c.width for c in cuts)+48;h=max(c.height for c in cuts)+96
  master=Image.new('RGB',(cell*5,h),'#e6e6e6')
  for i,cut in enumerate(cuts):master.paste(cut,(i*cell+(cell-cut.width)//2,h-48-cut.height),cut)
- master.save(base/f'{name}.png')
+ save_art(master,base/f'{name}.png')
  geom=layout['cats/'+coat]['walk-'+view];height=geom['height']
  # One scale for every articulation; landing is a slightly compressed walk stance.
  last=np.array(cuts[-1]);yy,xx=np.where(last[:,:,3]>127)
@@ -47,7 +50,7 @@ for job in json.loads((base/'jumps-prompts.json').read_text()):
   # Equal canvas height/baseline, plus margin for all whiskers and tail tips.
   pad=12;canvas=Image.new('RGBA',(cut.width+2*pad,round(height*1.6)+2*pad))
   baseline=canvas.height-pad-1;dy=baseline-int(bot)
-  canvas.paste(cut,(pad,dy));canvas.save(out/f'{prefix}-{i}.png')
+  canvas.paste(cut,(pad,dy));save_art(canvas,out/f'{prefix}-{i}.png')
   centers.append(round(center+pad,4))
  meta.setdefault('cats/'+coat,{})[prefix]={'height':height,'pad':12,'centers':centers}
 (base/'jumps-layout.json').write_text(json.dumps(meta,indent=2)+'\n')
@@ -57,8 +60,8 @@ for row,job in enumerate(json.loads((base/'jumps-prompts.json').read_text())):
  coat,view=job['coat'],job['view'];d.text((4,row*170+4),f'{coat} {view} / walk reference then five jump poses',fill='white')
  files=[root/f'scenes/art/sprites/cats/{coat}/cycle/walk-{view}-1.png']+[root/f'scenes/art/sprites/cats/{coat}/t/jump-{view}-{i}.png' for i in range(1,6)]
  for col,f in enumerate(files):
-  im=Image.open(f);bbox=im.getbbox();im=im.crop(bbox)
+  im=Image.open(asset_path(f));bbox=im.getbbox();im=im.crop(bbox)
   # Compare at common scale based on metadata, excluding transparent walk padding.
   scale=110/layout['cats/'+coat]['walk-'+view]['height'];im=im.resize((round(im.width*scale),round(im.height*scale)),Image.Resampling.LANCZOS)
   canvas.paste(im,(col*230+(230-im.width)//2,row*170+155-im.height),im)
-canvas.save(shots/'art-contact.jpg',quality=90)
+save_art(canvas,shots/'art-contact.jpg',quality=90)

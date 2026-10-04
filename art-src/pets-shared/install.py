@@ -7,10 +7,12 @@ from pathlib import Path
 import numpy as np
 from scipy import ndimage as nd
 from PIL import Image,ImageDraw
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/webp'))
+from assets import asset_path, save_art
 ROOT=Path(__file__).resolve().parents[2];BASE=Path(__file__).resolve().parent
 for dog in ['golden','corgi']:
  for gait,n,sub in [('walk',8,'cycle'),('jump',5,'t')]:
-  im=Image.open(BASE/f'{dog}-{gait}.png').convert('RGBA')
+  im=Image.open(asset_path(BASE/f'{dog}-{gait}.png')).convert('RGBA')
   for row,view in enumerate(['f','b']):
    half=im.crop((0,row*im.height//2,im.width,(row+1)*im.height//2));a=np.array(half)
    out=ROOT/f'scenes/art/sprites/dogs/{dog}/{sub}';prefix=f'{gait}-{view}'
@@ -22,9 +24,9 @@ for dog in ['golden','corgi']:
     for i,k in enumerate(ids,1):
      yy,xx=np.where(lab==k);x0=max(0,xx.min()-2);x1=min(half.width,xx.max()+3)
      cut=a[top:bot,x0:x1].copy();mask=nd.binary_dilation(lab[top:bot,x0:x1]==k,iterations=2);cut[:,:,3]=np.where(mask,cut[:,:,3],0)
-     Image.fromarray(cut).save(out/f'{prefix}-{i}.png')
+     save_art(Image.fromarray(cut),out/f'{prefix}-{i}.png')
    else:
-    src=BASE/f'{dog}-{gait}-{view}.png';half.save(src)
+    src=BASE/f'{dog}-{gait}-{view}.png';save_art(half,src)
     subprocess.run([sys.executable,str(ROOT/'art-src/cycles/cut.py'),str(src),str(out),prefix,str(n)],check=True)
 # Reuse original planting algorithm with dog inputs, corrected ground heading and separate outputs.
 s=(ROOT/'art-src/cycles/plant-directions.py').read_text()
@@ -43,12 +45,12 @@ exec(compile(s,'dog-plant','exec'))
 layout=json.loads((BASE/'directions-layout.json').read_text());jumps={}
 for dog in ['golden','corgi']:
  for view in ['f','b']:
-  out=ROOT/f'scenes/art/sprites/dogs/{dog}/t';cuts=[Image.open(out/f'jump-{view}-{i}.png').convert('RGBA') for i in range(1,6)]
+  out=ROOT/f'scenes/art/sprites/dogs/{dog}/t';cuts=[Image.open(asset_path(out/f'jump-{view}-{i}.png')).convert('RGBA') for i in range(1,6)]
   H=layout['dogs/'+dog]['walk-'+view]['height'];last=np.array(cuts[-1]);yy,xx=np.where(last[:,:,3]>127);factor=H*.88/(yy.max()-yy.min()+1);centers=[]
   for i,cut in enumerate(cuts,1):
    cut=cut.resize((round(cut.width*factor),round(cut.height*factor)),Image.Resampling.LANCZOS);a=np.array(cut);yy,xx=np.where(a[:,:,3]>127);top,bot=yy.min(),yy.max()
    mask=a[:,:,3]>127;mask[:round(top+(bot-top)*.3)]=False;mask[round(top+(bot-top)*.65)+1:]=False;center=np.where(mask)[1].mean()
-   pad=12;c=Image.new('RGBA',(cut.width+2*pad,round(H*1.6)+2*pad));dy=c.height-pad-1-int(bot);c.paste(cut,(pad,dy));c.save(out/f'jump-{view}-{i}.png');centers.append(float(center+pad))
+   pad=12;c=Image.new('RGBA',(cut.width+2*pad,round(H*1.6)+2*pad));dy=c.height-pad-1-int(bot);c.paste(cut,(pad,dy));save_art(c,out/f'jump-{view}-{i}.png');centers.append(float(center+pad))
   jumps.setdefault('dogs/'+dog,{})['jump-'+view]={'height':H,'pad':12,'centers':centers}
 (BASE/'jumps-layout.json').write_text(json.dumps(jumps,indent=2)+'\n')
 # Registry has one source of truth, same module used by all eight scenes.
@@ -63,5 +65,5 @@ cv=Image.new('RGB',(1600,8*175),'#686974');d=ImageDraw.Draw(cv)
 for row,(dog,gait,view) in enumerate((a,b,c) for a in ['golden','corgi'] for b in ['walk','jump'] for c in ['f','b']):
  H=layout['dogs/'+dog]['walk-'+view]['height'];d.text((5,row*175+4),dog+' '+gait+' '+view,fill='white')
  for i in range(1,9 if gait=='walk' else 6):
-  im=Image.open(ROOT/f'scenes/art/sprites/dogs/{dog}/{"cycle" if gait=="walk" else "t"}/{gait}-{view}-{i}.png');im=im.crop(im.getbbox());k=115/H;im=im.resize((round(im.width*k),round(im.height*k)));cv.paste(im,((i-1)*200+20,row*175+170-im.height),im)
-cv.save(ROOT/'shots/pets-shared/dog-art.jpg',quality=90)
+  im=Image.open(asset_path(ROOT/f'scenes/art/sprites/dogs/{dog}/{"cycle" if gait=="walk" else "t"}/{gait}-{view}-{i}.png'));im=im.crop(im.getbbox());k=115/H;im=im.resize((round(im.width*k),round(im.height*k)));cv.paste(im,((i-1)*200+20,row*175+170-im.height),im)
+save_art(cv,ROOT/'shots/pets-shared/dog-art.jpg',quality=90)

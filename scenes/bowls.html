@@ -23,7 +23,7 @@
 // Window light is geometric: the sun/moon direction shears the arched window (panes + mullion bars) onto the
 // floor, the bowls in it catch light on their rims and throw shadows along it, and a dust-lit beam joins window
 // and patch (stronger in haze/fog, faint when cloudy, gone when the source is down). See bakeLight().
-// Optional art (procedural fallback): art/bowls/window-view-day.png, window-view-night.png — 1152×468 painted
+// Optional art (procedural fallback): art/bowls/window-view-day.webp, window-view-night.webp — 1152×468 painted
 // Himalayan ranges with a transparent sky (live sky, sun, moon and stars show behind).
 
 // ───────────────────────── helpers ─────────────────────────
@@ -855,10 +855,10 @@ function shaftAt(x, y) {
 
 const grey3 = (c) => { const v = c[0] * 0.3 + c[1] * 0.5 + c[2] * 0.2; return [v, v, v * 1.03]; };
 // painted window view (optional; procedural ridges until/unless these load)
-//   art/bowls/window-view-day.png, window-view-night.png — 1152×468, transparent sky, land along the bottom
+//   art/bowls/window-view-day.webp, window-view-night.webp — 1152×468, transparent sky, land along the bottom
 const ART = { day: null, night: null, room: {}, thangka: null };
 // lived-in details on the floor (painted sprites, neutral light; re-lit by the room at bake):
-//   art/bowls/incense.png 113×173 (stick tip at 54,2) · mala.png 202×100 · plant.png 222×251 · shawl.png 298×134
+//   art/bowls/incense.webp 113×173 (stick tip at 54,2) · mala.webp 202×100 · plant.webp 222×251 · shawl.webp 298×134
 // u/d as for bowls (group-relative across / depth); w = width in Rmax
 const ROOM_PROPS = [
   { name: 'plant', u: 0.015, d: 1.45, w: 1.5 },
@@ -870,7 +870,7 @@ for (const rp of ROOM_PROPS) {
   const im = new Image();
   im.onload = () => { if (!im.naturalWidth) return; ART.room[rp.name] = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); };
   im.onerror = () => {};
-  im.src = 'art/bowls/' + rp.name + '.png';
+  im.src = 'art/bowls/' + rp.name + '.webp';
 }
 // placed in world space (follows layout); null until the sprite has loaded
 function roomPropGeom(rp) {
@@ -889,9 +889,9 @@ function roomLightAt(L, x, y) {
   }
   return c.map((v, i) => clamp(v * L.grade[i], 0, 1));
 }
-// a faded mandala thangka on the wall above the bowls (art/bowls/thangka.png 380×562, hanging cord included):
+// a faded mandala thangka on the wall above the bowls (art/bowls/thangka.webp 380×562, hanging cord included):
 // lit from below by the candles, falling into shadow toward the ceiling; hangs a finger's width off the wall
-{ const im = new Image(); im.onload = () => { if (!im.naturalWidth) return; ART.thangka = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); }; im.onerror = () => {}; im.src = 'art/bowls/thangka.png'; }
+{ const im = new Image(); im.onload = () => { if (!im.naturalWidth) return; ART.thangka = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); }; im.onerror = () => {}; im.src = 'art/bowls/thangka.webp'; }
 function thangkaGeom() {
   const im = ART.thangka; if (!im) return null;
   const top = Math.max(H * 0.08, horizonY - (horizonY - H * 0.08) * 0.92), h = (horizonY - top) * 0.6, w = h * im.naturalWidth / im.naturalHeight;
@@ -924,7 +924,7 @@ for (const [k, f] of [['day', 'window-view-day'], ['night', 'window-view-night']
   const im = new Image();
   im.onload = () => { if (!im.naturalWidth) return; ART[k] = im; clearTimeout(ART.rb); ART.rb = setTimeout(() => { if (W && bgCur) rebake(false); }, 40); };
   im.onerror = () => {};
-  im.src = 'art/bowls/' + f + '.png';
+  im.src = 'art/bowls/' + f + '.webp';
 }
 function bakeWindow(g, L) {
   const { x0, x1, top, bot, w, ft } = win;

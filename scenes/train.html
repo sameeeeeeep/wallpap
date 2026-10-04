@@ -32,9 +32,9 @@
    Dev keys: s stretch, k next skin. Browser (no host): clicking the walkman plays demo tracks.
 
    Stage: 1600×1000; plates are drawn to it. Shared table props (transparent, painted, neutral light;
-   re-lit by the carriage light at bake): walkman.png 396×344 (hubs at 176,197 / 289.5,197 r21.5;
-   LED 353,60; FF key 268–318 × 6–40), headphones.png 263×213, cassette-case.png 400×259 (blank J-card
-   17–388 × 39–248). art/birds/sparrow.png is a shared four-frame flight atlas.
+   re-lit by the carriage light at bake): walkman.webp 396×344 (hubs at 176,197 / 289.5,197 r21.5;
+   LED 353,60; FF key 268–318 × 6–40), headphones.webp 263×213, cassette-case.webp 400×259 (blank J-card
+   17–388 × 39–248). art/birds/sparrow.webp is a shared four-frame flight atlas.
    ===================================================================== */
 'use strict';
 (() => {
@@ -126,7 +126,7 @@ const fbm = (x, seed) => vnoise(x, seed) * 0.6 + vnoise(x * 2.3, seed + 7) * 0.2
 
 // =====================================================================
 //  SKINS — one table entry per look. Geometry is in stage units (1600×1000).
-//   files      logical name → PNG under dir (plates, panoramas, mask, drink, trackside, bridge)
+//   files      logical name → WebP under dir (PNG masks) (plates, panoramas, mask, drink, trackside, bridge)
 //   win        window glass: rect [x0,y0,x1,y1] + corner r; `mask` = the glass is the mask PNG's alpha
 //              (any shape, mullions, a second window); `view` = the mask's bounding box when wider
 //   pano       bands: [top as a fraction of the panorama height, speed] — far → near; above the first
@@ -227,7 +227,7 @@ function loadImg(path, cb) {
   const im = new Image();
   const done = (ok) => { if (ok && im.naturalWidth) ART.img[path] = im; for (const f of ART.cbs[path] || []) try { f(ok ? im : null); } catch (e) { console.error(e); } delete ART.cbs[path]; };
   im.onload = () => done(true); im.onerror = () => done(false);
-  im.src = path + '.png';
+  im.src = path + (/(?:win-mask|fore-mask-[^/]+)$/.test(path) ? '.png' : '.webp');
 }
 // load a skin's art; cb once its plates and panoramas are in (or failed)
 function loadSkinArt(sk, cb) {
@@ -785,11 +785,11 @@ function paintTable(g) {
 }
 // =====================================================================
 //  the fold-out table: a walkman with a cassette, its foam headphones, the cassette's case with a
-//  handwritten J-card. Painted sprites (art/train/*.png), lit by the carriage light at
+//  handwritten J-card. Painted sprites (art/train/*.webp), lit by the carriage light at
 //  bake time; reels, LED, J-card ink and the headphones' beat are live.
-//  Sprite feature coordinates are in each PNG's own pixels.
+//  Sprite feature coordinates are in each image's own pixels.
 // =====================================================================
-// sprite features (in each PNG's own pixels); where they stand comes from the skin (S.props)
+// sprite features (in each image's own pixels); where they stand comes from the skin (S.props)
 const TP_FEAT = {
   walkman: { hubs: [[176, 197], [289.5, 197]], hubR: 21.5, led: [353.3, 59.8], body: [83.5, 27.5, 387.5, 343.5], ff: [268, 6, 318, 40] },
   headphones: {}, case: { card: [17, 39, 388, 248] }, drink: {}, extra: {},
@@ -1415,7 +1415,7 @@ function drawPaintedCountryside(g,T) {
   g.beginPath();g.moveTo(v.x0,v.y1-14);g.lineTo(v.x1,v.y1-14);g.stroke();
   g.restore();
 }
-// ---- painted trackside (art/train/pole|palm|neem|scrub|kmstone.png): sprites slide past at their own
+// ---- painted trackside (art/train/pole|palm|neem|scrub|kmstone.webp): sprites slide past at their own
 // depth, re-lit for day/night/dusk only when the light changes; wires sag between the poles; everything
 // smears with speed (blurLen = how far the nearest layer moves while the "shutter" is open) ----
 let TS = S.track;   // the active skin's trackside layers
@@ -1768,7 +1768,7 @@ function breath() { return guide.on ? breathSt().level : 0; }   // 0 empty … 1
 function breathHold() { const s = breathSt(); return guide.on && (s.phase === 'hold' || s.phase === 'rest') ? smooth(Math.min(s.k, 1 - s.k) * 5) : 0; }
 function calmPace() { return 1 - calm.lv * (0.35 + 0.45 * breathHold()); }   // slow in calm, nearly still on the holds
 const outsideBirds = [], birdAtlas = new Image();
-birdAtlas.src = 'art/birds/sparrow.png';
+birdAtlas.src = 'art/birds/sparrow.webp';
 let birdWait = 4;
 function updateOutsideBirds(dt) {
   const pace = calmPace();

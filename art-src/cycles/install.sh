@@ -12,6 +12,6 @@ for q in "$@"; do
   python3 art-src/cycles/cut.py art-src/cycles/$slug-$q.png art-src/cycles/cut $slug-$q $n > /dev/null   # (Vision's cutout.swift holed dark patches)
   got=$(ls art-src/cycles/cut/$slug-$q-*.png | wc -l | tr -d ' ')
   [[ $got == $n ]] || { echo "$slug-$q: $got pieces, expected $n — not installed"; continue; }
-  for i in $(seq 1 $n); do cp art-src/cycles/cut/$slug-$q-$i.png $dst/$q-$i.png; done
+  for i in $(seq 1 $n); do python3 tools/webp/assets.py art-src/cycles/cut/$slug-$q-$i.png $dst/$q-$i.png; done
   echo "$slug-$q: installed $n frames"
 done

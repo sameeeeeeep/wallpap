@@ -441,3 +441,14 @@ svg.pk-mus{width:10px;height:10px;fill:none;stroke:var(--accent);stroke-width:2.
 .petsec-shot{max-width:1100px}
 .petsec-cap{display:grid;grid-template-columns:repeat(3,1fr);font-size:13px;color:var(--ink-2);padding:12px 4px 0;background:var(--bg,transparent)}
 .petsec-cap span{text-align:center}
+
+/* ───────────── Playground fullscreen: the scene as a wallpaper in the browser ───────────── */
+.fs-exit{display:none;width:clamp(16px,1.6cqw,22px);height:clamp(16px,1.6cqw,22px);padding:0;border:0;background:none;color:inherit;cursor:pointer;opacity:.85}
+.fs-exit svg{width:100%;height:100%}
+.fs-exit:hover{opacity:1}
+.screen.is-fs{position:fixed;inset:0;z-index:1000;width:100vw;height:100vh;height:100dvh;aspect-ratio:auto;border-radius:0!important}
+.screen:fullscreen{width:100vw;height:100vh;aspect-ratio:auto;border-radius:0}
+.screen.is-fs .fs-exit{display:block}
+.screen.is-fs .widgets,.screen.is-fs .desk-icons,.screen.is-fs .app-window,.screen.is-fs .status-pill{display:none}
+.screen.is-fs .menubar{transition:opacity .4s}
+html.pg-fs{overflow:hidden}

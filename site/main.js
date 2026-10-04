@@ -1081,6 +1081,39 @@ const PG = {
     $('#panelClose').addEventListener('click', () => setSheet(false));
     scrim.addEventListener('click', () => setSheet(false));
     addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (panel.classList.contains('open')) setSheet(false); if (h.panelOpen) { h.closePanel(); h.el.wave.focus(); } } });
+    // Fullscreen: the live scene fills the browser like a real wallpaper; the slim menu bar's wave
+    // opens the app's own panel for every control. Browsers without element fullscreen (iPhone)
+    // get the same view as a fixed overlay with an exit button.
+    const screenEl = $('#pgScreen'), fsBtn = $('#fsBtn');
+    screenEl.querySelector('.mb-right').insertAdjacentHTML('afterbegin', '<button class="fs-exit" type="button" aria-label="Exit fullscreen" title="Exit fullscreen (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>');
+    const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+    const setFsClass = (on) => {
+      screenEl.classList.toggle('is-fs', on); document.documentElement.classList.toggle('pg-fs', on);
+      fsBtn.setAttribute('aria-pressed', String(on));
+      Tour.held = on;                                     // fullscreen is the visitor's: no auto tour
+      if (on) { setSheet(false); Tour.stop(); h.note('Click the wave in the menu bar for every control · Esc to exit'); }
+      else { if (h.panelOpen) h.closePanel(); Tour.maybeStart(1500); }
+    };
+    const enterFs = async () => {
+      const req = screenEl.requestFullscreen || screenEl.webkitRequestFullscreen;
+      // Some embedded/in-app browsers never settle the request: give it a moment, then use the overlay.
+      if (req) { try { await Promise.race([req.call(screenEl), wait(700)]); } catch (e) {} if (fsEl() === screenEl) return; }
+      setFsClass(true);                                   // fallback: fixed overlay
+    };
+    const exitFs = () => {
+      if (fsEl()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else setFsClass(false);
+    };
+    fsBtn.addEventListener('click', () => (fsEl() || screenEl.classList.contains('is-fs') ? exitFs() : enterFs()));
+    screenEl.querySelector('.fs-exit').addEventListener('click', (e) => { e.stopPropagation(); exitFs(); });
+    const onFsChange = () => setFsClass(fsEl() === screenEl);
+    document.addEventListener('fullscreenchange', onFsChange); document.addEventListener('webkitfullscreenchange', onFsChange);
+    addEventListener('keydown', (e) => { if (e.key === 'Escape' && !fsEl() && screenEl.classList.contains('is-fs') && !h.panelOpen) setFsClass(false); });
+    // Overlay mode: Esc must also work while focus is inside the scene or panel iframe.
+    const escIn = (f) => { try { const w = f.contentWindow; if (!w || w.__fsEsc) return; w.__fsEsc = true; w.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !fsEl() && screenEl.classList.contains('is-fs')) { if (h.panelOpen) h.closePanel(); else setFsClass(false); } }, true); } catch (e) {} };
+    const escWatch = (f) => { escIn(f); f.addEventListener('load', () => escIn(f)); };
+    screenEl.querySelectorAll('iframe').forEach(escWatch);
+    new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType !== 1) return; if (n.tagName === 'IFRAME') escWatch(n); else n.querySelectorAll?.('iframe').forEach(escWatch); }))).observe(screenEl, { childList: true, subtree: true });
   },
   sync() {
     const h = this.host;
@@ -1124,6 +1157,21 @@ const Tour = {
     let lx = null, ly = null;
     area.addEventListener('pointermove', (e) => { if (!e.isTrusted) return; if (lx !== null && Math.hypot(e.screenX - lx, e.screenY - ly) > 4) this.userActivity(); lx = e.screenX; ly = e.screenY; }, { passive: true });
     area.addEventListener('pointerleave', () => { lx = null; });
+    // The live scene and the menu-bar panel are iframes: their clicks and moves never reach this
+    // document, so listen inside each one (same origin) as it loads. A window blur while focus moves
+    // into one of our iframes covers anything we can't reach.
+    const hookFrame = (f) => {
+      try {
+        const w = f.contentWindow; if (!w || w.__tourHooked) return; w.__tourHooked = true;
+        ['pointerdown', 'wheel', 'keydown', 'touchstart'].forEach((ev) => w.addEventListener(ev, (e) => { if (e.isTrusted) this.userActivity(); }, { passive: true, capture: true }));
+        let fx = null, fy = null;
+        w.addEventListener('pointermove', (e) => { if (!e.isTrusted) return; if (fx !== null && Math.hypot(e.screenX - fx, e.screenY - fy) > 4) this.userActivity(); fx = e.screenX; fy = e.screenY; }, { passive: true });
+      } catch (e) {}
+    };
+    const watchFrame = (f) => { hookFrame(f); f.addEventListener('load', () => hookFrame(f)); };
+    area.querySelectorAll('iframe').forEach(watchFrame);
+    new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType !== 1) return; if (n.tagName === 'IFRAME') watchFrame(n); else n.querySelectorAll?.('iframe').forEach(watchFrame); }))).observe(area, { childList: true, subtree: true });
+    addEventListener('blur', () => setTimeout(() => { const a = document.activeElement; if (a && a.tagName === 'IFRAME' && area.contains(a)) this.userActivity(); }, 0));
     new IntersectionObserver((es) => { es.forEach((e) => { this.inView = e.isIntersecting && e.intersectionRatio >= 0.45; }); this.inView ? this.maybeStart(1400) : this.stop(); }, { threshold: [0, 0.45, 0.7] }).observe($('#playground'));
     document.addEventListener('visibilitychange', () => (document.hidden ? this.stop() : this.maybeStart(1500)));
     if (reduceMotion) this.renderList();
@@ -1172,7 +1220,7 @@ const Tour = {
     return light ? all.filter((x) => !x.heavy) : all;
   },
   maybeStart(delay = 0) {
-    if (this.mode !== 'auto' || this.running || !this.inView || document.hidden || !PG.host.wantLive) return;
+    if (this.mode !== 'auto' || this.held || this.running || !this.inView || document.hidden || !PG.host.wantLive) return;
     clearTimeout(this.resumeT);
     this.resumeT = setTimeout(() => { this.resumeT = 0; if (this.mode === 'auto' && this.inView && !this.running && !document.hidden) this.start(); }, delay);
     this.label();
@@ -1196,7 +1244,7 @@ const Tour = {
     if (this.mode !== 'auto') return;
     if (this.running) { this.stop(); this.cap.textContent = 'Your turn — explore. The tour picks up again when you’re idle.'; }
     clearTimeout(this.resumeT);
-    this.resumeT = setTimeout(() => { this.resumeT = 0; this.maybeStart(0); }, 8000);
+    this.resumeT = setTimeout(() => { this.resumeT = 0; this.maybeStart(0); }, 25000);   // resume only after a real lull
     this.label();
   },
   setMode(m) {

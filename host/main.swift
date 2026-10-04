@@ -915,7 +915,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     func startAmbient() {
         loc.delegate = self
         loc.desiredAccuracy = kCLLocationAccuracyReduced
-        if preciseLocation { loc.startUpdatingLocation() } else { locateByTimeZone() }
+        // Time-zone city first, always: until (or unless) a precise fix arrives, scenes would otherwise get
+        // no location at all and fall back to a clock moon that ignores the real moonrise/moonset.
+        if preciseLocation { loc.startUpdatingLocation() }
+        locateByTimeZone()
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.pushEnv() }
         Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in self?.fetchWeather() }
         scheduleReminders()

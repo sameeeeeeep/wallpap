@@ -60,11 +60,11 @@ ROBOTS = {
       ['torso', None,    [405, 520], [('box', (230, 190, 580, 720))], ['upL', 'upR'], [[212, 292, 30], [598, 292, 30]]],
       ['head',  'torso', [405, 205], [('box', (270, 0, 540, 222))], [], []],
       ['upL',   'torso', [205, 290], [band((205, 290), (150, 465), 64, -0.25, 1.06)], [], []],
-      ['foL',   'upL',   [150, 465], [band((150, 465), (108, 625), 62, -0.16, 1.0)], [], []],
-      ['handL', 'foL',   [108, 625], [band((108, 625), (232, 800), 95, -0.1, 1.08)], ['foL', ('poly', [(242, 540), (600, 540), (600, 1024), (242, 1024)])], []],
+      ['foL',   'upL',   [150, 465], [band((150, 465), (108, 625), 62, -0.16, 1.0)], [], [[150, 465, 40]]],
+      ['handL', 'foL',   [108, 625], [band((108, 625), (232, 800), 95, -0.1, 1.08)], ['foL', ('poly', [(242, 540), (600, 540), (600, 1024), (242, 1024)])], [[108, 628, 36]]],
       ['upR',   'torso', [605, 290], [band((605, 290), (655, 465), 64, -0.25, 1.06)], [], []],
-      ['foR',   'upR',   [655, 465], [band((655, 465), (700, 625), 62, -0.16, 1.0)], [], []],
-      ['handR', 'foR',   [700, 625], [band((700, 625), (577, 800), 95, -0.1, 1.08)], ['foR', ('poly', [(210, 540), (568, 540), (568, 1024), (210, 1024)])], []],
+      ['foR',   'upR',   [655, 465], [band((655, 465), (700, 625), 62, -0.16, 1.0)], [], [[655, 465, 40]]],
+      ['handR', 'foR',   [700, 625], [band((700, 625), (577, 800), 95, -0.1, 1.08)], ['foR', ('poly', [(210, 540), (568, 540), (568, 1024), (210, 1024)])], [[700, 628, 36]]],
     ],
     'tips': {'handL': [232, 800], 'handR': [577, 800]},   # stick tips (rest pose)
     'eyes': {'head': [[362, 105], [445, 105]]},
@@ -99,6 +99,25 @@ ROBOTS = {
     ],
     'tips': {'foL': [70, 585], 'foR': [545, 585]},
     'eyes': {'head': [[307, 182]]},
+  },
+  # ── the guest saxophonist (joins some songs on the stage lift), front view; the horn is its own part ──
+  'sax': {
+    'src': 'saxophonist.webp', 'k': 0.208, 'anchor': [527, 1425],
+    'parts': [
+      ['legs',  None,    [527, 690], [('box', (360, 680, 700, 1431))], ['upL', 'foL', 'upR', 'foR'], []],
+      ['torso', 'legs',  [527, 690], [('box', (290, 290, 770, 720))], ['upL', 'upR', 'foL', 'foR'], [[345, 352, 34], [708, 352, 34]]],
+      ['head',  'torso', [527, 305], [('box', (420, 0, 640, 312))], [], []],
+      ['upL',   'torso', [345, 352], [band((345, 352), (255, 585), 58, -0.12, 1.04)], [], []],
+      ['upR',   'torso', [708, 352], [band((708, 352), (800, 585), 58, -0.12, 1.04)], [], []],
+      ['foL',   'upL',   [255, 585], [band((255, 585), (60, 900), 72, -0.1, 1.08)], [], [[255, 585, 34]]],
+      ['foR',   'upR',   [800, 585], [band((800, 585), (1000, 900), 72, -0.1, 1.08)], [], [[800, 585, 34]]],
+    ],
+    # the horn: mirrored so the body hangs at the player's right (viewer's left); pivot = mouthpiece tip,
+    # attached at the mouth socket; drawn between the upper arms and the forearms (hands hold it)
+    'extra': {'horn': {'src': 'sax-horn.webp', 'flip': True, 'scale': 0.55, 'pivot': [5, 75], 'attach': [527, 284], 'parent': 'torso', 'before': 'foL', 'pockets': True}},
+    'tips': {'foL': [95, 850], 'foR': [965, 850]},
+    'keys': {'upper': [300, 400], 'lower': [292, 830]},   # hand holds on the horn (its own, mirrored frame)
+    'eyes': {'head': [[487, 158], [567, 158]]},
   },
 }
 
@@ -177,22 +196,29 @@ def build(name, spec):
         pieces.append((pn, parent, pivot, (x0, y0), crop))
     for en, e in spec.get('extra', {}).items():
         im = load(os.path.join(CUT, e['src']))
+        if e.get('pockets'):
+            neu = (np.abs(im[..., 0] - im[..., 1]) < 10) & (np.abs(im[..., 1] - im[..., 2]) < 10) & (im[..., :3].mean(2) > 160) & (im[..., 3] > 0)
+            lab, n = nd.label(neu)
+            if n:
+                sz = nd.sum(np.ones(lab.shape), lab, range(1, n + 1))
+                im[np.isin(lab, np.where(sz >= 25)[0] + 1), 3] = 0
         im = defringe(im)
         if e.get('flip'): im = im[:, ::-1].copy()
         pv = list(e['pivot'])
         if e.get('flip'): pv[0] = im.shape[1] - pv[0]
-        pieces.append((en, 'torso', pv, (0, 0), im, e['scale'], e['attach']))
+        pieces.append((en, e.get('parent', 'torso'), pv, (0, 0), im, e['scale'], e['attach'], e.get('before')))
     # pack (shelf) at atlas scale
     imgs = []
     for p in pieces:
         pn, parent, pivot, (ox, oy), crop = p[:5]
         es = p[5] if len(p) > 5 else 1.0
         att = p[6] if len(p) > 6 else None
+        before = p[7] if len(p) > 7 else None
         s = scale * es
         pim = Image.fromarray(np.clip(crop, 0, 255).astype(np.uint8), 'RGBA')
         tw, th = max(1, round(pim.width * s)), max(1, round(pim.height * s))
         pim = pim.resize((tw, th), Image.LANCZOS)
-        imgs.append((pn, parent, pivot, ox, oy, es, pim, att))
+        imgs.append((pn, parent, pivot, ox, oy, es, pim, att, before))
     W = 1024 if max(i[6].width for i in imgs) < 1000 else 2048
     x = y = rowh = 0; pos = {}
     for it in sorted(imgs, key=lambda i: -i[6].height):
@@ -201,13 +227,16 @@ def build(name, spec):
         pos[it[0]] = (x, y); x += im.width + 2; rowh = max(rowh, im.height)
     H = y + rowh
     atlas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
-    meta = {'k': spec['k'], 'atlasScale': scale, 'anchor': spec['anchor'], 'parts': {}, 'order': [i[0] for i in imgs]}
-    for pn, parent, pivot, ox, oy, es, im, att in imgs:
+    order = [i[0] for i in imgs if not i[8]]
+    for i in imgs:
+        if i[8]: order.insert(order.index(i[8]), i[0])
+    meta = {'k': spec['k'], 'atlasScale': scale, 'anchor': spec['anchor'], 'parts': {}, 'order': order}
+    for pn, parent, pivot, ox, oy, es, im, att, before in imgs:
         ax, ay = pos[pn]; atlas.paste(im, (ax, ay))
         meta['parts'][pn] = {'x': ax, 'y': ay, 'w': im.width, 'h': im.height, 'ox': int(ox), 'oy': int(oy), 's': es,
                              'px': pivot[0], 'py': pivot[1], 'parent': parent}
         if att: meta['parts'][pn]['attach'] = att
-    for k2 in ('tips', 'eyes'):
+    for k2 in ('tips', 'eyes', 'keys'):
         if k2 in spec: meta[k2] = spec[k2]
     os.makedirs(OUT, exist_ok=True)
     atlas.save(os.path.join(OUT, name + '.webp'), 'WEBP', quality=90, method=6)

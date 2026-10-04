@@ -15,7 +15,8 @@ generation (commercial use permitted for the account's generations); no third-pa
 | --- | --- | --- |
 | `concept-lineup.webp` | four robots, front A-pose, flat grey card; style ref = a crop of the live stage (night) | 75 |
 | `pianist-rear.webp` | the pianist seen from behind on its stool + its head in profile; refs = pianist crop + stage | 75 |
-Total: **150 credits** (budget 800). `simulate_cost` was run before each call.
+| `saxophonist-sheet.webp` | guest saxophonist (front A-pose) + a tenor saxophone alone; refs = band lineup + stage | 75 |
+Total: **225 credits** (budget 800). `simulate_cost` was run before each call.
 
 ### Prompt — concept-lineup.webp (style reference: the scene's stage crop)
 > Character design lineup of four original 1920s art-deco automaton robot jazz musicians, painted in the same warm
@@ -48,9 +49,24 @@ Total: **150 credits** (budget 800). `simulate_cost` was run before each call.
 > shadows, no text, no piano, no people.
 (The profile came out facing left; `build.py` mirrors it.)
 
+### Prompt — saxophonist-sheet.webp (refs: the band lineup + the stage crop)
+> Character sheet of a fifth robot for the same art-deco automaton jazz band as the first reference image (same family:
+> 1920s Metropolis-era futurism, polished brass, gold and dark enamel, visible ball joints, glowing amber eyes), painted
+> in the same warm painterly storybook illustration style and lighting as the references, elegant and premium, NOT cute,
+> NOT toy-like. The saxophonist: a tall slim robot in polished gold-brass with dark bronze enamel panels and a stepped
+> deco chest grille, a rounded helmet head with two small round glowing amber eyes and a small round brass mouthpiece
+> socket for a mouth, a narrow gold crest. LEFT HALF: the robot alone, front view facing the viewer, standing straight in
+> a neutral A-pose, arms held away from the body with a clear gap, elbows straight, hands relaxed and slightly curled as
+> if ready to hold something, legs slightly apart, full body from head to feet. RIGHT HALF, well separated and not
+> touching the robot: a curved golden tenor saxophone ALONE, standing upright, seen from the front with the bell curving
+> up and to the right, mother-of-pearl key touches, gold lacquer, the neck and mouthpiece at the top; no hands, no strap.
+> Even soft warm key light from the upper left. Perfectly flat uniform plain light grey background (#e6e6e6), no floor,
+> no cast shadows, no text, no labels, no other instruments, no people.
+(The horn is mirrored by `build.py` so its body hangs at the player's right; grey card trapped in the keywork is removed.)
+
 ## Cutting
 1. `swift tools/cutout.swift <sheet> <dir> <prefix>` (Vision subject lifting) → `cut/*.png`, stored as lossless WebP
-   (`drummer`, `bassist`, `singer`, `pianist-front` from the lineup; `pianist-rear`, `pianist-side`).
+   (`drummer`, `bassist`, `singer`, `pianist-front` from the lineup; `pianist-rear`, `pianist-side`; `saxophonist`, `sax-horn`).
 2. `python3 build.py` → rigid parts by joint bands/boxes in each figure's own frame (see the docstring), pale card
    remnants removed at the silhouette, 2 px edge pull + colour bleed (no grey halo on the dark stage), packed at
    2.4 px per world unit. A part drawn with zero rotation lands where it was cut, so the rest pose IS the painting.

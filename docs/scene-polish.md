@@ -1008,8 +1008,46 @@ with other agents): playing ≈3.3–3.6 ms (main ≈3.3–3.6), idle ≈3.0–3
 it is paid for by filling the two light beams with a scrolling haze PATTERN instead of clip + tiled drawImage
 (≈0.6 → ≈0.25 ms per beam). Canvas 2D only; part tints baked per light change; no per-frame image uploads.
 
+Resume pass: the first cut had both elbows solved on the wrong side (the upper arms flipped up into 'wings' and
+the horn read as hanging off a shoulder) — IK bends swapped; solo no longer carries into the outro.
+
 **Verification (LOOKED at):** `shots/speakeasy-robots/` — night and day 22-frame scripted sequences (idle → count-in →
 intro → build → drop → groove → breakdown → stop → idle → singer song → idle), full-room frames, drummer one-beat
 close-up, quartet close-up, taps, `?side=left` and 3440×1440. Zero JS errors / failed images; 96 Node tests pass.
 Reproduce: `python3 devserver.py <port>` then `python3 tools/speakeasy-band/sequence.py <port> night,day`.
 Known gaps: see the backlog follow-ups (sax guest, pianist's hidden left hand, drummer shins, live Beat Sync check in-app).
+
+### 2026-10-04 (later) — Speakeasy band: guest saxophonist, drummer legs, cuff seams
+
+Owner approved a SAX BOT as a second guest. A gold-brass saxophonist (stepped deco chest grille, mouthpiece socket,
+small crest) generated in the same family from the band lineup + stage references; the tenor saxophone is a separate
+rig part (mirrored so its body hangs at the player's right, pivoting at the mouthpiece in the mouth socket, keywork
+pockets of grey card removed). It rides the stage lift like the singer (its own lift a step downstage of the mic, x 1172, drawn in front of the
+mic and kit so the stand never cuts through the horn) and leaves at song end. Lineup per track (hash): ~24% singer,
+~24% sax, ~5% both (the sax then stands front stage-left, x 922; quintet), else the trio.
+
+Driven by music.js: it plays PHRASES of 1–2 bars, chosen on bar lines (more often when the music is busy: onset rate
++ mid/high energy), with BREATHS between (chest swells, the horn dips from the lips); on a drop it takes a 4-bar SOLO
+(leans back, the bell lifts, bigger sway), and at a loud groove phrase line sometimes a 2-bar break; it sways with the groove; both hands hold the horn's upper/lower keys (IK to
+points on the horn; the player's left hand crosses the chest to the upper stack, the right hangs to the lower
+stack) and shift along it with the melody note (the strongest non-root pitch class, each 8th), pressing in on each
+new note; on a breath the chest swells and the head lifts a touch; the bell
+catches the spot when it plays loud; tap it for a short solo.
+
+Also: the drummer's shins are no longer drawn (they only peeked out under the kick drum — legs stay hidden behind the
+kit), and the drummer's wrist/elbow cut seams are covered by round joint caps carried on the hand/forearm parts.
+The lift only clips while it moves (cheaper once the guest is up).
+
+**Spend:** images_generate (Nano Banana Pro 2k, 16:9, refs = band lineup + stage) — saxophonist + saxophone sheet —
+**75 credits**. Scene total **225** of the 800 budget. Prompt: `art-src/speakeasy/robots/README.md`.
+
+Resume pass: the first cut had both elbows solved on the wrong side (the upper arms flipped up into 'wings' and
+the horn read as hanging off a shoulder) — IK bends swapped; solo no longer carries into the outro.
+
+**Verification (LOOKED at):** `shots/speakeasy-robots/night-sequence.jpg` + `day-sequence.jpg` now run 32 frames:
+the trio song, the singer song, then a sax song (rises on the lift, phrase, build, solo on the drop with the bell up,
+groove, stop → sinks) and the rare both-guests quintet; `*-full.jpg` add the sax solo and the quintet;
+`closeup-sax-night-day.jpg` (lift, phrase, breath, solo, groove, sink; night + day). Zero JS errors / failed images.
+96 Node tests pass. Perf: an interleaved in-page A/B (same WKWebView, load avg ~23 from other agents) measured trio
+6.0 / +sax 5.9 / both guests 6.6 ms — the sax adds nothing measurable; `bench.py` now has a sax-only case. The
+unloaded ~3.3–3.6 ms baseline could not be re-measured under that load.

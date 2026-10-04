@@ -14,6 +14,7 @@
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
 <script src="moon.js"></script>
+<script src="train-stations.js"></script>
 <script>
 /* =====================================================================
    Train Journey — a quiet carriage, window seat. The world slides by in parallax (fields, hills,
@@ -29,6 +30,7 @@
    to cruise further down the line. Music Mode plays on a walkman on the table: reels turn, a tiny LED,
    the cassette's J-card carries the track in biro; click the walkman = play/pause, its fast-forward key
    (top right) or right flank = next. Headphone foam breathes faintly with the beat.
+   Dev hook: __train.forceStation(24) requests a station at the next safe stretch.
    Dev keys: s stretch, k next skin. Browser (no host): clicking the walkman plays demo tracks.
 
    Stage: 1600×1000; plates are drawn to it. Shared table props (transparent, painted, neutral light;
@@ -1163,13 +1165,16 @@ function jointIndex(m) { let j = Math.floor(m / RAIL_LEN); if (m < jointPos(j)) 
 // can't be seen, then eases back to cruise over ~1.6 s. The glass never goes dark.
 const SURGE = { up: 0.9, hold: 0.3, down: 1.7, gain: 13 };
 function surgeEnv(t) { return t < SURGE.up ? smooth(t / SURGE.up) : t < SURGE.up + SURGE.hold ? 1 : 1 - smooth((t - SURGE.up - SURGE.hold) / SURGE.down); }
+const stations = TrainStations.create({train,skin:()=>skinId,view:()=>L.V,env:()=>E,snow:()=>snowAcc,segments:SEG,routeLength:()=>RT});
 const cruise = () => S.cruise || 260;
 const vPhys = () => train.v * 140 / cruise();   // speed in "feel" units (140 = cruising): rocking, wind on the glass
 function updateTrain(dt, T) {
   let vT = cruise();
   if (calm.on) vT *= 0.5;
+  const stationStep = stations.update(dt, vT);
   const sk = train.skip;
-  if (sk) {
+  if (stationStep) { /* Station controller integrates both speed and distance exactly. */ }
+  else if (sk) {
     sk.t += dt;
     const e = surgeEnv(sk.t);
     sk.env = e;
@@ -1182,7 +1187,7 @@ function updateTrain(dt, T) {
     }
     if (sk.t > SURGE.up + SURGE.hold + SURGE.down) train.skip = null;
   } else train.v = approach(train.v, vT, 0.35, dt);
-  train.d += train.v * dt;
+  if (!stationStep) train.d += train.v * dt;
   // rail joints: each axle of our car crossing a gap jolts the floor a hair — the same physics the
   // ambience bed schedules the clacks from, so the jolt lands on the "dha"
   const vr = Math.min(vPhys(), 320);
@@ -1199,7 +1204,7 @@ function updateTrain(dt, T) {
     if (jn !== train.joint) { train.joint = jn; jolt(4); }
   }
   rock.jv += (-rock.jy * 90 - rock.jv * 9) * dt; rock.jy += rock.jv * dt;
-  const amp = (0.45 + 0.55 * vr / 220) * (1 - calm.lv * (0.4 + 0.35 * breathHold()));   // the holds: very still
+  const amp = Math.min(1, vr / 28) * (0.45 + 0.55 * vr / 220) * (1 - calm.lv * (0.4 + 0.35 * breathHold()));   // the holds: very still
   rock.y = (Math.sin(T * 1.7) * 2.0 + Math.sin(T * 2.9 + 1) * 0.8) * amp + rock.jy * 0.35;
   rock.x = Math.sin(T * 1.1 + 0.4) * 1.3 * amp;
 }
@@ -1323,6 +1328,7 @@ function drawOutside(g, T) {
   // NEAR: catenary masts, lamps, bushes, walls, bridge girders
   if (!artMode()) drawNear(g, T);
   drawPaintedCountryside(g,T);
+  stations.draw(g);
   if (train.tunnel > 0.001) drawTunnel(g, T);
   if (E.snow > 0.02 && train.tunnel < 0.995) drawSnow(g, T);
 }
@@ -1477,6 +1483,7 @@ function drawTrackside(g, layers, blurLen) {
       const lit = tsLit.get(it.name); if (!lit) continue;
       const dw = lit.w * it.sc * hs, dh = lit.h * it.sc * hs, x = v.x0 + i * L0.gap * hs + it.dx * hs - off, y = gy - dh;
       if (x > v.x1 + 10 || x + dw + len < v.x0 - 10) continue;
+      if (stations.groundAt(x + dw / 2)) continue;
       if (layer !== 'poles' && onBridge(x + dw / 2)) continue;   // nothing grows beside the track on a bridge
       // Feet belong to the near field band and travel at its speed. A low contact shadow anchors the cutout.
       if(layer==='trees'){g.fillStyle=rgba([18,25,16],.20+.14*E.day);g.beginPath();g.ellipse(x+dw*.5,gy-1,dw*.30,Math.max(1.2,dh*.018),0,0,TAU);g.fill();}
@@ -1642,7 +1649,7 @@ function drawSnow(g, T) {
   for (const f of snow) {
     f.x -= (train.v * (0.4 + f.z * 1.2)) / 30; f.y += (20 + f.z * 40) / 30;
     if (f.x < v.x0) { f.x += v.ww; f.y = v.y0 + Math.random() * v.wh; } if (f.y > v.y1) f.y = v.y0;
-    if ((train.tunnels || []).some(([a, b]) => f.x > a && f.x < b)) continue;   // no flakes inside the bore
+    if (stations.covered(f.x,f.y) || (train.tunnels || []).some(([a, b]) => f.x > a && f.x < b)) continue;   // no flakes inside the bore
     g.moveTo(f.x + f.s * (1 + f.z), f.y); g.ellipse(f.x, f.y, f.s * (1 + f.z * 2), f.s, 0, 0, TAU);
   }
   g.fill();
@@ -1666,7 +1673,7 @@ function drawGlass(g, T, dt) {
   }
   // weather on the glass only while it's out in the open: a tunnel's roof keeps rain and snow off (the wind
   // through the bore dries the beads)
-  const open = 1 - train.tunnel, inTunnel = (x) => (train.tunnels || []).some(([a, b]) => x > a - 10 && x < b + 10);
+  const open = (1 - train.tunnel) * (1 - stations.coverFraction()), inTunnel = (x) => (train.tunnels || []).some(([a, b]) => x > a - 10 && x < b + 10);
   // static beads when the glass is wet
   if (E.wetGlass * open > 0.02) { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = E.wetGlass * 0.9 * open; g.drawImage(beadsCv, OX * dpr + (v.x0 + rock.x) * U, OY * dpr + (v.y0 + rock.y) * U, v.ww * U, v.wh * U); g.restore(); }
   // streaks run diagonally backwards (the train's wind pushes them)
@@ -1676,7 +1683,7 @@ function drawGlass(g, T, dt) {
   g.strokeStyle = 'rgba(214,228,248,0.32)'; g.lineWidth = 1.3; g.lineCap = 'round'; g.beginPath();
   for (let i = streaks.length - 1; i >= 0; i--) {
     const s = streaks[i]; s.life += dt; s.x += dx * s.sp * dt * (1 + vPhys() / 200); s.y += dy * s.sp * dt;
-    if (s.y > w.y1 || s.x < w.x0 - 40 || s.life > 4 || streaks.length > 260 || inTunnel(s.x)) { streaks.splice(i, 1); continue; }
+    if (s.y > w.y1 || s.x < w.x0 - 40 || s.life > 4 || streaks.length > 260 || inTunnel(s.x) || stations.covered(s.x,s.y)) { streaks.splice(i, 1); continue; }
     if (s.x > w.x1) continue;
     g.moveTo(s.x, s.y); g.lineTo(s.x - dx * s.len, s.y - dy * s.len);
   }
@@ -1781,6 +1788,7 @@ function updateOutsideBirds(dt) {
   for(let i=outsideBirds.length-1;i>=0;i--){const b=outsideBirds[i];b.t+=dt*pace;if(b.t>b.life)outsideBirds.splice(i,1);}
 }
 function drawOutsideBirds(g) {
+  if(stations.coverFraction()>.01)return;
   if(!birdAtlas.complete || !birdAtlas.naturalWidth || !outsideBirds.length)return;
   const w=L.win,fw=birdAtlas.naturalWidth/4,fh=birdAtlas.naturalHeight;
   g.save();setW(g);winClip(g);
@@ -2013,7 +2021,7 @@ function sHorn(a, t, amp, o) {              // the loco, far up front: a two-not
 function ambUpdate(a, t, dt, B, X) {
   const v = clamp(train.v / cruise(), 0, 3.2), tun = train.tunnel, q = 1 - 0.25 * calm.lv;
   const bridge = (biomeAt(train.d).water || 0), out = 1 - 0.75 * tun;
-  ambGain('rumble', 0.11 * (0.3 + 0.7 * Math.min(v, 1.4)) * (1 + 0.9 * tun) * q); ambFreq('rumble', 80 + 50 * Math.min(v, 1.5) + 60 * tun);
+  ambGain('rumble', 0.11 * Math.min(1,v*5) * (0.3 + 0.7 * Math.min(v, 1.4)) * (1 + 0.9 * tun) * q); ambFreq('rumble', 80 + 50 * Math.min(v, 1.5) + 60 * tun);
   ambGain('rail', 0.012 * Math.min(v, 1.5) * (1 + 1.2 * tun) * q);
   ambGain('air', 0.005 * Math.min(v, 1.5) * out * q);
   ambGain('fan', 0.006 * q); ambGain('fanHum', 0.0018 * q);
@@ -2023,9 +2031,9 @@ function ambUpdate(a, t, dt, B, X) {
   // rail joints (jointed track only): schedule each axle's crossing of each gap ahead of time from the
   // current speed → dha-dha … dhaa-dhaa. Welded track (other skins) is a smooth hiss with no beat.
   if (S.rail === 'jointed') {
-    const vm = Math.max(0.5, train.v / RAIL.dPerM), sm = train.d / RAIL.dPerM, ahead = sm + vm * (dt + 0.3);
+    const vm = Math.max(0.001, train.v / RAIL.dPerM), sm = train.d / RAIL.dPerM, ahead = sm + vm * (dt + 0.3);
     if (AMB.ev.rs == null || AMB.ev.rs < sm - 1 || AMB.ev.rs > ahead + 30) AMB.ev.rs = sm;
-    if (!train.skip && vm < 70) for (const ax of RAIL.axles) {
+    if (!train.skip && train.v > .5 && vm < 70) for (const ax of RAIL.axles) {
       let j = jointIndex(AMB.ev.rs + ax.o) + 1;
       for (let m = jointPos(j) - ax.o; m <= ahead; m = jointPos(++j) - ax.o) {
         if (m <= AMB.ev.rs) continue;
@@ -2035,8 +2043,8 @@ function ambUpdate(a, t, dt, B, X) {
     }
     AMB.ev.rs = ahead;
   }
-  if (ambN(0.11 * (0.4 + 0.6 * Math.min(v, 1)), dt)) sCreak(a, t + Math.random() * dt, 0.0035 * q, B);
-  if (tun < 0.05 && !train.skip && ambN(1 / 110, dt)) sHorn(a, t + 0.1, 0.006 * q, B);
+  if (ambN(0.11 * Math.min(v, 1), dt)) sCreak(a, t + Math.random() * dt, 0.0035 * q, B);
+  if (tun < 0.05 && !train.skip && v>.1 && ambN(1 / 110, dt)) sHorn(a, t + 0.1, 0.006 * q, B);
   // into / out of a tunnel: a pressure whoosh
   if ((AMB.ev.tun < 0.15) !== (tun < 0.15)) ambSwell(t + 0.02, 2.2, 'lowpass', 1800, 0.7, 0.05 * q, B, 350);
   AMB.ev.tun = tun;
@@ -2055,7 +2063,7 @@ function onDown(px, py) {
   if (dh) { media(dh); return; }
   const w = L.win;
   if (x > w.x0 && x < w.x1 && y > w.y0 && y < w.y1) {
-    if (!train.skip) { train.skip = { t: 0, jumped: false, v0: train.v }; sWhoosh(); }
+    if (!train.skip && !stations.calls.active) { train.skip = { t: 0, jumped: false, v0: train.v }; sWhoosh(); }
   }
 }
 LW.on('down', onDown);
@@ -2157,6 +2165,7 @@ function render(T, dt) {
 // =====================================================================
 const xf = { cv: null, a: 0, want: null };
 function applySkin(id) {
+  stations.reset();
   skinId = id; S = SKINS[id];
   passer.age=-1;passer.wait=55;passer.tintKey="";
   TS = S.track; buildRoute(); applySkinProps();
@@ -2218,7 +2227,7 @@ function selfTest(secs = 60) {
   }
   return {err,maxBirds};
 }
-window.__train = { passer, previewPasser(age=12){passer.age=age;}, AMB, get skin() { return skinId; }, setSkin, SKINS, get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, get RT() { return RT; }, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
+window.__train = { stations, forceStation(dwell){return stations.force(dwell);}, passer, previewPasser(age=12){passer.age=age;}, AMB, get skin() { return skinId; }, setSkin, SKINS, get E() { return E; }, breath, breathSt, get L() { return L; }, get W() { return W; }, outsideBirds, train, rock, calm, setCalm, startWater, startStretch, benchRaw, selfTest, biomeAt, SEG, get RT() { return RT; }, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, onDown, bake };
 })();
 </script>
 </body>

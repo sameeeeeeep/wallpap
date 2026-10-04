@@ -617,6 +617,12 @@
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !LW.focused && liveCanvases.size) freezeStill();
   });
+  // The page is being closed (scene switch: the host closes the old view outright) or navigated away:
+  // let go of the paused stills' decoded images and the audio graph at once instead of with the process.
+  window.addEventListener('pagehide', () => {
+    thawStill();
+    try { if (LW._ctx && LW._ctx.state !== 'closed') LW._ctx.close(); } catch (e) {}
+  });
   const blurCSS = document.createElement('style');
   // An auto-paused scene simply stops drawing and keeps its last frame (no blur/zoom): it should
   // still look like a wallpaper. A desktop click resumes it (host energy modes).

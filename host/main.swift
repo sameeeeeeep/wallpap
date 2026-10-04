@@ -94,18 +94,17 @@ final class WallWindow: NSWindow {
     }
 
     /// Each scene gets a brand-new web view, so nothing (audio tails, timers,
-    /// WebGL contexts) can leak from the previous scene.
+    /// WebGL contexts) can leak from the previous scene. The old page is closed outright
+    /// (WebTeardown.retire), which ends its WebContent process and returns its memory now.
     func freshWebView() {
         guard let handler else { return }
         let old = web
-        old.evaluateJavaScript("try{LW._ctx&&LW._ctx.close()}catch(e){}", completionHandler: nil)
-        old.configuration.userContentController.removeScriptMessageHandler(forName: "lw")
-        old.stopLoading()
-        old.loadHTMLString("", baseURL: nil)
         web = WallWindow.makeWebView(size: frame.size, handler: handler)
         contentView = web
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { _ = old }   // let the old page finish tearing down
+        WebTeardown.retire(old)
     }
+    /// The window is going away (displays changed): close its page now rather than whenever it deallocates.
+    func retireWebView() { WebTeardown.retire(web) }
 
     func js(_ s: String) { web.evaluateJavaScript(s, completionHandler: nil) }
 
@@ -738,7 +737,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     func rebuildWindows() {
         playHost.close(immediate: true)
-        windows.forEach { $0.close() }
+        windows.forEach { $0.retireWebView(); $0.close() }
         windows = NSScreen.screens.map { screen in
             let w = WallWindow(screen: screen, handler: self)
             w.orderFrontRegardless()

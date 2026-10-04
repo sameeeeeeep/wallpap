@@ -93,14 +93,61 @@
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
         LW._ctx = new AC({ latencyHint: 'interactive' });
+        if (!audioWanted()) syncAudio();   // created while paused: don't let it run
       }
-      if (LW._ctx.state !== 'running') LW._ctx.resume().catch(() => {});
+      if (LW._ctx.state !== 'running' && audioWanted()) LW._ctx.resume().catch(() => {});
       return LW._ctx;
     },
     post(msg) {
       if (LW.isHost) window.webkit.messageHandlers.lw.postMessage(msg);
     },
   };
+
+  // ─── Idle governor: a paused page does no work ──────────────────────────
+  // While the scene is paused (LW.focused false) and nothing keeps it alive (LW.keepAlive, e.g. bowls
+  // auto-play), every setInterval the page registered is suspended — cleared natively, so no timer
+  // wakes the process — and re-armed on resume; the shared AudioContext fades its scene buses out and
+  // suspends (its clock stops, so scheduled sound resumes exactly where it was). The global soundscape
+  // is an explicit choice and keeps sounding: then the context stays running with the scene buses at 0.
+  // setTimeout is left alone (one-shots end by themselves; lw.js's own still/pill fades rely on it).
+  const rawSetInterval = window.setInterval.bind(window), rawClearInterval = window.clearInterval.bind(window);
+  const rawSetTimeout = window.setTimeout.bind(window), rawClearTimeout = window.clearTimeout.bind(window);
+  const intervals = new Map();
+  let ivSeq = 1 << 30, idle = false, suspendT = 0;
+  window.setInterval = function (fn, ms, ...args) {
+    if (typeof fn !== 'function') return rawSetInterval(fn, ms, ...args);
+    const id = ivSeq++, rec = { ms, raw: 0, run: () => fn.apply(window, args) };
+    intervals.set(id, rec);
+    if (!idle) rec.raw = rawSetInterval(rec.run, ms);
+    return id;
+  };
+  const clearAny = (raw) => function (id) {
+    const rec = intervals.get(id);
+    if (!rec) return raw(id);
+    if (rec.raw) rawClearInterval(rec.raw);
+    intervals.delete(id);
+  };
+  window.clearInterval = clearAny(rawClearInterval);
+  window.clearTimeout = clearAny(rawClearTimeout);   // the two id spaces are interchangeable on the web
+  function setIdle(on) {
+    if (idle === on) return;
+    idle = on;
+    for (const rec of intervals.values()) {
+      if (on) { rawClearInterval(rec.raw); rec.raw = 0; } else if (!rec.raw) rec.raw = rawSetInterval(rec.run, rec.ms);
+    }
+    syncAudio();
+  }
+  const soundscapeOn = () => !!(SS && SS.gain);
+  function audioWanted() { return !LW.muted && (!idle || soundscapeOn()); }
+  function syncAudio() {
+    const ctx = LW._ctx;
+    if (!ctx) return;
+    for (const k in BUS) applyBus(k);   // scene buses go quiet while idle
+    rawClearTimeout(suspendT);
+    if (audioWanted()) { if (ctx.state !== 'running') ctx.resume().catch(() => {}); }
+    else if (ctx.state === 'running') suspendT = rawSetTimeout(() => { if (!audioWanted() && LW._ctx === ctx) ctx.suspend().catch(() => {}); }, LW.muted ? 0 : 450);   // after the fade
+  }
+  LW._idle = () => idle;
 
   function input(type, x, y) {
     const p = LW.pointer;
@@ -227,6 +274,7 @@
     const changed = !prev !== !LW.nowPlaying || (prev && LW.nowPlaying &&
       (prev.title !== np.title || prev.artist !== np.artist || prev.playing !== np.playing || prev.artwork !== np.artwork));
     if (changed) LW.emit('nowplaying', LW.nowPlaying);
+    if (LW.nowPlaying) wakePulse();
   }
 
   // ─── Audio buses ──────────────────────────────────────────────────────────
@@ -247,7 +295,7 @@
   function applyBus(cat) {
     const g = BUS[cat], p = LW.audioPrefs[cat];
     if (!g || !p || !LW._ctx) return;
-    g.gain.setTargetAtTime(p.on ? p.vol : 0, LW._ctx.currentTime, 0.25);
+    g.gain.setTargetAtTime(p.on && !idle ? p.vol : 0, LW._ctx.currentTime, idle ? 0.1 : 0.25);
   }
   // Route anything connected straight to the speakers through the 'fx' bus.
   const __rawConnect = AudioNode.prototype.connect;
@@ -375,13 +423,14 @@
   function onBeatFrame(m) {
     const M = LW.music;
     M.level = m.l; M.bass = m.b; M.mid = m.m; M.high = m.h; M.live = true; M.lastLive = performance.now();
-    M.raw = m;   // whole frame: newer hosts add chroma/key/bpm/sections (see host/BeatSync.swift); read via music.js
+    M.raw = m; wakePulse();   // whole frame: newer hosts add chroma/key/bpm/sections (see host/BeatSync.swift); read via music.js
     if (m.k) LW.emit('beat', Math.min(1, m.k));
     LW.emit('beatframe', m);
   }
-  // Fallback pulse when there's music but no live analysis.
-  let fakeT = 0;
-  setInterval(() => {
+  // Fallback pulse when there's music but no live analysis. Runs only while there is music (or a level
+  // still decaying), so a silent desktop has no 10 Hz timer.
+  let fakeT = 0, pulseIv = 0;
+  function pulse() {
     const M = LW.music;
     if (M.live && performance.now() - M.lastLive > 3000) M.live = false;
     if (M.live) return;
@@ -390,7 +439,9 @@
     const target = playing ? 0.35 + 0.1 * Math.sin(fakeT * 0.3) : 0;
     M.level += (target - M.level) * 0.2; M.bass = M.level; M.mid = M.level * 0.8; M.high = M.level * 0.5;
     if (playing && Math.round(fakeT * 10) % 6 === 0) LW.emit('beat', 0.4);   // ~100 bpm, soft
-  }, 100);
+    if (!playing && M.level < 0.001) { M.level = M.bass = M.mid = M.high = 0; clearInterval(pulseIv); pulseIv = 0; }
+  }
+  function wakePulse() { if (!pulseIv) pulseIv = setInterval(pulse, 100); }
 
   // ─── Background soundscapes (procedural, looped, very light on CPU) ──────
   LW.soundscape = { kind: 'off', volume: 0.35 };
@@ -416,13 +467,14 @@
     return buf;
   }
   function stopSoundscape() {
-    SS.timers.forEach(clearInterval); SS.timers = [];
+    SS.timers.forEach(rawClearInterval); SS.timers = [];
     const g = SS.gain, ctx = LW._ctx;
     if (g && ctx) {
       g.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
       const old = SS.nodes; setTimeout(() => old.forEach((n) => { try { n.stop && n.stop(); n.disconnect(); } catch (e) {} }), 2000);
     }
     SS.nodes = []; SS.gain = null; SS.kind = 'off';
+    syncAudio();
   }
   function startSoundscape() {
     const { kind, volume } = LW.soundscape;
@@ -434,6 +486,7 @@
     const out = ctx.createGain(); out.gain.value = 0; out.__lwBus = true; out.connect(ctx.destination);
     out.gain.setTargetAtTime(volume * 0.5, ctx.currentTime, 1.2);
     SS.gain = out; SS.kind = kind;
+    syncAudio();   // a paused page keeps its context running for the soundscape
     const src = (color) => { const s = ctx.createBufferSource(); s.buffer = noiseBuffer(ctx, color); s.loop = true; s.start(); SS.nodes.push(s); return s; };
     const filt = (type, f, q = 0.7) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; SS.nodes.push(b); return b; };
     const lfo = (rate, depth, param) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = rate; g.gain.value = depth; o.connect(g); g.connect(param); o.start(); SS.nodes.push(o, g); };
@@ -449,7 +502,7 @@
     else if (kind === 'brown') chain(src('brown'), filt('lowpass', 900), out);
     else if (kind === 'rain') {
       chain(src('pink'), filt('highpass', 500), filt('lowpass', 6500), out);
-      SS.timers.push(setInterval(() => { if (Math.random() < 0.6) burst(0.04, 2500 + Math.random() * 3000, 4, 0.05 + Math.random() * 0.08); }, 60));
+      SS.timers.push(rawSetInterval(() => { if (Math.random() < 0.6) burst(0.04, 2500 + Math.random() * 3000, 4, 0.05 + Math.random() * 0.08); }, 60));
     } else if (kind === 'ocean') {
       const lp = filt('lowpass', 700), g = ctx.createGain(); g.gain.value = 0.55; SS.nodes.push(g);
       chain(src('brown'), lp, g, out);
@@ -457,7 +510,7 @@
       chain(src('pink'), filt('highpass', 2000), ctx.createGain(), out).gain.value = 0.08;
     } else if (kind === 'fire') {
       chain(src('brown'), filt('lowpass', 350), out);
-      SS.timers.push(setInterval(() => { if (Math.random() < 0.35) burst(0.015 + Math.random() * 0.03, 1500 + Math.random() * 4000, 2, 0.1 + Math.random() * 0.25); }, 80));
+      SS.timers.push(rawSetInterval(() => { if (Math.random() < 0.35) burst(0.015 + Math.random() * 0.03, 1500 + Math.random() * 4000, 2, 0.1 + Math.random() * 0.25); }, 80));
     } else if (kind === 'stream') {
       const bp = filt('bandpass', 1200, 0.6);
       chain(src('pink'), bp, out);
@@ -473,7 +526,16 @@
   LW.layout = { side: qs.get('side') || 'right', clear: qs.get('side') === 'left' ? [0.28, 1] : qs.get('side') === 'off' ? [0, 1] : [0, 0.72], avoid: [] };
   LW.fps = +(qs.get('fps') || 30);
   LW.focused = true;
-  LW.keepAlive = false;
+  let keepAlive = false;
+  Object.defineProperty(LW, 'keepAlive', {
+    enumerable: true,
+    get: () => keepAlive,
+    set(v) {
+      keepAlive = !!v;
+      setIdle(!LW.focused && !keepAlive);
+      if (!LW.focused) LW._resumeFrames();   // a paused page starts (or stops) its 2 fps keep-alive ticks
+    },
+  });
   if (qs.get('virtual') !== '1') {
     const realRAF = window.requestAnimationFrame.bind(window);
     let queue = [], scheduled = false, last = 0, timer = 0;
@@ -579,10 +641,12 @@
   function setFocused(on) {
     if (LW.focused === on) return;
     LW.focused = on;
+    if (on) setIdle(false);
     if (on) thawStill(true); else freezeStill();
     showPausePill(!on);
     document.documentElement.classList.toggle('lw-unfocused', !on);
     LW.emit('focus', on);
+    if (!on) setIdle(!LW.keepAlive);   // after the scene's own focus handlers and the last frame
     if (on) LW._resumeFrames();
   }
 
@@ -653,7 +717,7 @@
     if (type === 'env') { LW.setEnv(x); return; }
     if (type === 'reminder') { LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }
     if (type === 'calm') { LW.calm = !!x; LW.emit('calm', LW.calm); return; }
-    if (type === 'mute') { LW.muted = !!flag; if (LW._ctx) (LW.muted ? LW._ctx.suspend() : LW._ctx.resume()); if (!LW.muted && LW.soundscape.kind !== 'off') startSoundscape(); LW.emit('mute', LW.muted); return; }
+    if (type === 'mute') { LW.muted = !!flag; syncAudio(); if (!LW.muted && LW.soundscape.kind !== 'off') startSoundscape(); LW.emit('mute', LW.muted); return; }
     if (type === 'leave') { LW.pointer.inside = false; LW.emit('leave'); return; }
     input(type, x, y);
   };

@@ -649,7 +649,12 @@
     if (type === 'settings') { Object.assign(LW.settings, x || {}); LW.emit('settings', LW.settings); return; }
     if (type === 'action') { LW.emit('action', x); return; }
     if (type === 'pauseReason') { LW.pauseReason = x || ''; return; }
-    if (type === 'layout') { LW.layout = Object.assign({}, LW.layout, x || {}); LW.emit('layout', LW.layout); return; }
+    if (type === 'layout') {
+      // Identical pushes (the host re-sends on display notifications) must not rebuild the scene.
+      const next = Object.assign({}, LW.layout, x || {});
+      if (LW.layout && JSON.stringify(next) === JSON.stringify(LW.layout)) return;
+      LW.layout = next; LW.emit('layout', LW.layout); return;
+    }
     if (type === 'env') { LW.setEnv(x); return; }
     if (type === 'reminder') { LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }
     if (type === 'calm') { LW.calm = !!x; LW.emit('calm', LW.calm); return; }

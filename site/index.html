@@ -51,202 +51,157 @@
 </header>
 
 <main id="main">
-  <!-- ───────────── Story: a still Mac desktop comes alive as you scroll ─────────────
-       Desktop: a pinned Mac; each step (scroll position) changes what it shows.
-       Phones / reduced motion: the same steps as a plain list with stills (.sc-visual). -->
-  <section class="story" id="story" aria-labelledby="hero-title">
-    <div class="story-pin">
-      <div class="story-copy">
-        <header class="sc-step sc-intro is-on" data-step="0">
-          <p class="eyebrow">wallpap · living wallpapers for Mac</p>
-          <h1 id="hero-title">Your desktop,<br>but alive.</h1>
-          <p class="lede">Swap the still picture behind your apps for a scene you can touch — koi that come when you click, cats on a sunset terrace, a record store that plays what you’re playing.</p>
-          <div class="cta-row">
+  <!-- ───────────── Hero: the headline and the live, playable scene ─────────────
+       The poster shows first; main.js starts the live scene after the page has loaded (or on the
+       first click here). The controls sit beside the screen (a bottom sheet on phones) and drop
+       from the menu bar's wave in fullscreen. -->
+  <section class="hero" id="scenes" aria-labelledby="hero-title">
+    <div class="hero-in">
+      <header class="hero-head">
+        <h1 id="hero-title">Your desktop,<br>but alive.</h1>
+        <div class="hero-side">
+          <p class="lede">Swap the still picture behind your apps for a scene you can touch. Twelve scenes, all free — and this one is running live. Click it.</p>
+          <div class="hero-cta">
             <a class="btn btn-dark btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">
               <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.9zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>
               Download free
             </a>
-            <a class="text-link scroll-cue" href="#story-live">See it come alive <span aria-hidden="true">↓</span></a>
+            <p class="meta">macOS 13+ · Apple Silicon &amp; Intel<br>Signed &amp; notarized by Apple</p>
           </div>
-          <p class="meta">macOS 13+ · Apple Silicon &amp; Intel · Signed &amp; notarized by Apple</p>
-        </header>
+        </div>
+      </header>
 
-        <article class="sc-step" data-step="1" id="story-live">
-          <p class="sc-k"><span>01</span> Live</p>
-          <h2>Swap the still for a living&nbsp;scene.</h2>
-          <p>wallpap runs a real, animated scene behind your icons and widgets — and keeps its main action clear of them on its own.</p>
-        </article>
+      <div class="picker" id="picker" role="group" aria-label="Choose a scene"></div>
 
-        <article class="sc-step" data-step="2">
-          <p class="sc-k"><span>02</span> Touch</p>
-          <h2>Reach in. It reacts.</h2>
-          <p>Click the pond and the koi come for the food. Pet the cats, drop the needle, strike a singing bowl. Every interaction is free.</p>
-          <div class="sc-visual"><img src="img/koi-night-sm.jpg" alt="The Koi Pond at night, with ripples where you clicked" width="720" height="450" loading="lazy" decoding="async"><span class="sv-tap" aria-hidden="true"></span></div>
-        </article>
-
-        <article class="sc-step" data-step="3">
-          <p class="sc-k"><span>03</span> Your day</p>
-          <h2>Morning light. Evening rain.</h2>
-          <p>Light follows your real clock — or let a slow day cycle drift by. Pick the weather, or let live weather bring the rain in when it rains outside. Even the moon is real, in tonight’s phase.</p>
-          <p class="sc-fine">Live weather is part of Pro.</p>
-          <div class="sc-visual"><img src="img/koi-rain-sm.jpg" alt="The Koi Pond at dusk in the rain" width="720" height="450" loading="lazy" decoding="async"></div>
-        </article>
-
-        <article class="sc-step" data-step="4">
-          <p class="sc-k"><span>04</span> Music Mode <span class="tag">Pro</span></p>
-          <h2>Your music, in the room.</h2>
-          <p>Whatever’s playing in Apple Music or Spotify lands on the record sleeve, the jukebox and the rooftop projector. Beat Sync moves the room with it.</p>
-          <button class="btn btn-soft btn-small sound-toggle" type="button" data-sound-toggle aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path class="sw-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Play with sound</span></button>
-          <div class="sc-visual"><img src="img/records-np-sm.jpg" alt="The Record Store scene with an album on the big frame while music plays" width="720" height="450" loading="lazy" decoding="async"></div>
-        </article>
-
-        <article class="sc-step" data-step="5">
-          <p class="sc-k"><span>05</span> Calm <span class="tag">Pro</span></p>
-          <h2>Breathe with the scene.</h2>
-          <p>Calm slows the whole world down and breathes with you — box, 4·6 or 4-7-8 — right there on your desktop.</p>
-          <div class="sc-visual"><img src="img/bowls-sm.jpg" alt="Singing bowls by candlelight, with a breathing guide" width="720" height="450" loading="lazy" decoding="async"><span class="sv-breath" aria-hidden="true"><i></i><b>breathe in</b></span></div>
-        </article>
-
-        <article class="sc-step" data-step="6">
-          <p class="sc-k"><span>06</span> Reminders <span class="tag">Pro</span></p>
-          <h2>A gentle nudge to drink some water.</h2>
-          <p>Reminders appear inside the scene. When your apps cover the desktop, a small card slides in under the menu bar instead.</p>
-          <div class="sc-visual"><img src="img/cafe-sm.jpg" alt="Corner Café with a water reminder card under the menu bar" width="720" height="450" loading="lazy" decoding="async">
-            <div class="rcard sv-card" aria-hidden="true"><div class="rc-top"><span class="rc-ic"><svg viewBox="0 0 24 24"><path d="M7 4h10l-1.3 15.2a2 2 0 0 1-2 1.8h-3.4a2 2 0 0 1-2-1.8z"/><path d="M7.6 10h8.8"/></svg></span><span class="rc-t"><b>A sip of water?</b><span>Small sips, all day.</span></span></div><div class="rc-acts"><span class="main">Done</span><span>Snooze 10 min</span></div></div>
-          </div>
-        </article>
-
-        <article class="sc-step" data-step="7">
-          <p class="sc-k"><span>07</span> Menu bar</p>
-          <h2>Everything, one click away.</h2>
-          <p>Scenes, weather, music, calm and energy live in one panel in your menu bar. Pause when you’re away or on battery — a paused scene keeps its last frame, crisp, until you click.</p>
-          <a class="text-link" href="#scenes">Try every scene <span aria-hidden="true">↓</span></a>
-          <div class="sc-visual"><img src="img/cats-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"><img class="sv-panel" src="img/panel.jpg" alt="The wallpap menu-bar panel: scene picker, time of day, weather and more" width="340" height="640" loading="lazy" decoding="async"></div>
-        </article>
-
-        <ol class="story-rail" aria-label="Story steps">
-          <li><a href="#story-live" data-goto="1">Live</a></li>
-          <li><a href="#story-live" data-goto="2">Touch</a></li>
-          <li><a href="#story-live" data-goto="3">Your day</a></li>
-          <li><a href="#story-live" data-goto="4">Music</a></li>
-          <li><a href="#story-live" data-goto="5">Calm</a></li>
-          <li><a href="#story-live" data-goto="6">Reminders</a></li>
-          <li><a href="#story-live" data-goto="7">Menu bar</a></li>
-        </ol>
-      </div>
-
-      <div class="story-stage" aria-hidden="true">
-        <div class="device">
-          <div class="bezel">
-            <!-- The Mac screen. main.js adds the desktop chrome (menu bar, widgets, icons…) and,
-                 once you start scrolling, the live scene. -->
-            <div class="screen" id="storyScreen" data-static>
-              <img class="poster" data-src="img/koi.jpg" alt="" width="1440" height="900" decoding="async">
-              <noscript><img class="poster" src="img/koi.jpg" alt="" width="1440" height="900"></noscript>
+      <div class="pg-body" id="playground">
+        <div class="pg-stage">
+          <div class="monitor">
+            <div class="screen" id="pgScreen">
+              <img class="poster" src="img/koi.jpg" alt="" width="1440" height="900" fetchpriority="high" decoding="async">
+              <button class="play-live" id="playLive" type="button" hidden><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg> Play the live scene</button>
+              <div class="sound-hint" id="soundHint" hidden>Tap the scene once to let it play sound</div>
             </div>
           </div>
-          <div class="base"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ───────────── Playground: pick a scene, see the headline change, play with it ───────────── -->
-  <section class="pg" id="scenes" aria-labelledby="pgTitle">
-    <div class="pg-head">
-      <p class="eyebrow">Try every scene <span class="eyebrow-dim">· 12 scenes, all free</span></p>
-      <div class="pg-text" id="pgText" aria-live="polite">
-        <h2 id="pgTitle">Feed the fish on your desktop.</h2>
-        <p class="pg-pitch" id="pgPitch">Click the water and nine koi come for the food. Hold still and they come to see you.</p>
-      </div>
-    </div>
-
-    <div class="picker" id="picker" role="group" aria-label="Choose a scene"></div>
-
-    <div class="pg-body" id="playground">
-      <div class="pg-stage">
-        <div class="monitor">
-          <div class="screen" id="pgScreen">
-            <img class="poster" src="img/koi.jpg" alt="" width="1440" height="900" loading="lazy" decoding="async">
-            <button class="play-live" id="playLive" type="button" hidden><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg> Play the live scene</button>
-            <div class="sound-hint" id="soundHint" hidden>Tap the scene once to let it play sound</div>
+          <div class="tourbar" id="tourbar">
+            <p class="tb-cap"><span class="tb-dot" aria-hidden="true"></span><span id="tourCap">This is the real scene, running live. Click it.</span></p>
+            <div class="tb-acts">
+              <button class="btn btn-ghost btn-small" type="button" id="tourBtn" aria-pressed="false">Take the tour</button>
+              <button class="btn btn-ghost btn-small" id="fsBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fullscreen</span></button>
+              <button class="btn btn-ghost btn-small sheet-btn" id="sheetBtn" type="button" aria-controls="panel" aria-expanded="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>Controls</button>
+              <button class="btn btn-dark btn-small sound-toggle" type="button" data-sound-toggle aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path class="sw-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Play with sound</span></button>
+            </div>
+            <ol class="tour-list" id="tourList" hidden aria-label="Things to try"></ol>
           </div>
         </div>
-        <div class="tourbar" id="tourbar">
-          <p class="tb-cap"><span class="tb-dot" aria-hidden="true"></span><span id="tourCap">This is the real scene, running live. Click it.</span></p>
-          <div class="tb-acts">
-            <button class="btn btn-ghost btn-small" type="button" id="tourBtn" aria-pressed="false">Take the tour</button>
-            <button class="btn btn-ghost btn-small" id="fsBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fullscreen</span></button>
-            <button class="btn btn-ghost btn-small sheet-btn" id="sheetBtn" type="button" aria-controls="panel" aria-expanded="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>Controls</button>
-            <button class="btn btn-dark btn-small sound-toggle" type="button" data-sound-toggle aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path class="sw-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Play with sound</span></button>
+
+        <!-- Controls next to the screen (a bottom sheet on phones, a dropdown under the wave in fullscreen). -->
+        <aside class="panel" id="panel" aria-labelledby="panelTitle">
+          <div class="panel-top">
+            <p class="panel-kicker" id="panelTitle">Controls</p>
+            <button class="panel-x" type="button" id="panelClose" aria-label="Close controls">×</button>
           </div>
-          <ol class="tour-list" id="tourList" hidden aria-label="Things to try"></ol>
-        </div>
+          <div class="p-block p-pick" id="fsPick" role="group" aria-label="Choose a scene"></div>
+          <div class="p-block p-scene">
+            <p class="p-label" id="pCat">Koi Pond · Nature</p>
+            <p class="p-title" id="pgTitle" aria-live="polite">Feed the fish on your desktop.</p>
+            <ul class="tips" id="sceneTips"></ul>
+            <div class="row scene-actions" id="sceneActions"></div>
+          </div>
+          <div class="p-block">
+            <div class="ctl-head"><label for="hour">Time of day</label><output id="hourOut" for="hour">4:00 pm</output></div>
+            <input type="range" id="hour" min="0" max="23.75" step="0.25" value="16">
+            <div class="scale" aria-hidden="true"><span>Night</span><span>Dawn</span><span>Noon</span><span>Dusk</span><span>Night</span></div>
+          </div>
+          <div class="p-block">
+            <div class="ctl-head"><span id="wxLabel">Weather</span></div>
+            <div class="chips" role="radiogroup" aria-labelledby="wxLabel" id="wxChips"></div>
+          </div>
+          <div class="p-block quick">
+            <button class="q-btn" type="button" id="qMusic" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Music</span><small id="qMusicSub">off</small></button>
+            <button class="q-btn" type="button" id="qBreathe" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg><span>Breathe</span><small>box 4·4·4·4</small></button>
+            <button class="q-btn" type="button" id="qWater"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg><span>Reminder</span><small>water, now</small></button>
+            <button class="q-btn" type="button" id="qPanel" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 13c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3"/></svg><span>Menu bar</span><small>all controls</small></button>
+          </div>
+          <p class="fine p-foot">Pro features are unlocked in this preview.</p>
+        </aside>
       </div>
-
-      <!-- Controls next to the screen (a bottom sheet on phones). -->
-      <aside class="panel" id="panel" aria-labelledby="panelTitle">
-        <div class="panel-top">
-          <p class="panel-kicker" id="panelTitle">Controls</p>
-          <button class="panel-x" type="button" id="panelClose" aria-label="Close controls">×</button>
-        </div>
-        <div class="p-block p-scene">
-          <p class="p-label" id="pCat">Nature</p>
-          <ul class="tips" id="sceneTips"></ul>
-          <div class="row scene-actions" id="sceneActions"></div>
-        </div>
-        <div class="p-block">
-          <div class="ctl-head"><label for="hour">Time of day</label><output id="hourOut" for="hour">4:00 pm</output></div>
-          <input type="range" id="hour" min="0" max="23.75" step="0.25" value="16">
-          <div class="scale" aria-hidden="true"><span>Night</span><span>Dawn</span><span>Noon</span><span>Dusk</span><span>Night</span></div>
-        </div>
-        <div class="p-block">
-          <div class="ctl-head"><span id="wxLabel">Weather</span></div>
-          <div class="chips" role="radiogroup" aria-labelledby="wxLabel" id="wxChips"></div>
-        </div>
-        <div class="p-block quick">
-          <button class="q-btn" type="button" id="qMusic" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg><span>Music</span><small id="qMusicSub">off</small></button>
-          <button class="q-btn" type="button" id="qBreathe" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg><span>Breathe</span><small>box 4·4·4·4</small></button>
-          <button class="q-btn" type="button" id="qWater"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg><span>Reminder</span><small>water, now</small></button>
-          <button class="q-btn" type="button" id="qPanel" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 13c2.5 0 2.5-3 5-3s2.5 3 5 3 2.5-3 5-3 2.5 3 5 3"/></svg><span>Menu bar</span><small>all controls</small></button>
-        </div>
-        <p class="fine p-foot">Pro features are unlocked in this preview.</p>
-      </aside>
+      <div class="scrim" id="scrim" hidden></div>
     </div>
-    <div class="scrim" id="scrim" hidden></div>
-    <p class="pg-more">More scenes arrive in the app’s Discover tab as they’re finished — no update needed. Or <a href="#make-a-scene">make your own</a>.</p>
   </section>
 
-  <!-- ───────────── Pets that notice you ───────────── -->
-  <section class="playsec petsec" id="pets" aria-labelledby="pets-title">
-    <div class="section-head">
-      <p class="eyebrow">New · Pets</p>
-      <h2 id="pets-title">Pick a cat.<br>It follows you.</h2>
-      <p class="sub">Tap a cat and it looks up at you, then trails your cursor across the room — walking, running, and pouncing when you hold still. Tap it again and it goes back to its nap. Five cats and two dogs, every one hand-painted, every step drawn.</p>
-    </div>
-    <figure class="playsec-shot petsec-shot">
-      <img src="img/follow.jpg" srcset="img/follow-sm.jpg 720w, img/follow.jpg 1440w" sizes="(max-width: 1100px) 100vw, 1100px" alt="An orange cat on the Santorini terrace: it looks up when picked, walks after the cursor, then sits and watches it" width="1440" height="296" loading="lazy" decoding="async">
-      <figcaption class="petsec-cap"><span>Picked</span><span>Following</span><span>Watching your cursor</span></figcaption>
-    </figure>
+  <!-- ───────────── What it does: small tiles; "Try it" runs each one in the hero scene ───────────── -->
+  <section class="strip" aria-label="What wallpap does">
+    <ul class="strip-grid">
+      <li class="ft">
+        <div class="ft-img"><img src="img/koi-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"><span class="sv-tap" aria-hidden="true"></span></div>
+        <h3>Reach in. It reacts.</h3>
+        <p>Click the pond and the koi come for the food. Pet the cats, drop the needle, strike a singing bowl. Every interaction is free.</p>
+        <button class="ft-try" type="button" data-try="touch">Try it<span class="sr-only">: feed the koi</span></button>
+      </li>
+      <li class="ft">
+        <div class="ft-img"><img src="img/cats-rain-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"></div>
+        <h3>Morning light. Evening rain.</h3>
+        <p>Light follows your real clock, or a slow day cycle drifts by. Pick the weather — or let live weather <span class="tag">Pro</span> bring the rain in. Even the moon is in tonight’s phase.</p>
+        <button class="ft-try" type="button" data-try="day">Try it<span class="sr-only">: dusk and rain</span></button>
+      </li>
+      <li class="ft">
+        <div class="ft-img"><img src="img/records-np-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"></div>
+        <h3>Your music, in the room. <span class="tag">Pro</span></h3>
+        <p>Whatever’s playing in Apple Music or Spotify lands on the record sleeve, the jukebox and the rooftop projector. Beat Sync moves the room with it.</p>
+        <button class="ft-try" type="button" data-try="music">Try it<span class="sr-only">: Music Mode</span></button>
+      </li>
+      <li class="ft">
+        <div class="ft-img"><img src="img/bowls-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"><span class="sv-breath" aria-hidden="true"><i></i></span></div>
+        <h3>Breathe with the scene. <span class="tag">Pro</span></h3>
+        <p>Calm slows the whole world down and breathes with you — box, 4·6 or 4-7-8 — right there on your desktop.</p>
+        <button class="ft-try" type="button" data-try="calm">Try it<span class="sr-only">: Calm</span></button>
+      </li>
+      <li class="ft">
+        <div class="ft-img"><img src="img/cafe-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async">
+          <span class="ft-card" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4h10l-1.3 15.2a2 2 0 0 1-2 1.8h-3.4a2 2 0 0 1-2-1.8z"/><path d="M7.6 10h8.8"/></svg><b>A sip of water?</b></span></div>
+        <h3>A gentle nudge to drink some water. <span class="tag">Pro</span></h3>
+        <p>Reminders appear inside the scene. When your apps cover the desktop, a small card slides in under the menu bar instead.</p>
+        <button class="ft-try" type="button" data-try="remind">Try it<span class="sr-only">: a water reminder</span></button>
+      </li>
+      <li class="ft">
+        <div class="ft-img"><img src="img/cabin-sm.jpg" alt="" width="720" height="450" loading="lazy" decoding="async"><img class="sv-panel" src="img/panel.jpg" alt="" width="340" height="640" loading="lazy" decoding="async"></div>
+        <h3>Everything, one click away.</h3>
+        <p>Scenes, weather, music, calm and energy live in one menu-bar panel. Pause when you’re away or on battery — a paused scene keeps its last frame.</p>
+        <button class="ft-try" type="button" data-try="menu">Try it<span class="sr-only">: the menu-bar panel</span></button>
+      </li>
+    </ul>
+    <p class="strip-more">More scenes arrive in the app’s Discover tab as they’re finished — no update needed. Or <a href="#make-a-scene">make your own</a>.</p>
   </section>
 
-  <!-- ───────────── Play: daily puzzles on the wallpaper ───────────── -->
-  <section class="playsec" id="play" aria-labelledby="play-title">
-    <div class="playsec-grid">
-      <div class="playsec-copy">
-        <p class="eyebrow">New · Play</p>
-        <h2 id="play-title">A small break,<br>right on your wallpaper.</h2>
-        <p class="sub">Open <b>Play</b> from the menu bar and the scene comes forward with a glass panel on it. The cats keep wandering behind it. Esc, and you’re back to work.</p>
-        <ol class="make-points">
-          <li><span class="step-n">1</span><div><h3>Letter Garden</h3><p>One hidden word, six gentle attempts. A new word every day, the same for everyone.</p></div></li>
-          <li><span class="step-n">2</span><div><h3>Little Crossings</h3><p>A 5×5 mini crossword with original clues. Check a square, a word or the whole grid.</p></div></li>
-          <li><span class="step-n">3</span><div><h3>Works offline, keeps your streak</h3><p>Every puzzle ships with the app. Your progress stays on your Mac.</p></div></li>
-        </ol>
+  <!-- ───────────── New: Pets and Play, as two compact cards ───────────── -->
+  <section class="duo" aria-label="New in wallpap">
+    <article class="duo-card" id="pets" aria-labelledby="pets-title">
+      <div class="duo-copy">
+        <p class="eyebrow">New · Pets</p>
+        <h2 id="pets-title">Pick a cat. It follows you.</h2>
+        <p class="sub">Tap a cat and it looks up at you, then trails your cursor across the room — walking, running, and pouncing when you hold still. Tap it again and it goes back to its nap. Five cats and two dogs, every one hand-painted, every step drawn.</p>
       </div>
-      <figure class="playsec-shot">
-        <img src="img/play.jpg" srcset="img/play-sm.jpg 720w, img/play.jpg 1440w" sizes="(max-width: 1100px) 100vw, 56vw" alt="The Play panel open over the Santorini Cats scene, showing today’s Letter Garden puzzle" width="1440" height="900" loading="lazy" decoding="async">
+      <figure class="duo-shot petsec-shot">
+        <img src="img/follow.jpg" srcset="img/follow-sm.jpg 720w, img/follow.jpg 1440w" sizes="(max-width: 900px) 100vw, 760px" alt="An orange cat on the Santorini terrace: it looks up when picked, walks after the cursor, then sits and watches it" width="1440" height="296" loading="lazy" decoding="async">
+        <figcaption class="petsec-cap"><span>Picked</span><span>Following</span><span>Watching your cursor</span></figcaption>
       </figure>
-    </div>
+    </article>
+
+    <article class="duo-card" id="play" aria-labelledby="play-title">
+      <div class="duo-copy">
+        <p class="eyebrow">New · Play</p>
+        <h2 id="play-title">A small break, right on your wallpaper.</h2>
+        <p class="sub">Open <b>Play</b> from the menu bar and the scene comes forward with a glass panel on it. The cats keep wandering behind it. Esc, and you’re back to work.</p>
+        <ul class="duo-points">
+          <li><b>Letter Garden.</b> One hidden word, six gentle attempts. A new word every day, the same for everyone.</li>
+          <li><b>Little Crossings.</b> A 5×5 mini crossword with original clues. Check a square, a word or the whole grid.</li>
+          <li><b>Works offline, keeps your streak.</b> Every puzzle ships with the app. Your progress stays on your Mac.</li>
+        </ul>
+      </div>
+      <figure class="duo-shot play-shot">
+        <img src="img/play.jpg" srcset="img/play-sm.jpg 720w, img/play.jpg 1440w" sizes="(max-width: 900px) 100vw, 760px" alt="The Play panel open over the Santorini Cats scene, showing today’s Letter Garden puzzle" width="1440" height="900" loading="lazy" decoding="async">
+      </figure>
+    </article>
   </section>
 
   <!-- ───────────── Made for the Mac ───────────── -->

@@ -962,3 +962,41 @@ smokes and two jukebox captures pass with zero errors/failed images. Plain local
 JPEG evidence: `shots/webp/README.md` and `shots/play/`; raw captures deleted.
 Full sizes, retained-PNG rationale, test outputs and reproduction: `docs/webp-0.13.5.md`.
 No push, release, notarization, installed-app change, or other-worktree edits.
+
+## 2026-10-04 — Train station calls (local train-stations branch; QA interrupted by disk guard)
+
+Added four finite painted station strips: Itarsi canopy/benches/bilingual yellow board and tea kiosk;
+Mishima modern canopy/tactile line/glass barriers/LED board; Bergün chalet/flower boxes/clock;
+Venezia iron-and-glass canopy/stone facade/gas lamps. Built-in ImageGen only; no Magnific/Freepik credits.
+Art, lineage and prompt set: `scenes/art/train/stations/`, `art-src/train/stations/prompts.md`.
+Design: `art-src/train/stations/design.md`. Six-frame waiting, walking, serving and pigeon-peck cycles
+were packed into one atlas. The first walk was regenerated to improve passing poses. No still-image
+actor translation. Static architecture moves relative to the train camera as world scenery.
+
+`scenes/train-stations.js` owns randomized 180–360 s cruise intervals, safe-route queuing, 20 s quintic
+braking, 20–40 s dwell, and 24 s acceleration. The analytically integrated trajectory gives exact stop
+positions at different frame rates. Existing panorama/rocking/rumble systems follow the same speed;
+rocking/rail rumble settle at zero. Click surges cannot interrupt station calls. Live skin switches cancel
+and release stale loads. Station imagery loads near the call and releases once the platform clears.
+Night uses cached cool grading and practical light pools (cooler in Japan); roofs exclude weather,
+exposed ridges accumulate snow, wet aprons darken. Walkable apron and fixture footprints are declared;
+Japanese barrier pixels are restored in front of figures. QA hook: `__train.forceStation(24)`.
+
+Rendered all four skins day/night plus Indian rain, Swiss snow and Japanese/Swiss ultrawide-left sequences
+with off-screen file:// WKWebView. Initial sequences inspected; night exposure lifted and Swiss walking
+feet moved back from the stone fascia. Evidence: `shots/train-stations/*-scene.jpg`, `*-windows.jpg`,
+`life-frames.jpg`, per-frame JSON reports. Reports show no JS/image errors, fixed dwell distance/zero speed,
+and station-owned bytes returning to zero. Final recaptures were interrupted when **df -h / reported
+2.0 GiB free**, below the owner's 3 GB stop rule. Stopped rendering/iteration; deleted all remaining
+raw captures. **Final visual acceptance is pending**, especially the last foot-position refinement.
+
+The full suite passed **102/102** before the final geometry test/foot refinement; the final seven station
+tests pass. Re-run full suite and final matrix when space is available. Reproduction and remaining QA:
+`tools/train-stations/README.md`. No boarding/door animation shipped; current actors wait/walk/serve/peck.
+
+Performance is not accepted yet: the real-clock run overlapped rendering, so baseline 2.96–5.04 ms,
+cruise 6.62–7.11 ms, dwell 9.68–14.69 ms and released 4.58–8.23 ms total/frame are noisy, not proof of
+no regression. A controlled rerun is required. Explicit station image/canvas memory is ~9.02 MiB while
+loaded and 0 after release; process RSS/GPU cache retention unmeasured. A revised benchmark fixture is
+saved, unrun. Local commits only. No push, release, installed-app rebuild/reload, screen interaction,
+other-worktree edits or unrelated disk cleanup.

@@ -417,6 +417,21 @@ void main(){
   int mode = int(vP.x + 0.5);
   if (mode == 0) { o = texture(uAtlas, vUV) * vCol; o2 = vec4(0.0); return; }
   if (mode == 1) { o = vCol; o2 = vec4(0.0, 0.0, 0.0, vCol.a); return; }   // fins/eyes occlude glints beneath
+  if (mode >= 3) { // Minnows: olive back, pale belly edge, faint lateral line; same water/depth treatment.
+    float flank = abs(vUV.y), gold = vP.y;
+    vec3 back = mix(vec3(0.39,0.43,0.33), vec3(0.65,0.36,0.12), gold);
+    vec3 belly = mix(vec3(0.73,0.76,0.65), vec3(0.86,0.64,0.31), gold);
+    vec3 c = mix(back, belly, smoothstep(0.12,0.85,flank)) * vCol.r;
+    c *= 1.0 - 0.17 * exp(-pow((flank-0.58)/0.12,2.0));
+    c += vec3(0.26,0.29,0.25) * vP.w * exp(-pow((flank-0.68)/0.23,2.0));
+    if (mode == 3) { // Two tiny eyes in body coordinates (no extra geometry).
+      float eye = length(vec2((vUV.x-0.11)*7.0,(flank-0.64)*1.6));
+      c *= mix(0.24,1.0,smoothstep(0.08,0.2,eye));
+    }
+    c = mix(c, vec3(0.031,0.133,0.141), vP.z * 0.32);
+    float a = vCol.a * (1.0-smoothstep(1.0-fwidth(vUV.y)*1.2,1.0,flank));
+    o = vec4(c*a,a); o2 = vec4(0.0,0.0,0.0,a); return;
+  }
   // Koi body: vUV = (u along spine 0..1, v across -1..1).
   // vCol.rgb (unused by the body otherwise) carries music glimmer: r = sheen position along the body,
   // g = sheen strength, b = sparkle strength.
@@ -924,6 +939,7 @@ const cur = { x: -1e4, y: -1e4, vx: 0, vy: 0, speed: 0, inside: false, still: 0,
 LW.on('move', (x, y) => {
   const t = performance.now() / 1000, dt = Math.max(0.008, t - cur.lastT);
   const vx = (x - cur.x) / dt, vy = (y - cur.y) / dt;
+  if (cur.inside && Math.hypot(vx, vy) > 900) scareShoals(cur.x, cur.y, x, y);
   if (cur.inside && cur.lastT) { cur.vx = lerp(cur.vx, vx, 0.35); cur.vy = lerp(cur.vy, vy, 0.35); }
   cur.x = x; cur.y = y; cur.lastT = t; cur.lastMove = t; cur.inside = true;
   cur.speed = Math.hypot(cur.vx, cur.vy);
@@ -936,7 +952,7 @@ function dropFood(x, y) {
   const n = 4 + Math.floor(rand(4));
   for (let i = 0; i < n; i++) {
     const a = rand(TAU), r = rand(4, 26);
-    pellets.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, vx: Math.cos(a) * rand(4, 14), vy: Math.sin(a) * rand(4, 14), age: 0, life: rand(35, 55), rot: rand(TAU) });
+    pellets.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r, vx: Math.cos(a) * rand(4, 14), vy: Math.sin(a) * rand(4, 14), age: 0, life: rand(35, 55), rot: rand(TAU), bits: 1 });
   }
   while (pellets.length > 60) pellets.shift();
 }
@@ -1272,6 +1288,187 @@ function updateFish(dt, t) {
   if (Math.random() < dt / 14) {
     const f = fish[Math.floor(rand(fish.length))];
     if (f) { addDrop(f.x + Math.cos(f.ang) * 4, f.y + Math.sin(f.ang) * 4, 5, -1.1); }
+  }
+}
+
+// ─── Small shoals ──────────────────────────────────────────────────────────
+// Owner 2026-10-04 explicitly requested the koi's procedural spine-wave approach.
+// Independent boid schools, no sprite translation, no additional render pass.
+// State is allocated on resize only; update/mesh emission allocate nothing.
+const shoals = [], minnows = [];
+let shoalClock = 0;
+function spawnShoals() {
+  shoals.length = 0; minnows.length = 0;
+  const small = W * H < 850000, wide = W / H > 2;
+  const groups = small ? 3 : wide ? 5 : 4, count = small ? 8 : wide ? 12 : 11;
+  const band = LW.layout.clear, size = clamp(Math.min(W,H) * 0.19,110,300) * 0.13;
+  for (let i = 0; i < groups; i++) {
+    const hx = (i + 0.65) / (groups + 0.3), hy = i % 2 ? 0.68 : 0.32;
+    const x = W * lerp(band[0]+0.07,band[1]-0.07,hx), y = H * hy;
+    const a = rand(TAU);
+    const s = {start:minnows.length, end:minnows.length+count, x,y, vx:Math.cos(a),vy:Math.sin(a),
+      hx,hy, tx:x,ty:y, seed:rand(1000), next:rand(4,9), turn:0, fear:0, fx:x,fy:y, gold:i===3 ? 1 : 0};
+    shoals.push(s);
+    for (let j = 0; j < count; j++) {
+      const angle = j * 2.39996, r = size * Math.sqrt(j) * 0.85;
+      minnows.push({x:x+Math.cos(angle)*r,y:y+Math.sin(angle)*r, vx:Math.cos(a)*45,vy:Math.sin(a)*45,
+        nx:0,ny:0, ang:a, bend:0, speed:45, phase:rand(TAU), L:size*rand(0.9,1.1),
+        z:rand(0.62,0.87), seed:rand(1000), shade:rand(0.93,1.07), flash:0, nibble:rand(0.5), school:s});
+    }
+  }
+}
+function scareShoals(x0,y0,x1,y1) {
+  const dx=x1-x0, dy=y1-y0, len=dx*dx+dy*dy || 1;
+  const radius = Math.min(W,H)*0.13;
+  for (let i=0;i<minnows.length;i++) {
+    const f=minnows[i], u=clamp(((f.x-x0)*dx+(f.y-y0)*dy)/len,0,1);
+    const x=x0+dx*u, y=y0+dy*u;
+    if ((f.x-x)*(f.x-x)+(f.y-y)*(f.y-y)<radius*radius) {
+      f.school.fear=1; f.school.fx=x; f.school.fy=y;
+    }
+  }
+}
+// Soft widget exclusion: no targets there, slow passes, steer around the actual rectangles.
+function shoalQuiet(x,y) {
+  const layout=LW.layout, band=layout.clear;
+  let k = x<W*band[0] || x>W*band[1] ? 1 : 0;
+  const boxes=layout.avoid;
+  if (boxes) for(let i=0;i<boxes.length;i++) {
+    const b=boxes[i], dx=Math.max(b[0]*W-x,0,x-(b[0]+b[2])*W), dy=Math.max(b[1]*H-y,0,y-(b[1]+b[3])*H);
+    k=Math.max(k,1-smooth(0,65,Math.hypot(dx,dy)));
+  }
+  return k;
+}
+function updateShoals(dt,t) {
+  const pace=(1-0.38*L.night)*(1-0.42*calmFade), step=dt*pace;
+  shoalClock+=step;
+  const band=LW.layout.clear, lo=W*band[0]+45, hi=W*band[1]-45;
+  const rain=LW.env.weather==='rain'||LW.env.weather==='storm';
+  let curious=null, nearest=Math.min(W,H)*0.32;
+  if(cur.inside && t-cur.lastMove>2) for(let i=0;i<shoals.length;i++) {
+    const s=shoals[i], d=Math.hypot(s.x-cur.x,s.y-cur.y);
+    if(d<nearest && shoalQuiet(cur.x,cur.y)<0.1) {nearest=d;curious=s;}
+  }
+  for(let si=0;si<shoals.length;si++) {
+    const s=shoals[si], count=s.end-s.start;
+    let cx=0,cy=0,ax=0,ay=0;
+    for(let i=s.start;i<s.end;i++) {const f=minnows[i];cx+=f.x;cy+=f.y;ax+=f.vx;ay+=f.vy;}
+    s.x=cx/count;s.y=cy/count;s.vx=ax/count;s.vy=ay/count;
+    s.fear=Math.max(0,s.fear-dt*0.65);s.turn=Math.max(0,s.turn-step*1.5);
+    // Relocate the wandering destination occasionally: a shared, quick banking turn.
+    if(shoalClock>s.next) {s.seed+=3.7;s.next=shoalClock+rand(5,11);s.turn=1;}
+    let tx=lerp(lo,hi,clamp(s.hx+noise1(s.seed+shoalClock*0.055)*0.32,0.06,0.94));
+    let ty=H*clamp(s.hy+noise1(s.seed+70+shoalClock*0.065)*0.28,0.14,0.86);
+    if(curious===s && !s.fear) {
+      const d=Math.hypot(s.x-cur.x,s.y-cur.y)||1, radius=100+minnows[s.start].L*1.5;
+      tx=lerp(tx,cur.x+(s.x-cur.x)/d*radius,0.65);
+      ty=lerp(ty,cur.y+(s.y-cur.y)/d*radius,0.65);
+    }
+    // A school notices nearby food first; individual fish nibble without consuming the whole pellet.
+    let food=null, foodD=Math.min(W,H)*0.48;
+    for(let pi=0;pi<pellets.length;pi++) {
+      const p=pellets[pi], d=Math.hypot(s.x-p.x,s.y-p.y);
+      if(!p.eaten && p.bits>0.65 && d<foodD && shoalQuiet(p.x,p.y)<0.2) {food=p;foodD=d;}
+    }
+    if(food && !s.fear) {tx=food.x;ty=food.y;}
+    const boxes=LW.layout.avoid;
+    if(boxes) for(let bi=0;bi<boxes.length;bi++) {
+      const b=boxes[bi], x0=b[0]*W-65,x1=(b[0]+b[2])*W+65,y0=b[1]*H-65,y1=(b[1]+b[3])*H+65;
+      if(tx>x0&&tx<x1&&ty>y0&&ty<y1) {tx=s.x<(x0+x1)/2?x0:x1;ty=clamp(ty,65,H-65);}
+    }
+    s.tx=clamp(tx,lo,hi);s.ty=clamp(ty,55,H-55);
+    for(let i=s.start;i<s.end;i++) {
+      const f=minnows[i], quiet=shoalQuiet(f.x,f.y), length=f.L;
+      const dx=s.tx-f.x,dy=s.ty-f.y,d=Math.hypot(dx,dy)||1;
+      let steerX=dx/d*1.35+(s.x-f.x)/(length*3.2)+s.vx/100;
+      let steerY=dy/d*1.35+(s.y-f.y)/(length*3.2)+s.vy/100;
+      // Separation is local to this school; schools keep different wandering destinations.
+      for(let j=s.start;j<s.end;j++) if(i!==j) {
+        const o=minnows[j],rx=f.x-o.x,ry=f.y-o.y,dd=rx*rx+ry*ry, R=length*1.15;
+        if(dd<R*R) {const q=(1-Math.sqrt(dd)/R)*R/(dd+1);steerX+=rx*q*2.3;steerY+=ry*q*2.3;}
+      }
+      let threat=0;
+      // Four capsules follow each koi's real curved spine, including AI companions.
+      for(let ki=0;ki<fish.length;ki++) {
+        const k=fish[ki];
+        if(Math.abs(f.x-k.x)>k.L*1.6||Math.abs(f.y-k.y)>k.L*1.6) continue;
+        for(let j=0;j<SEG-1;j+=4) {
+          const p=k.p[j],q=k.p[Math.min(SEG-1,j+4)],kx=q[0]-p[0],ky=q[1]-p[1];
+          const u=clamp(((f.x-p[0])*kx+(f.y-p[1])*ky)/(kx*kx+ky*ky||1),0,1);
+          const rx=f.x-p[0]-kx*u,ry=f.y-p[1]-ky*u,dd=Math.hypot(rx,ry)||1;
+          const R=k.L*(j<8?0.23:0.15)+length;
+          if(dd<R) {const push=(1-dd/R);steerX+=rx/dd*push*8;steerY+=ry/dd*push*8;threat=Math.max(threat,push);}
+        }
+      }
+      if(s.fear>0) {
+        const rx=f.x-s.fx,ry=f.y-s.fy,dd=Math.hypot(rx,ry)||1;
+        steerX+=rx/dd*s.fear*7;steerY+=ry/dd*s.fear*7;
+      }
+      if(f.x<lo) steerX+=(lo-f.x)/45;
+      if(f.x>hi) steerX-=(f.x-hi)/45;
+      if(f.y<65) steerY+=(65-f.y)/30;
+      if(f.y>H-65) steerY-=(f.y-H+65)/30;
+      if(quiet && boxes) for(let bi=0;bi<boxes.length;bi++) {
+        const b=boxes[bi],rx=f.x-(b[0]+b[2]/2)*W,ry=f.y-(b[1]+b[3]/2)*H,dd=Math.hypot(rx,ry)||1;
+        steerX+=rx/dd*quiet*2;steerY+=ry/dd*quiet*2;
+      }
+      // A still cursor is a loose point of interest, with a firm personal-space ring.
+      if(cur.inside&&t-cur.lastMove>2) {
+        const rx=f.x-cur.x,ry=f.y-cur.y,dd=Math.hypot(rx,ry)||1;
+        if(dd<105) {steerX+=rx/dd*(1-dd/105)*4;steerY+=ry/dd*(1-dd/105)*4;}
+      }
+      let speed=length*(2.15+0.35*noise1(f.seed+shoalClock*0.5)+s.turn*1.8+s.fear*4+threat*2.5);
+      if(food&&!s.fear&&threat<0.12) {
+        speed=length*(d>45?6:1.2);
+        f.nibble-=step;
+        if(d<length*0.65&&f.nibble<=0) {food.bits=Math.max(0.65,food.bits-0.018);f.nibble=0.35;}
+      }
+      speed*=1-quiet*0.5;
+      const turn=clamp(angDiff(f.ang,Math.atan2(steerY,steerX)),-step*6,step*6);
+      f.ang+=turn;f.bend=lerp(f.bend,turn/Math.max(step,0.001),1-Math.exp(-dt*8));
+      f.speed=lerp(f.speed,speed,1-Math.exp(-dt*5));
+      f.nx=Math.cos(f.ang)*f.speed;f.ny=Math.sin(f.ang)*f.speed;
+      f.phase=(f.phase+step*(5+f.speed/length*5))%TAU;
+      f.z=lerp(f.z,0.7+0.08*Math.sin(f.seed+shoalClock*0.3)+(rain?0.22:0)+(s.fear?0.08:0),1-Math.exp(-dt*1.2));
+      const flank=Math.max(0,Math.sin(f.ang)*L.sunDir[0]-Math.cos(f.ang)*L.sunDir[1]);
+      f.flash=s.turn*Math.pow(flank,8)*0.7*(1-L.night*0.7)*(1-quiet);
+    }
+    // Integrate after all steering reads so boids do not depend on iteration order.
+    for(let i=s.start;i<s.end;i++) {const f=minnows[i];f.vx=f.nx;f.vy=f.ny;f.x+=f.vx*step;f.y+=f.vy*step;}
+  }
+}
+
+// Seven spine sections suffice at ~25 CSS px. Shared scratch, 42 body + 6 tail vertices/fish.
+const minnowMesh = new Float32Array(8*4);
+const minnowWidths = new Float32Array([0.02,0.075,0.083,0.069,0.048,0.027,0.014,0.009]);
+function minnowVertex(f,x,y,u,v,fin=false) {
+  vtx(x,y,u,v,f.shade,0,0,(1-f.z*0.3)*(fin?0.55:1),fin?4:3,f.school.gold,f.z,f.flash);
+}
+function emitShoals() {
+  for(let fi=0;fi<minnows.length;fi++) {
+    const f=minnows[fi],len=f.L*(1-f.z*0.18),c=Math.cos(f.ang),s=Math.sin(f.ang);
+    const amp=len*(0.025+0.025*Math.min(2,f.speed/f.L));
+    for(let j=0;j<8;j++) {
+      const u=j/7, wave=Math.sin(f.phase-u*4.8)*amp*u*u+f.bend*len*0.018*u*u;
+      const x=f.x-c*len*u-s*wave,y=f.y-s*len*u+c*wave,w=minnowWidths[j]*len,k=j*4;
+      minnowMesh[k]=x-s*w;minnowMesh[k+1]=y+c*w;minnowMesh[k+2]=x+s*w;minnowMesh[k+3]=y-c*w;
+      if(j) {
+        const p=k-4;
+        minnowVertex(f,minnowMesh[p],minnowMesh[p+1],(j-1)/7,1);
+        minnowVertex(f,minnowMesh[p+2],minnowMesh[p+3],(j-1)/7,-1);
+        minnowVertex(f,minnowMesh[k],minnowMesh[k+1],u,1);
+        minnowVertex(f,minnowMesh[p+2],minnowMesh[p+3],(j-1)/7,-1);
+        minnowVertex(f,minnowMesh[k+2],minnowMesh[k+3],u,-1);
+        minnowVertex(f,minnowMesh[k],minnowMesh[k+1],u,1);
+      }
+    }
+    const x=(minnowMesh[28]+minnowMesh[30])*0.5,y=(minnowMesh[29]+minnowMesh[31])*0.5;
+    const beat=Math.sin(f.phase-5.5)*len*0.055;
+    for(let side=-1;side<=1;side+=2) {
+      minnowVertex(f,x,y,0,0,true);
+      minnowVertex(f,x-c*len*0.24-s*(side*len*0.1+beat),y-s*len*0.24+c*(side*len*0.1+beat),1,side,true);
+      minnowVertex(f,x-c*len*0.12-s*beat,y-s*len*0.12+c*beat,1,0,true);
+    }
   }
 }
 
@@ -1641,7 +1838,7 @@ function emitSurface(t) {
     const k = l.kind === 'maple' ? l.s / 14 : l.s / 8;
     quad(l.x, l.y, sp.s * k, sp.s * k, l.rot, sp.uv, a);
   }
-  for (const p of pellets) quad(p.x, p.y, 10, 10, p.rot, SPR.pellet.uv, Math.min(1, (p.life - p.age) / 5));
+  for (const p of pellets) quad(p.x, p.y, 10 * Math.sqrt(p.bits), 10 * Math.sqrt(p.bits), p.rot, SPR.pellet.uv, Math.min(1, (p.life - p.age) / 5));
   emitLife(t);
   if (bloom) {
     const k = smooth(0, 3, bloom.t) * smooth(16, 12, bloom.t);
@@ -1921,6 +2118,7 @@ function resize() {
   spawnPads();
   makeMiscSprites();
   buildAtlas([...pads.map((p) => p.sp), ...pads.filter((p) => p.flower).map((p) => p.flower), ...SPR.maple, ...SPR.petal, SPR.pellet, SPR.bloomPad, ...SPR.bloom, SPR.frog, SPR.frogThroat, SPR.dfBody, SPR.dfWings]);
+  spawnShoals();
   frog.state = 'gone'; frog.back = 2;
 }
 addEventListener('resize', () => { clearTimeout(resize.t); resize.t = setTimeout(resize, 150); });
@@ -1961,12 +2159,14 @@ function tick() {
   if (hand.pending && !hand.on && now - hand.downT > 0.45) hand.on = true;
   if (hand.on) { lastInput = now; if (Math.random() < dt * 2.5) addDrop(hand.x + rand(-3, 3), hand.y + rand(-3, 3), 5, -0.3); if (now - hand.downT > 45) hand.on = false; }
   updateFish(dt * (1 - 0.35 * calmFade) * (1 - 0.5 * calmStill * calmFade), t);
+  updateShoals(dt, t);
   updateSurface(dt, t);
   updateFrog(dt, t);
   updateFly(dt, t);
 
   drawOverlay(dt, t);
   stepSim();
+  emitShoals(); // deeper life, covered by adult koi and then the surface pads
   for (const f of fish) emitKoi(f, t);
   flush(fishRT, true);
   emitSurface(t);

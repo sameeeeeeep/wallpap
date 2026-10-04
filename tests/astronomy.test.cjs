@@ -24,3 +24,17 @@ test('polar day/night remain finite without invented rise/set times',()=>{
 test('missing/invalid coordinates fall back and zero coordinates remain valid',()=>{
  assert.equal(calc(new Date(),null),null);assert.equal(calc(new Date(),{latitude:100,longitude:0}),null);assert.ok(calc(new Date(),{latitude:0,longitude:0}));
 });
+test('moonrise/moonset match an independent ephemeris (astronomy-engine) to within ~1.5 min',()=>{
+ // reference: astronomy-engine SearchRiseSet (upper limb, standard refraction), 2026-10-04/05
+ const cases=[[{latitude:12.97,longitude:77.59},'2026-10-04T19:36:41Z','2026-10-05T08:47:34Z'],
+  [{latitude:40.71,longitude:-74.01},'2026-10-05T05:08:04Z','2026-10-05T20:05:06Z'],
+  [{latitude:51.51,longitude:-.13},'2026-10-04T23:12:56Z','2026-10-05T15:38:18Z']];
+ const M=60000;
+ for(const [where,rise,set] of cases){
+  const r=+new Date(rise),s=+new Date(set),{moonTimes}=window.LWAstronomy;
+  assert.ok(Math.abs(+moonTimes(new Date(r),where.latitude,where.longitude).rise-r)<1.5*M,'rise '+rise);
+  assert.ok(Math.abs(+moonTimes(new Date(s),where.latitude,where.longitude).set-s)<1.5*M,'set '+set);
+  assert.equal(calc(new Date(r-3*M),where).moon.visibility,0);assert.equal(calc(new Date(r+3*M),where).moon.visibility,1);
+  assert.equal(calc(new Date(s-3*M),where).moon.visibility,1);assert.equal(calc(new Date(s+3*M),where).moon.visibility,0);
+ }
+});

@@ -1,0 +1,148 @@
+{
+  "coats": {
+    "orange": {
+      "clips": 19,
+      "frames": 152,
+      "webpBytes": 1321806,
+      "decodedAtlasBytes": 14496832,
+      "croppedFrameBytes": 11604884,
+      "geometryAndAlphaMatch": true
+    },
+    "black": {
+      "clips": 19,
+      "frames": 152,
+      "webpBytes": 821374,
+      "decodedAtlasBytes": 14496832,
+      "croppedFrameBytes": 11604884,
+      "geometryAndAlphaMatch": true
+    },
+    "grey": {
+      "clips": 19,
+      "frames": 152,
+      "webpBytes": 1175970,
+      "decodedAtlasBytes": 14496832,
+      "croppedFrameBytes": 11604884,
+      "geometryAndAlphaMatch": true
+    },
+    "calico": {
+      "clips": 19,
+      "frames": 152,
+      "webpBytes": 1216598,
+      "decodedAtlasBytes": 14496832,
+      "croppedFrameBytes": 11604884,
+      "geometryAndAlphaMatch": true
+    },
+    "siamese": {
+      "clips": 19,
+      "frames": 152,
+      "webpBytes": 1041094,
+      "decodedAtlasBytes": 14496832,
+      "croppedFrameBytes": 11604884,
+      "geometryAndAlphaMatch": true
+    }
+  },
+  "orangePalette": {
+    "jump-away": [
+      225,
+      141,
+      69
+    ],
+    "jump-far": [
+      235,
+      157,
+      88
+    ],
+    "jump-near": [
+      230,
+      153,
+      85
+    ],
+    "jump-side": [
+      228,
+      152,
+      85
+    ],
+    "jump-toward": [
+      220,
+      148,
+      88
+    ],
+    "perk": [
+      230,
+      156,
+      92
+    ],
+    "rest": [
+      225,
+      154,
+      93
+    ],
+    "run-away": [
+      214,
+      138,
+      75
+    ],
+    "run-far": [
+      233,
+      157,
+      91
+    ],
+    "run-near": [
+      219,
+      149,
+      89
+    ],
+    "run-side": [
+      227,
+      154,
+      88
+    ],
+    "run-toward": [
+      222,
+      152,
+      90
+    ],
+    "sit": [
+      228,
+      156,
+      96
+    ],
+    "stretch": [
+      225,
+      146,
+      81
+    ],
+    "walk-away": [
+      225,
+      154,
+      96
+    ],
+    "walk-far": [
+      227,
+      154,
+      88
+    ],
+    "walk-near": [
+      223,
+      154,
+      90
+    ],
+    "walk-side": [
+      226,
+      154,
+      88
+    ],
+    "walk-toward": [
+      224,
+      157,
+      100
+    ]
+  },
+  "walkAreaCV": {
+    "walk-away": 0.0117,
+    "walk-far": 0.0142,
+    "walk-near": 0.008,
+    "walk-side": 0.0151,
+    "walk-toward": 0.0094
+  }
+}

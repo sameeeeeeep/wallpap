@@ -1,0 +1,57 @@
+{
+  "orange": {
+    "frames": 1350,
+    "fps": 30,
+    "seconds": 45,
+    "bytes": 5185398,
+    "eightWalkAndRunDirections": true,
+    "fiveJumpViews": true,
+    "fullPerkAndStretch": true,
+    "pounceLandedOnTarget": true,
+    "ledgesBothWays": true
+  },
+  "black": {
+    "frames": 1350,
+    "fps": 30,
+    "seconds": 45,
+    "bytes": 4794222,
+    "eightWalkAndRunDirections": true,
+    "fiveJumpViews": true,
+    "fullPerkAndStretch": true,
+    "pounceLandedOnTarget": true,
+    "ledgesBothWays": true
+  },
+  "grey": {
+    "frames": 1350,
+    "fps": 30,
+    "seconds": 45,
+    "bytes": 5198309,
+    "eightWalkAndRunDirections": true,
+    "fiveJumpViews": true,
+    "fullPerkAndStretch": true,
+    "pounceLandedOnTarget": true,
+    "ledgesBothWays": true
+  },
+  "calico": {
+    "frames": 1350,
+    "fps": 30,
+    "seconds": 45,
+    "bytes": 5012297,
+    "eightWalkAndRunDirections": true,
+    "fiveJumpViews": true,
+    "fullPerkAndStretch": true,
+    "pounceLandedOnTarget": true,
+    "ledgesBothWays": true
+  },
+  "siamese": {
+    "frames": 1350,
+    "fps": 30,
+    "seconds": 45,
+    "bytes": 4780406,
+    "eightWalkAndRunDirections": true,
+    "fiveJumpViews": true,
+    "fullPerkAndStretch": true,
+    "pounceLandedOnTarget": true,
+    "ledgesBothWays": true
+  }
+}

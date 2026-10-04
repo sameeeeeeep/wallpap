@@ -983,3 +983,25 @@ stage requirement and G4-CAT motion review gate.
 Runtime and final WebKit/video verification results follow in `docs/cats-gpt.md`
 and `shots/cats-gpt/README.md`; visual acceptance is reported separately from test
 success. The installed app and owner's wallpaper settings remain untouched.
+
+### Final runtime, review and coat correction
+
+Cats now select eight floor directions from five mirrored painted views, use
+distance-driven walk/gallop phase and contact-aligned turns, and play full
+directional jump preparation/flight/landing for floor pounces and ledge links.
+Front sit/rest/wake, stretch and pickup use complete drawn sequences. All eight
+pet scenes load the shared script metadata and cropped frames through file://.
+
+Encoded-frame review caught and fixed run ground registration, review-camera
+clipping, virtual-clock drift, skipped stretch/perk frames and early pickup
+expiry. Calico/Siamese face masks now track the painted eyes with fixed pixel
+radii; calico face colors override body masks, with Siamese tail/paw corrections.
+No new imagegen prompt was needed for this final palette/mask correction.
+
+Delivered five 45-second, 30 fps MP4s and five direction/action contact sheets in
+`shots/cats-gpt/`. All 6,750 encoded frames decode; review scope and remaining
+stepped turns, residual foot slip and approximate coat markings are explicitly
+recorded in `docs/cats-gpt.md`. 106 Node tests, 24 file-origin scene integrations
+and a plain local build pass. Isolated off-screen CPU was 5.6% before / 5.9%
+after, footprint 165 / 216 MiB. These are single headless samples, not installed
+app measurements. Owner visual acceptance remains open; no install or push.

@@ -1,0 +1,38 @@
+{
+  "method": "isolated off-screen 1280x800 WebKit, day, fixed seed, 8s warmup, 20s sample; newly spawned WebKit processes plus screenshot host; unrelated wallpaper excluded",
+  "procs": [
+    {
+      "cpu": 3.2,
+      "mb": 16,
+      "mw": 5,
+      "name": "cats-wkshot",
+      "pid": 28017
+    },
+    {
+      "cpu": 0.6,
+      "mb": 23,
+      "mw": 1,
+      "name": "com.apple.WebKit.GPU",
+      "pid": 28018
+    },
+    {
+      "cpu": 0.2,
+      "mb": 12,
+      "mw": 0,
+      "name": "com.apple.WebKit.Networking",
+      "pid": 28019
+    },
+    {
+      "cpu": 1.9,
+      "mb": 165,
+      "mw": 3,
+      "name": "com.apple.WebKit.WebContent",
+      "pid": 28020
+    }
+  ],
+  "total": {
+    "cpu": 5.9,
+    "mb": 216,
+    "mw": 9
+  }
+}

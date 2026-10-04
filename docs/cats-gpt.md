@@ -12,3 +12,67 @@
 ## Baseline
 
 The requested scenes/pet-roster.js does not exist. The immutable common roster is in scenes/pets.js. Initial untracked directories art-src/cat-refs and tools/cats-qa predate this task and are retained. Existing cats use three views and six travel rays; vertical paths zigzag. Existing video.py advances 24 fps captures on rounded 30 Hz increments, and wkshot has a fixed 60-second timeout.
+
+## Implemented — 2026-10-05
+
+The five coats now use 95 compact WebP atlases, 760 painted frames. Each orange animation/view was generated as one eight-frame sheet; incorrect walk phases and wrong-facing jump/run sheets were rejected and regenerated. Hand-authored 2D paw blocking guided the replacement walks. The four other coats preserve the exact orange frame geometry and alpha through palette/marking edits. Production prompts, references, cuts, calibration and rebuild instructions are in `tools/cats-qa/ART.md`.
+
+`cat-atlas.js` supplies synchronous metadata and `cat-motion.js` shares cropped frames by coat. There is no file-origin fetch, live mesh deformation, procedural cat squash or per-frame size normalization. The five drawn views mirror to eight floor octants. `pets.js` now routes cats directly in those eight directions, divides vertical displacement by the stage slope, scales speed with depth, and advances gait phase by traveled floor distance. Long trips/chases use the gallop. Turns finish at a contact and step through neutral view frames while stationary.
+
+Directional jumps contain crouch, takeoff, gathered/reaching flight and landing/recovery. Floor jumps, pounces and declared ledge links use the same views; facing is locked during flight and scale is continuous across the supporting surfaces. Front stand/sit, loaf, curled sleep, wake, stretch and click perk have drawn transitions. The pickup action gets its own clock after the sit transition, so all eight perk frames play before following.
+
+The public pet API and scene stage geometry remain intact: wandering, food/water, beds, shelter, follow/stalk/wiggle/pounce, pointer leave/return, Pets off/on, occluders, shadows, lighting, scene mirroring and depth sorting remain integrated. Stalking uses the slow walk cycle; wiggle alternates two drawn crouch frames. The older sequence/cycle code remains for dogs and pandas; atlas cats bypass it. The eight callers are Cats, Cafe, Cabin, Ramen, Records, Rooftop, Speakeasy and Grass (pandas in Grass are unchanged).
+
+## Verification and corrections
+
+- `node --test tests/*.cjs`: **106 passed**, no failures/skips. Coverage includes all eight routes, five jump views and mirrors, complete perk/stretch, shared frame caching, front rest/wake, pounce landing, feeding/shelter, Pets toggles, ledge links/depth and occlusion. Existing dog/panda and host/scene coverage was retained.
+- Plain `./build.sh`: **passed**, producing only the local ignored `wallpap.app`. Existing duplicate `bowls` switch warnings remain. The app was never launched or installed.
+- **24 isolated file:// WebKit integrations**: eight scenes × day/night/1920×800 mirrored night. Zero JS/image errors; all cats used the new atlases. Reports and visually inspected overview sheets are in `shots/cats-gpt/matrix/`.
+- Five owner reels: **960×600, 30 fps, 45 seconds, 1,350 frames each**. Eight walks, eight runs, five floor-jump views, idle transitions, both ledge directions, real scene click/follow/stalk/wiggle/pounce and a night excerpt. Labels mark deliberate cuts; within each shot the engine runs continuously. The camera follows the cat for legibility.
+- All 6,750 final encoded frames are decoded for verification. Orange motion was inspected in consecutive 20-frame pages, including corrected sequences. The other coats were inspected in encoded pose pages covering every distinct pose/direction/action/lighting combination (repeated holds/cycles collapsed), in addition to the sprite sheets and dark/light contacts. This is not a claim that every repeated video frame was individually judged by eye.
+- Numerical art checks: all 760 frame bounds valid; exact cross-coat alpha and registration; walk silhouette area coefficient of variation **0.8–1.51%**. Orange walk fur medians: R223–227, G154–157, B88–100. These measurements supplement visual review; they cannot establish anatomical perfection.
+
+Review led to concrete fixes: removed per-frame area normalization that enlarged curled cats; regenerated wrong-facing art; re-registered gallop contact/flight frames independently of source sheet row spacing; fixed the virtual-clock rounding error; stopped the review camera clipping toward runs; rendered setup before frame zero; fixed skipped stretch/perk frames and premature pickup expiry; anchored calico/Siamese facial markings to painted eyes so crouch/landing no longer whitens or relocates the face mask. Capture scripts stream to ffmpeg and delete raw PNG frames immediately, with a 5 GiB free-space guard.
+
+## Performance
+
+| Isolated WebKit measurement | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Total CPU, screenshot host + spawned WebKit processes | 5.6% | 5.9% | +0.3 percentage points |
+| Total physical footprint | 165 MiB | 216 MiB | +51 MiB |
+| WebContent CPU / footprint | 2.0% / 106 MiB | 1.9% / 165 MiB | −0.1 points / +59 MiB |
+
+Same 1280×800 day scene, seed 19, real-time clock, eight-second warmup and 20-second sample using `tools/measure/wpmeter`. Owner wallpaper processes were excluded. These are single off-screen samples, which WebKit may throttle, not installed-app foreground or energy guarantees. The after sample was taken after atlas packing and run registration; subsequent changes affect pickup timing and coat pixels, not idle loading geometry. Raw measurements: `baseline-performance.json` and `after-performance.json` in the deliverables directory.
+
+Packing each sheet to its actual cell extent reduced total decoded atlas dimensions from approximately 238 MiB to **69 MiB**. Shared cropped frames total **55 MiB** before browser/tint overhead. Runtime WebP payload is about **5.5 MB**. The extra memory over the old smaller animation set is real.
+
+## Remaining visual limitations
+
+This is an implemented and tested review candidate, not a declaration of flawless animation or owner acceptance of G4-CAT.
+
+1. Turns use discrete neutral views at contacts. Large turns and changes between independently drawn action sheets still show a stepped change in head/body proportions. There are no dedicated in-between turning sheets.
+2. Eight-frame walks/gallops have a stylized cadence; some diagonal contacts shuffle, and the gallop has strong extension. Strides are measured/calibrated, but residual foot slip and ambiguous overlapping legs remain. The strict no-persistent-sliding visual gate is not claimed passed merely because tests pass.
+3. Calico body patches use approximate silhouette masks and can shift with strong deformation; the final face-tracking correction reduces the most conspicuous facial drift. Siamese retains faint tabby texture and simplified point boundaries from the shared painted source.
+4. Sleep/loaf use held final drawings. Stalk has no separately authored crouched travel sheet; the existing slow approach behavior is preserved. Groom invokes the new stretch rather than a licking animation.
+5. Native installed-app display/Space behavior and foreground performance were intentionally not exercised. No wallpaper settings, running app, other worktree, release or remote branch was touched.
+
+## Reproduce the review
+
+Requires macOS WebKit, Swift, ffmpeg, Python with Pillow; art rebuilding additionally uses NumPy/SciPy.
+
+```sh
+swiftc -O tools/wkshot.swift -o /tmp/cats-wkshot
+OUT=shots/cats-gpt/final-raw END=41 python3 tools/cats-qa/video.py orange 12 showcase
+OUT=shots/cats-gpt/final-raw END=4 python3 tools/cats-qa/video.py orange 22 night
+# Repeat the two commands for black, grey, calico and siamese.
+python3 tools/cats-qa/finish.py
+python3 tools/cats-qa/review_frames.py shots/cats-gpt/orange.mp4
+python3 tools/cats-qa/review_frames.py shots/cats-gpt/black.mp4 --poses
+python3 tools/cats-qa/contact.py
+python3 tools/cats-qa/matrix.py
+python3 tools/cats-qa/quality.py
+node --test tests/*.cjs
+./build.sh
+```
+
+`finish.py` optionally uses a corrected `follow-final` capture for seconds 33.2–41; remove those optional local inputs when doing a fresh full render. Large intermediate videos, contact pages and imagegen masters stay ignored locally. Only the five small final MP4s, five owner contact sheets, overview evidence, metrics and README are committed from `shots/cats-gpt`.

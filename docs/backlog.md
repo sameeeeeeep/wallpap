@@ -104,4 +104,5 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [ ] Audit acceptance: recover the missing beach/garden/sky-kites assets with owner authorization, capture their full before/after sequences, and finish ten-scene signoff. Seven available scenes pass G1 (.187–.245 night luma), zero render errors; 64 Node tests pass. Evidence: `shots/audit-fix/`.
 
 ## Cats GPT replacement — owner 2026-10-04
-- [~] Replace painted cat motion end to end: five coats, eight floor directions, walk/run/jump, front idle transitions, preserved follow/scene behavior; video acceptance and performance pending. See docs/cats-gpt.md.
+- [x] Implement and deliver painted cat motion replacement: five coats, eight floor directions, walk/run/jump, front idle transitions, preserved follow/scene behavior; five 45-second WebKit review videos, contact sheets, 106 passing tests, 24 scene integrations and before/after performance. See docs/cats-gpt.md and shots/cats-gpt/README.md.
+- [ ] Owner motion acceptance (G4-CAT): review delivered reels before installation. Remaining visual refinement: stepped view/action changes, diagonal foot shuffle, approximate calico body markings and faint Siamese tabby texture. See the explicit limitations in docs/cats-gpt.md; automated checks do not close this visual gate.

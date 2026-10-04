@@ -102,3 +102,6 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [~] Clouds: shared scene-id seed, bounded perspective, broader formations and horizon haze implemented; template/generator wired and sky-kites migrated off repeated still clouds. Seven full before/after day/night/rain + mirrored/ultrawide sequences inspected. Three-scene acceptance remains blocked by missing art.
 
 - [ ] Audit acceptance: recover the missing beach/garden/sky-kites assets with owner authorization, capture their full before/after sequences, and finish ten-scene signoff. Seven available scenes pass G1 (.187–.245 night luma), zero render errors; 64 Node tests pass. Evidence: `shots/audit-fix/`.
+
+## Cats GPT replacement — owner 2026-10-04
+- [~] Replace painted cat motion end to end: five coats, eight floor directions, walk/run/jump, front idle transitions, preserved follow/scene behavior; video acceptance and performance pending. See docs/cats-gpt.md.

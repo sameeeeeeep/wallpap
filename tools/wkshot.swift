@@ -13,6 +13,7 @@ let out = a[2]
 let W = a.count > 3 ? Double(a[3]) ?? 1600 : 1600, H = a.count > 4 ? Double(a[4]) ?? 1000 : 1000
 let steps = a.count > 5 ? Double(a[5]) ?? 3 : 3
 let pre = a.count > 6 ? a[6] : ""
+let timeout = Double(ProcessInfo.processInfo.environment["WKSHOT_TIMEOUT"] ?? "60") ?? 60
 // Optional sequence in ONE running scene. Values are elapsed virtual seconds after
 // the initial steps; snapshots use -f00, -f01... suffixes. No app is launched.
 let frames = (ProcessInfo.processInfo.environment["WKSHOT_FRAMES"] ?? "0").split(separator: ",").compactMap { Double($0) }.sorted()
@@ -65,13 +66,13 @@ if(new URLSearchParams(location.search).has('shotSeed')){let seed=Number(new URL
     func waitSetup(_ attempts: Int = 0, _ done: @escaping () -> Void) {
         run("(window.__shotPoll&&window.__shotPoll(),window.__shotPending===true)") { result in
             if (result as? Bool) != true { done(); return }
-            if attempts > 120 { self.run("JSON.stringify({errors:window.__errs,report:window.__shotReport?window.__shotReport():null,stage:window.__setupStage,ticks:window.__pollCount,html:document.querySelector('iframe')?.srcdoc.slice(-1000)})") { r in print("async setup timeout:",r ?? "null"); exit(4) }; return }
+            if Double(attempts) > timeout * 10 { self.run("JSON.stringify({errors:window.__errs,report:window.__shotReport?window.__shotReport():null,stage:window.__setupStage,ticks:window.__pollCount,html:document.querySelector('iframe')?.srcdoc.slice(-1000)})") { r in print("async setup timeout:",r ?? "null"); exit(4) }; return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { self.waitSetup(attempts + 1, done) }
         }
     }
     func capture(_ index: Int = 0) {
         let delta = frames[index] - (index > 0 ? frames[index - 1] : 0)
-        run("(()=>{for(let i=0;i<Math.round(\(delta)*30);i++)if(window.LW)LW.advance(1/30);return true})()") { _ in
+        run("(()=>{const n=Math.max(1,Math.ceil(\(delta)*30-1e-7));for(let i=0;i<n;i++)if(window.LW&&\(delta)>0)LW.advance(\(delta)/n);return true})()") { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 self.web.takeSnapshot(with: nil) { img, _ in
                     let path = frames.count > 1 ? String(out.dropLast(4)) + String(format: "-f%02d.png", index) : out
@@ -108,6 +109,6 @@ if(new URLSearchParams(location.search).has('shotSeed')){let seed=Number(new URL
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 let s = Shot()
-DispatchQueue.main.asyncAfter(deadline: .now() + 60) { print("timeout"); exit(3) }
+DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { print("timeout"); exit(3) }
 app.run()
 _ = s

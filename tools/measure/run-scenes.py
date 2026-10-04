@@ -20,8 +20,15 @@ ap.add_argument('--soak', type=float, default=600)
 ap.add_argument('scenes', nargs='*', default=['koi', 'bowls', 'cats', 'grass', 'cafe', 'records', 'ramen', 'rooftop', 'speakeasy', 'cabin', 'train', 'cymatics'])
 a = ap.parse_args()
 
-def dev(cmd): subprocess.run(['./dev.sh', cmd], capture_output=True, timeout=30)
-def devjs(js): return subprocess.run(['./dev.sh', 'js', js], capture_output=True, text=True, timeout=30).stdout.strip()
+def dev(cmd):
+    try: subprocess.run(['.build/devpost', cmd], capture_output=True, timeout=10)
+    except subprocess.TimeoutExpired: print('  (dev command timed out:', cmd, ')', flush=True)
+def devjs(js):
+    try: os.remove('/tmp/livewall-dev.txt')
+    except OSError: pass
+    dev('js:' + js); time.sleep(0.6)
+    try: return open('/tmp/livewall-dev.txt').read().strip()
+    except OSError: return ''
 
 def battery_w():
     out = subprocess.run(['ioreg', '-rn', 'AppleSmartBattery'], capture_output=True, text=True).stdout
@@ -51,13 +58,19 @@ def measure(label):
           f"system {('%.2f W' % sysw) if sysw is not None else 'n/a (plugged in)'}", flush=True)
     return row
 
-if not os.path.exists('.build/wpmeter'):
+for tool in ['devpost', 'wpmeter']:
+  if not os.path.exists(f'.build/{tool}'):
+    subprocess.run(['swiftc', '-O', f'tools/measure/{tool}.swift', '-o', f'.build/{tool}'], check=True)
+if False:
     subprocess.run(['swiftc', '-O', 'tools/measure/wpmeter.swift', '-o', '.build/wpmeter'], check=True)
 info = {'date': datetime.datetime.now().isoformat(timespec='seconds'),
         'model': subprocess.run(['sysctl', '-n', 'hw.model'], capture_output=True, text=True).stdout.strip(),
         'chip': subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True, text=True).stdout.strip(),
         'macos': platform.mac_ver()[0], 'settle': a.settle, 'seconds': a.seconds}
 rows = []
+os.makedirs('docs/perf', exist_ok=True)
+OUT = f"docs/perf/{info['date'][:10]}-{info['model']}{'-interact' if a.interact else ''}{'-extras' if a.extras else ''}.json"
+def save(): json.dump({'info': info, 'rows': rows}, open(OUT, 'w'), indent=1)
 # Keep the wallpaper engaged for the whole run (the owner may be away); restore their mode after.
 DOM = 'live.wallpap.mac'
 prev_mode = subprocess.run(['defaults', 'read', DOM, 'energyMode'], capture_output=True, text=True)
@@ -76,7 +89,7 @@ for s in a.scenes:
     dev(f'scene:{s}'); time.sleep(a.settle)
     devjs("__lw('focus',true)")
     if a.interact: dev(f'interact:{a.seconds + 2:.0f}')
-    rows.append(measure(s + ('+interact' if a.interact else '')))
+    rows.append(measure(s + ('+interact' if a.interact else ''))); save()
 if a.extras:
     # Switching cost: measure the 10 s right after a scene change (teardown + load + art decode).
     for s in ['cats', 'koi', 'train']:

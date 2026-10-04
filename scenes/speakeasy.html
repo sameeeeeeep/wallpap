@@ -1810,9 +1810,13 @@ const BOT_AT = {
   drummer: { x: 1300, y: 604 },   // hips on the throne behind the kit
   bassist: { x: 1440, y: 691 },   // feet, behind the double bass
   singer: { x: 1180, y: 694 },    // feet, behind the microphone (rises through a stage lift)
+  sax: { x: 1172, y: 697 },       // a step downstage of the microphone (in front of it); with both guests, front stage-left (SAX_SIDE)
 };
+const SAX_SIDE = { x: 922, y: 700 };
 // parts drawn in front of the painted kit/bass/mic (the rest stand behind them)
-const FRONT = { drummer: new Set(['upL', 'foL', 'handL', 'upR', 'foR', 'handR']), bassist: new Set(['upL', 'foL', 'upR', 'foR']), singer: new Set(['upL', 'foL', 'upR', 'foR']) };
+const FRONT = { drummer: new Set(['upL', 'foL', 'handL', 'upR', 'foR', 'handR']), bassist: new Set(['upL', 'foL', 'upR', 'foR']), singer: new Set(['upL', 'foL', 'upR', 'foR']),
+  // the saxophonist stands a step downstage of the mic / in front of the kit: all of it is drawn in front
+  sax: new Set(['legs', 'torso', 'head', 'upL', 'upR', 'horn', 'foL', 'foR']) };
 // drum contact points (world): stick tip on the head/bow, stick angle at contact (rad, canvas: 0 = right, +π/2 = down)
 const DR = {
   // fs: how foreshortened the stick looks there (it points toward us over the near drums)
@@ -1823,7 +1827,7 @@ const DR = {
   restL: { x: 1243, y: 603, a: 2.3 }, restR: { x: 1352, y: 611, a: 0.95 },
 };
 const BAND = { ready: false, bots: {}, occ: null, occCv: newCanvas(1, 1), occAt: null, mode: 'idle', wasPlaying: false,
-  modeT: 0, countN: 0, lineup: { singer: false }, singerK: 0, idleT: 0, look: 0, lookT: 4, strings: [0, 0, 0, 0], stringPh: [0, 0, 0, 0],
+  modeT: 0, countN: 0, lineup: { singer: false, sax: false }, singerK: 0, saxK: 0, sax: { phrase: 0, solo: 0, next: 0, onsets: [], note: 0, breath: 0 }, idleT: 0, look: 0, lookT: 4, strings: [0, 0, 0, 0], stringPh: [0, 0, 0, 0],
   kickThump: 0, swing: 0.62, lastHits: {}, crashAt: -1, turn: 0, turnT: 0, twirl: -1, twirlT: 9, flourish: {}, gliss: -1, glissK: -1 };
 function loadBand() {
   if (!RIG) return;
@@ -1944,7 +1948,7 @@ function tintBand() {
     const a = bot.rig.anchor, at = BOT_AT[bot.name];
     // the painting's stage light is warm and fairly even (the procedural light model is darker over
     // there than the painted instruments look): a warm stage key per robot, scaled with the room level
-    const lvl = { pianist: 1, drummer: 0.92, bassist: 0.9, singer: 0.95 }[bot.name] * roomLv();
+    const lvl = ({ pianist: 1, drummer: 0.92, bassist: 0.9, singer: 0.95, sax: 0.95 }[bot.name] || 0.95) * roomLv();
     const warm = [1.0, 0.86, 0.7].map((v) => v * lvl), top = warm.map((v) => v * 1.06), mid = warm;
     let minY = 1e9, maxY = -1e9;
     for (const p of Object.values(bot.parts)) if (p.s === 1) { minY = Math.min(minY, p.oy); maxY = Math.max(maxY, p.oy + p.h / bot.rig.atlasScale); }
@@ -2050,7 +2054,9 @@ function bandStep(dt, T) {
   for (let i = 0; i < 4; i++) { B.strings[i] *= Math.exp(-dt * 2.2); B.stringPh[i] += dt * (38 + i * 9); }
   // the singer's lift
   const singerWanted = B.lineup.singer && (B.mode === 'play' || B.mode === 'countin');
-  B.singerK = approach(B.singerK, singerWanted ? 1 : 0, singerWanted ? 0.55 : 0.7, dt);
+  B.singerK = approach(B.singerK, singerWanted ? 1 : 0, singerWanted ? 0.55 : 1.0, dt);
+  const saxWanted = B.lineup.sax && (B.mode === 'play' || B.mode === 'countin');
+  B.saxK = approach(B.saxK, saxWanted ? 1 : 0, saxWanted ? 0.5 : 1.0, dt);
   // the band looks to the drummer on count-in / section changes / the end
   B.turnT -= dt;
   const wantTurn = B.mode === 'countin' || (B.mode === 'outro' && B.modeT < 2.5) || B.turnT > 0 ? 1 : 0;
@@ -2060,11 +2066,13 @@ function bandStep(dt, T) {
   stepPianist(B.bots.pianist, dt, T, p, bar, bpm);
   stepBassist(B.bots.bassist, dt, T, p, bar, bpm);
   if (B.bots.singer) stepSinger(B.bots.singer, dt, T, p, bar, bpm);
+  if (B.bots.sax) stepSax(B.bots.sax, dt, T, p, bar, bpm);
 }
-const BAND_BOX = { pianist: [982, 436, 1040, 640], drummer: [1262, 432, 1342, 560], bassist: [1404, 398, 1492, 515], singer: [1150, 400, 1212, 690] };
+const BAND_BOX = { pianist: [982, 436, 1040, 640], drummer: [1262, 432, 1342, 560], bassist: [1404, 398, 1492, 515], singer: [1150, 400, 1212, 690], sax: [1120, 400, 1222, 690] };
 function bandHit(x, y) {
   for (const [n, b] of Object.entries(BAND_BOX)) {
     if (n === 'singer' && (!BAND.bots.singer || BAND.bots.singer.hidden || BAND.singerK < 0.9)) continue;
+    if (n === 'sax') { const sb = BAND.bots.sax; if (!sb || sb.hidden || BAND.saxK < 0.9) continue; const ox = sb.x - 1180; if (x > b[0] + ox && x < b[2] + ox && y > b[1] && y < b[3]) return n; continue; }
     if (x > b[0] && x < b[2] && y > b[1] && y < b[3]) return n;
   }
   return null;
@@ -2075,10 +2083,14 @@ function bandPoke(n) {
   else if (n === 'pianist') { if (B.mode === 'idle' || B.mode === 'outro') B.gliss = 0; else B.turnT = 1.6; }
   else if (n === 'bassist') { for (let i = 0; i < 4; i++) B.strings[i] = 1; B.turnT = 1.2; sBoof(); }
   else if (n === 'singer') B.flourish.sing = 1;
+  else if (n === 'sax') { B.sax.solo = Math.max(B.sax.solo, 4 * 60 / (LW.mx.bpm || 100)); B.sax.phrase = B.sax.solo; }   // a little solo
 }
 function pickLineup() {
   const key = LW.mx.trackKey || (music.key || '');
-  BAND.lineup.singer = (hash(key + '|band') % 100) < 38;
+  // per track: ~24% the singer, ~24% the saxophonist, ~5% both (sax then stands front stage-left), else the trio
+  const h = hash(key + '|band') % 100;
+  BAND.lineup.singer = h < 24 || (h >= 48 && h < 53);
+  BAND.lineup.sax = h >= 24 && h < 53;
   BAND.swing = 0.6 + (hash(key) % 8) / 100;
   if (BAND.force) Object.assign(BAND.lineup, BAND.force);   // tests
 }
@@ -2152,7 +2164,8 @@ function stepDrummer(bot, dt, T, p, bar, bpm) {
   driveStick(bot, 'L', L, lift.L, dt, +1);
   driveStick(bot, 'R', R, lift.R, dt, -1);
   // the right foot works the kick pedal (shin tilts on each kick)
-  q.shinR.r = -0.05 * B.kickThump; q.shinL.r = 0;
+  // (seated behind the kit the legs stay hidden: the shins would only peek out under the kick)
+  q.shinR.a = q.shinL.a = 0;
   if (B.twirl >= 0) { B.twirl += dt / 0.9; if (B.twirl >= 1) B.twirl = -1; }
   botFK(bot);
 }
@@ -2344,17 +2357,86 @@ function stepSinger(bot, dt, T, p, bar, bpm) {
   ik2(bot, 'upL', 'foL', bot.rig.tips.foL, sL.x, sL.y + bot.oy, -1, 0.85);
   botFK(bot);
 }
+// ---- the guest saxophonist: phrases on melodic/busy passages, breaths between, a solo on the drop ----
+if (window.LW && LW.mx) LW.mx.on('onset', (o) => { if (o > 0.15) BAND.sax.onsets.push(nowS()); });
+function stepSax(bot, dt, T, p, bar, bpm) {
+  const B = BAND, S = B.sax, mx = LW.mx, q = bot.pose, k = B.saxK;
+  bot.hidden = k < 0.003;
+  if (bot.hidden) { S.phrase = S.solo = 0; return; }
+  const spot = B.lineup.singer ? SAX_SIDE : BOT_AT.sax;
+  if (k < 0.03 && (bot.x !== spot.x || bot.y !== spot.y)) { bot.x = spot.x; bot.y = spot.y; for (const key in bot.sp) delete bot.sp[key]; }   // (still below the floor)
+  bot.oy = (1 - easeOut(k)) * 345;   // below k 0.03 the whole robot is still under the stage floor
+  const beatS = 60 / bpm, playing = B.mode === 'play';
+  while (S.onsets.length && T - S.onsets[0] > 2) S.onsets.shift();
+  const busy = clamp(S.onsets.length / 5 + mx.mid * 0.6 + mx.high * 0.5, 0, 1.5);
+  // phrasing: on a bar line decide to play (more likely when the music is melodic/busy) or to breathe
+  if (playing && bar !== S.bar) {
+    S.bar = bar;
+    if (mx.section === 'drop' && mx.sectionT < beatS * 4) S.solo = beatS * 16;   // the drop: four bars of solo
+    // a section peak (a loud groove at a phrase line): sometimes a two-bar break
+    else if (mx.section === 'groove' && bar % 8 === 0 && mx.energy > 0.62 && S.solo <= 0 && hash('s' + bar + mx.trackKey) % 2 === 0) S.solo = beatS * 8;
+    if (S.solo <= 0) {
+      if (S.phrase <= 0 && S.rest <= 0) { if (busy > 0.45 || hash(bar + LW.mx.trackKey) % 3) S.phrase = beatS * 4 * (1 + (hash('p' + bar) % 2)); else S.rest = beatS * 4; }
+    }
+  }
+  S.solo = playing ? Math.max(0, S.solo - dt) : 0; S.rest = Math.max(0, (S.rest || 0) - dt);
+  const wasP = S.phrase > 0;
+  S.phrase = playing ? Math.max(S.solo, S.phrase - dt) : 0;
+  if (wasP && S.phrase <= 0) S.rest = beatS * (2 + (bar % 2) * 2);   // a breath between phrases
+  const on = S.phrase > 0 ? 1 : 0, solo = S.solo > 0 ? 1 : 0;
+  S.on = approach(S.on || 0, on, on ? 7 : 3, dt); S.so = approach(S.so || 0, solo, 1.5, dt);
+  S.glow = approach(S.glow || 0, on * clamp(mx.level * 1.4, 0.2, 1), 6, dt);
+  // the melody note under the fingers: the strongest pitch class that isn't the chord root
+  if (on && (p * 2 | 0) !== S.step) { S.step = p * 2 | 0; const iv = mx.interval, nn = iv.a === mx.root ? iv.b : iv.a; if (nn !== S.note) { S.note = nn; S.press = 1; } }
+  S.press = Math.max(0, (S.press || 0) - dt * 7);
+  // breath: the chest swells and the horn dips away from the lips a touch between phrases
+  S.breath = approach(S.breath, on ? 0 : 1, 2.5, dt);
+  const sway = Math.sin(p * Math.PI / 2) * (0.035 + 0.05 * S.so) * (playing ? 1 : 0.2);
+  q.torso.r = spring1(bot, 'sway', sway - 0.06 * S.so, dt, 5);
+  // (an inhale: the chest swells and the head lifts off the mouthpiece a touch)
+  const inh = S.breath * (playing ? 1 : 0.4) * (0.5 + 0.5 * Math.sin(T * 1.6));
+  q.torso.sy = 1 + 0.02 * inh;
+  q.head.r = -0.05 * S.so + 0.03 * sway; q.head.dy = (playing ? 1 * Math.exp(-(p % 1) * 4) : 0) - 7 * inh;
+  // the horn: bell lifts in the solo (rotates out from the lips), dips on a breath, bobs with the phrase
+  // (rest: rotated so the body hangs diagonally across the torso, held at the player's right)
+  const tilt = -0.38 + 0.24 * S.so - 0.08 * S.breath * (playing ? 1 : 0.5) + 0.04 * S.on * Math.sin(p * Math.PI);
+  q.horn.r = spring1(bot, 'tilt', tilt, dt, 6);
+  bot.eye = 0.35 + 0.8 * S.glow;
+  botFK(bot);
+  // fingers on the keys: the hands hold the horn and shift along it with each melody note
+  const n = S.note | 0, f = on ? 1 : 0;
+  const ku = bot.rig.keys.upper, kl = bot.rig.keys.lower;
+  const up = worldOf(bot, 'horn', ku[0] + f * ((n % 4) - 1.5) * 7, ku[1] + f * ((n % 3) - 1) * 14);
+  const lo = worldOf(bot, 'horn', kl[0] + f * (((n >> 2) % 3) - 1) * 7, kl[1] + f * ((n % 2) - 0.5) * 18);
+  const sU = spring(bot, 'ku', up[0], up[1], dt, 26, 0.65), sL = spring(bot, 'kl', lo[0], lo[1], dt, 26, 0.65);
+  ik2(bot, 'upR', 'foR', bot.rig.tips.foR, sU.x, sU.y, -1, 0.7);
+  ik2(bot, 'upL', 'foL', bot.rig.tips.foL, sL.x, sL.y, 1, 0.7);
+  // a key goes down under the fingers on each new note (the hands press in, then lift)
+  q.foR.r += 0.07 * S.press * f; q.foL.r -= 0.05 * S.press * f * ((S.note & 1) ? 1 : -0.6);
+  botFK(bot);
+}
 function drawSinger(g, layer) {
-  const bot = BAND.bots.singer; if (!bot || bot.hidden) return;
-  // the lift: everything below the stage floor is hidden; a brass ring glows while it moves
-  g.save(); g.beginPath(); g.rect(1100, 300, 160, 694 - 300); g.clip();
+  drawLift(g, BAND.bots.singer, layer, BAND.singerK); drawLift(g, BAND.bots.sax, layer, BAND.saxK);
+  if (layer === 'front') drawLift(g, BAND.bots.sax, 'bell', BAND.saxK);
+}
+// a guest on the stage lift: everything below the stage floor is hidden; a brass ring glows while it moves
+function drawLift(g, bot, layer, k) {
+  if (!bot || bot.hidden) return;
+  const fy = bot.y;
+  if (layer === 'bell') {   // the saxophone's bell catches the spot when it plays loud
+    const h = bot.rig.keys && bot.M.horn ? MX2.ap(bot.M.horn, 100, 560) : null;
+    if (h && h[1] < fy) drawSprite(g, GLOW_WARM, h[0], h[1], 14, 0.16 * (BAND.sax.glow || 0));
+    return;
+  }
+  const clip = bot.oy > 0.3;   // only while the lift is moving is any of the robot below the floor
+  if (clip) { g.save(); g.beginPath(); g.rect(bot.x - 110, 300, 220, fy - 300); g.clip(); }
   drawBot(g, bot, layer);
   if (layer === 'front') drawEyes(g, bot);
-  g.restore();
+  if (clip) g.restore();
   if (layer === 'back') {
-    const mv = BAND.singerK > 0.02 && BAND.singerK < 0.98 ? 1 : 0.35;
-    g.fillStyle = `rgba(214,176,98,${0.55 * mv})`; g.beginPath(); g.ellipse(BOT_AT.singer.x, 694, 30, 4, 0, 0, TAU); g.fill();
-    drawSpriteE(g, GLOW_WARM, BOT_AT.singer.x, 692, 46, 10, 0.25 * mv * BAND.singerK);
+    const mv = k > 0.02 && k < 0.98 ? 1 : 0.35;
+    g.fillStyle = `rgba(214,176,98,${0.55 * mv})`; g.beginPath(); g.ellipse(bot.x, fy, 30, 4, 0, 0, TAU); g.fill();
+    drawSpriteE(g, GLOW_WARM, bot.x, fy - 2, 46, 10, 0.25 * mv * k);
   }
 }
 function drawBandBack(g) {
@@ -2427,6 +2509,7 @@ function drawDrumLive(g, T) {
   const hh = BAND.headHit;
   if (hh && hh.t > 0.02) { const d = DR[hh.d]; drawSpriteE(g, GLOW_SOFT, d.x, d.y + 2, 22, 6, 0.22 * hh.t); }
 }
+let BULB_B = new Float32Array(0);
 function drawMarquee(g, T) {
   const m = L.mq, w = m.x1 - m.x0, h = m.y1 - m.y0;
   const lt = lightAt((m.x0 + m.x1) / 2, (m.y0 + m.y1) / 2), lit = clamp(lum(lt) * 1.6, 0.55, 1.05) * (1 - 0.35 * calm.lv);
@@ -2446,14 +2529,18 @@ function drawMarquee(g, T) {
   const base = 0.55;
   const e = calm.lv > 0.01 ? breathE() : 0, dk = calm.lv * (1 - e) * 0.8;
   const lv = (1 - calm.lv * (0.78 - 0.55 * e)) * (0.75 + 0.25 * roomLv()), chase = 1 - calm.lv;
+  // (two passes: bulb discs, then all the glows under one 'lighter' state — fewer state changes per frame)
+  const bv = BULB_B.length === n ? BULB_B : (BULB_B = new Float32Array(n));
   for (let i = 0; i < n; i++) {
     const [x, y] = L.bulbs[i];
     let b = base + pl * (0.2 * music.beatEnv + 0.06 * LW.music.level + 0.07 * Math.max(0, Math.sin(music.beatPh * Math.PI * 0.5 - i * 0.62))) * chase;
-    b = clamp(b, 0, 1.2) * lv;
+    b = bv[i] = clamp(b, 0, 1.2) * lv;
     if (dk > 0.01) drawSprite(g, DARK, x, y, 11, dk, 'source-over');   // the painted bulbs dim with the out-breath
     g.fillStyle = rgba(mix3([120, 80, 40], [255, 240, 200], clamp(b, 0, 1))); g.beginPath(); g.arc(x, y, 3.4, 0, TAU); g.fill();
-    drawSprite(g, GLOW_WARM, x, y, 14, 0.55 * b);
   }
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < n; i++) { const a = 0.55 * bv[i]; if (a <= 0.003) continue; g.globalAlpha = Math.min(1, a); g.drawImage(GLOW_WARM, L.bulbs[i][0] - 14, L.bulbs[i][1] - 14, 28, 28); }
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 function drawJukebox(g, T) {
   // silent decor: lit and turning its colours slowly, whatever the music is doing

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Speakeasy frame time, main vs. working tree, in an isolated WKWebView (same method as
 tools/pets-shared/benchmark.py: 1200x750, 7 batches x 90 virtual frames, one flush per batch, median).
-Cases: idle (no music) and playing (music.js's fake song, singer forced on).
+Cases: idle (no music), sax (music.js's fake song, the sax guest only) and playing (both guests forced on = the busiest stage).
 usage: python3 tools/speakeasy-band/bench.py [port=5241] [base=main]"""
 import os, sys, subprocess, json, statistics
 from pathlib import Path
@@ -13,8 +13,9 @@ for version in ['before', 'after']:
     idx = src.rfind('})();'); src = src[:idx] + 'window.__benchFlush=()=>{ctx.getImageData(0,0,1,1)};' + src[idx:]
     tmp = root / 'scenes/__bench_speakeasy.html'; tmp.write_text(src)
     try:
-        for case in ['idle', 'playing']:
-            start = "if(window.__speak&&__speak.BAND)__speak.BAND.force={singer:true};__lw('nowplaying',{title:'Bench',artist:'Band',playing:true,app:'Music'});" if case == 'playing' else ''
+        for case in ['idle', 'sax', 'playing']:
+            force = {'sax': '{singer:false,sax:true}', 'playing': '{singer:true,sax:true}'}.get(case)
+            start = f"if(window.__speak&&__speak.BAND)__speak.BAND.force={force};__lw('nowplaying',{{title:'Bench',artist:'Band',playing:true,app:'Music'}});" if force else ''
             js = start + """window.__shotReady=()=>{let seed=7;Math.random=()=>((seed=(seed*1664525+1013904223)>>>0)/4294967296);
 for(let i=0;i<150;i++)LW.advance(1/30);__benchFlush();window.__timings=[];
 for(let r=0;r<7;r++){const a=Date.now();for(let i=0;i<90;i++)LW.advance(1/30);__benchFlush();__timings.push((Date.now()-a)/90)}};

@@ -684,8 +684,26 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     // MARK: windows
 
+    // macOS posts screen-parameter changes for many things that aren't a new display: EDR/HDR
+    // headroom shifts (a video or bright content elsewhere), brightness, colour profile. Rebuilding
+    // tore every web view down and reloaded the scene — the wallpaper flashed black, again and
+    // again. Only rebuild when the set of displays changes; otherwise refit the windows in place.
+    private var screensWork: DispatchWorkItem?
     @objc func screensChanged() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.rebuildWindows() }
+        screensWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            let now = NSScreen.screens
+            if now.map(\.displayID) == self.windows.map(\.screenID) {
+                for (w, screen) in zip(self.windows, now) where w.frame != screen.frame {
+                    w.setFrame(screen.frame, display: true)
+                    w.web.frame = NSRect(origin: .zero, size: screen.frame.size)
+                }
+                self.pushLayout(force: true)
+            } else { self.rebuildWindows() }
+        }
+        screensWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
     }
 
     @objc func unlocked() {

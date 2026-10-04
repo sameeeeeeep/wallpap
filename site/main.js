@@ -1187,7 +1187,7 @@ const Tour = {
     if (reduceMotion) return set();
     c.parentElement.classList.add('out'); setTimeout(() => { set(); c.parentElement.classList.remove('out'); }, 220);
   },
-  idleCaption() { if (this.cap) this.cap.textContent = `${PG.host.scene.tips[0]} — it’s live.`; },
+  idleCaption() { if (this.cap) this.cap.textContent = PG.host.scene.tips[0]; },
   renderList() {
     const l = $('#tourList'); l.hidden = false;
     l.innerHTML = this.steps.map((s, i) => `<li><button type="button" data-ts="${i}">${s.cap}</button></li>`).join('');

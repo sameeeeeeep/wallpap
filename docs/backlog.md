@@ -76,7 +76,7 @@ Baseline: `node --test tests/*.cjs` passes all 32 tests. Follow this order; insp
 - [x] Social media kit (marketing/): 3 clips × 3 aspects (hero, koi, music), IG carousel, PH gallery, X/Threads/IG/LinkedIn/PH/Reddit/HN drafts, press kit — agent stopped by user; remaining clips (calm, weather, pets, desktop mock, cymatics) re-renderable later
 
 ## Release
-- [ ] Compress scene art — DEFERRED: palette PNG fails quality on painted plates; needs WebP/pngquant tooling (not installed)
+- [x] Compress scene art — release 0.13.5 worktree: 178.81 → 67.29 MB; 1,196 WebP conversions, exact alpha/dimensions, PSNR ≥40 dB; 18 pixel-sensitive PNGs retained. 96 tests pass; full day/night, native decode, follow and Play checks pass. Local app build 72.40 MB. See `docs/webp-0.13.5.md`.
 - [ ] Rebuild + test in the real app (ask before relaunching the live wallpaper)
 - [ ] 0.13: commit, notarized DMG, GitHub release, site push (go/no-go on the notch)
 

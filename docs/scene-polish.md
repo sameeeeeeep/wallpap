@@ -940,3 +940,25 @@ gaze-fix matrix, this task retains **600 verified scene snapshots** as downscale
 JPEGs. All raw capture/generation PNGs removed; source runtime PNGs retained.
 Approximately 14 GiB free at acceptance. Prompts remain in `art-src/gaze-fix/` and
 `art-src/follow/`. No push, release, app build/install/relaunch or sibling-tree edit.
+
+
+## 2026-10-04 — Release 0.13.5 bundled art compression
+
+Converted 1,196 PNG assets (all 1,080 pet frames included) to quality-gated WebP.
+Total art: 178.81 → 67.29 MB; du: 177,080 → 68,152 KiB. Minimum PSNR 40.00593 dB,
+maximum alpha error zero; unchanged dimensions and native WebKit alpha prove
+unchanged registration/contact measurements. Retained 18 pixel-sensitive PNGs.
+No art generation, geometry change or image prompts. Updated every runtime loader,
+sprite format documentation, active generator references and PNG-header tests.
+Removed absent optional-art requests; fixed two existing Café jukebox compatibility
+errors discovered while checking its lazy-loaded paintings.
+
+Inspected all 38 before/38 after day/night captures (16 built-ins, four train skins),
+ten pet identities on light/dark mattes, weakest-PSNR crops, follow and Play sheets.
+No visible degradation. Native 1,196-file comparisons pass before/after install;
+96 Node tests pass, eight follow smokes pass on this worktree's 5217 server, six Play
+smokes and two jukebox captures pass with zero errors/failed images. Plain local
+`./build.sh` succeeds: app 72.40 MB (du 73,280 KiB); installed app untouched.
+JPEG evidence: `shots/webp/README.md` and `shots/play/`; raw captures deleted.
+Full sizes, retained-PNG rationale, test outputs and reproduction: `docs/webp-0.13.5.md`.
+No push, release, notarization, installed-app change, or other-worktree edits.

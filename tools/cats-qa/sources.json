@@ -1,0 +1,24 @@
+{
+  "note": "Selected whole-sheet imagegen masters are local ignored production inputs in generated/. Runtime WebP atlases are committed. SHA256 identifies the exact accepted source, not rejected versions.",
+  "masters": {
+    "orange-run-away.png": "5448b2e4c211bff144caa0315f75d8542eb1de232b3b8aed9961689441a8b58b",
+    "orange-run-toward.png": "d6cf7f7c202fd98eaf6d2bc7b92a88ae07b74f72576bed397242cc68afdfa7fa",
+    "orange-jump-away.png": "f3ba5c9606b1595c79980010f8da08e590cdb53ffae7f3057c5238a6f1fb4f68",
+    "orange-walk-away.png": "5acf95220b1f5b73a8d15df500c8791da11a70f9fcd9a0de49e85b321c2727c7",
+    "orange-run-side.png": "f7bb8d2dcb375fcc348c72b176eefe0c152b8fa5862956c660dc11ed707bb1cb",
+    "orange-jump-side.png": "cfff85c0025a5d05e9e928453e2311d87da15c500a4a0c58ba7e4896d882f09d",
+    "orange-walk-side.png": "7a911a38bb0884543f25bbea8c93e0661addc3d203b39b470f9bdc8e937c9a45",
+    "orange-stretch.png": "6892a39fca1a3dd6a82ee3d845237de9f57d4e547a5e60d820c935019fe8213d",
+    "orange-rest.png": "e1e1da3aba9665057c81dfd7b3bb5a6f3417ab366130337fb047ce1819dcd931",
+    "orange-walk-toward.png": "59e628afb6fc0a3c3894df963273b0e5b7ba710baae5135f7268ac8e4feb233c",
+    "orange-run-far.png": "16cba3d6990b17d1439eb03757f06d50ce386f77987920448a6136536812384b",
+    "orange-perk.png": "10f534c7d382c82ce55102f8261477a8fb014d3744b4f32f00ad34ed9aea0f43",
+    "orange-walk-far.png": "9f5e3cae4f404b13ed383e01c78ff1164d218294fe9ef66f54ea1bcd66ac1c64",
+    "orange-run-near.png": "b8dd146b73967b0e2616a3098e9192c228b859e4693c947c4e20df6a34736936",
+    "orange-jump-toward.png": "0fec696e323f7e00144308acb4e50754476209eb5a1b72c05335643694634a27",
+    "orange-jump-far.png": "0a6eee2c6a41a8a07c99e0495cce39ddb5fc7f3ffe7443567824f87335bcb75a",
+    "orange-walk-near.png": "424908414641eefdd2a1b73efe205ecab48136c15329368f1321dcc9dd5a8e07",
+    "orange-sit.png": "4cf32fbdf28c70ed2861d790d20621e816e4cddd70a4d5c34a1e9bb02117c452",
+    "orange-jump-near.png": "c98939ee307057b9ef49b4b28d35f62c8a983ba75176ac08951ac7c77f3a7a48"
+  }
+}

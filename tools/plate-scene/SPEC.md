@@ -99,6 +99,7 @@ and the actor's own side sheet, then cut, align and plant:
   - birds: flap ×6–8, plus glide and land
   - paragliders: canopy sway
   - aircraft: an angle set plus gear and lights
+- **Painted cats (owner 2026-10-04):** five views (side, toward diagonal, toward, away diagonal, away), mirrored to eight floor directions. Every view must have its own complete walk, gallop and jump sheet. Generate each whole cycle in one image, never independent frames; lock painted identity, skull/body scale and palette across sheets. Front sit, curled sleep, loaf, drawn stand→sit→sleep and click perk are required. Use alpha or border-connected background extraction preserving white fur. Stride and root anchors are explicit metadata; load via images/scripts compatible with file://. Hand-authored paw blocking may guide repainting; never ship a still image travelling along a path or substitute a 3D cat rig.
 - Lights (headlights, windows, nav lights) are separate glow sprites.
 - **Alignment**:
   - the contact point (paws, wheels, hull waterline) sits on one baseline
@@ -199,3 +200,6 @@ moon fits fully within sky pixels, and separate ids produce different cloud fiel
 Rain start/end sequences must show a continuous light transition and no solar disk
 or hard cast shadows under full overcast; wet-ground crops must have no repeating
 horizontal bands. Keep JPEG contact sheets and remove raw capture PNGs.
+
+### G4-CAT — painted cat motion acceptance
+For every coat, retain 24–30 fps WebKit file:// footage of eight-direction walk/run, directional floor and ledge jumps, front idle transitions and click/follow/pounce. Inspect extracted consecutive frames, not only endpoint stills. Fail on moving static poses, repeated wrong leg phases, silhouette clipping, persistent foot sliding, per-frame size normalization, wrong-facing jumps, dark/light edge fringes, or unreported color/registration discontinuities. The walk footfalls must follow LH→LF→RH→RF; the run must show gather, extension and suspension. All eight path headings must be exercised by tests. Report CPU/memory measurement scope and preserve existing scene geometry, lighting, occlusion and Pets toggles.

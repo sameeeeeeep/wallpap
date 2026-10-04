@@ -962,3 +962,24 @@ smokes and two jukebox captures pass with zero errors/failed images. Plain local
 JPEG evidence: `shots/webp/README.md` and `shots/play/`; raw captures deleted.
 Full sizes, retained-PNG rationale, test outputs and reproduction: `docs/webp-0.13.5.md`.
 No push, release, notarization, installed-app change, or other-worktree edits.
+
+## 2026-10-05 — Painted cats, eight floor headings (cats-gpt)
+
+Replaced the cat art set with 19 eight-frame whole-sheet animations per coat: five
+views each for walk, gallop and jump, plus front sit, sit/loaf/curled sleep, perk,
+and stretch. Orange imagegen sheets were made first using the existing painted
+orange walk1/sit references. Initial incorrect walk phases were rejected and
+regenerated over explicit LH/LF/RH/RF blocking; near/far jump and far gallop were
+regenerated to correct their camera view. Coat variants retain identical alpha
+and registration. No 3D rig assets were used.
+
+Production prompt recipes, references, selected-master SHA256, stride calibration,
+cutting and coat edits are recorded in `tools/cats-qa/ART.md` and `sources.json`.
+Whole-sheet scale is fixed; there is no per-frame size normalization. Contact and
+flight registration are explicit, and packed WebP atlases avoid large transparent
+decoded margins. `tools/plate-scene/SPEC.md` now carries the owner's painted-cat
+stage requirement and G4-CAT motion review gate.
+
+Runtime and final WebKit/video verification results follow in `docs/cats-gpt.md`
+and `shots/cats-gpt/README.md`; visual acceptance is reported separately from test
+success. The installed app and owner's wallpaper settings remain untouched.

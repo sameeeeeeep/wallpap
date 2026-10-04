@@ -33,7 +33,7 @@ for case in cases:
     r = subprocess.run(['./tools/wkshot', url, str(base) + '.png', str(W), str(H), '0', js], text=True, capture_output=True, env=env, timeout=600)
     rep = [json.loads(x[8:]) for x in r.stdout.splitlines() if x.startswith('result: ')]
     rep = rep[-1] if rep else {}
-    (OUT / f'{case}-log.json').write_text(json.dumps(rep, indent=1))
+    (OUT / f'{case}-log.json').write_text(json.dumps({k: rep.get(k) for k in ('errors', 'imageErrors', 'report')}, indent=1))
     print(case, 'errors:', rep.get('errors'), 'imageErrors:', rep.get('imageErrors'))
     files = sorted(glob.glob(str(base) + '-f*.png'))
     tiles, fulls = [], []

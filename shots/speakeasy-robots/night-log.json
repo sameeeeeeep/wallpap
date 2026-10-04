@@ -1,0 +1,26 @@
+{
+ "errors": [],
+ "imageErrors": [],
+ "report": {
+  "log": [
+   "0.00 idle/silence/singer:false",
+   "2.07 countin/silence/singer:false",
+   "2.10 countin/intro/singer:false",
+   "4.03 play/intro/singer:false",
+   "7.10 play/build/singer:false",
+   "11.80 play/drop/singer:false",
+   "13.33 play/groove/singer:false",
+   "15.43 play/breakdown/singer:false",
+   "19.03 outro/silence/singer:false",
+   "23.07 idle/silence/singer:false",
+   "25.07 countin/groove/singer:true",
+   "27.00 play/groove/singer:true",
+   "27.57 play/build/singer:true",
+   "28.13 play/drop/singer:true",
+   "29.67 play/groove/singer:true",
+   "33.07 outro/silence/singer:true",
+   "37.07 idle/silence/singer:true"
+  ],
+  "errs": []
+ }
+}

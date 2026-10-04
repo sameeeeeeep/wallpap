@@ -24,16 +24,16 @@ function pond(w=1600,h=1000,side='right') {
   `,ctx);
   return js=>vm.runInContext(js,ctx);
 }
-test('shoals scale from 24 to 44 to 60 fish, with only one gold group',()=>{
-  for(const [w,h,count,groups] of [[800,600,24,3],[1600,1000,44,4],[3440,1440,60,5]]) {
+test('shoals scale from 12 to 27 to 30 fish (bigger, fewer), with only one gold group',()=>{
+  for(const [w,h,count,groups] of [[800,600,12,2],[1600,1000,27,3],[3440,1440,30,3]]) {
     const p=pond(w,h);assert.equal(p('minnows.length'),count);assert.equal(p('shoals.length'),groups);
-    assert.ok(p('shoals.every(s=>s.end-s.start>=7&&s.end-s.start<=14)'));
+    assert.ok(p('shoals.every(s=>s.end-s.start>=6&&s.end-s.start<=10)'));
     assert.ok(p('shoals.filter(s=>s.gold).length<=1'));
   }
 });
 test('live meshes bend their spines and forked tails, using existing batch modes',()=>{
   const p=pond();p('emitShoals();globalThis.before=vertices.map(v=>v.slice());vertices.length=0;advance(1);emitShoals()');
-  assert.equal(p('vertices.length'),44*48);
+  assert.equal(p('vertices.length'),27*48);
   assert.ok(p('vertices.every(v=>v.every(Number.isFinite)&&(v[8]===3||v[8]===4))'));
   assert.ok(p('vertices.some((v,i)=>Math.abs(v[0]-before[i][0])>.01)'));
 });

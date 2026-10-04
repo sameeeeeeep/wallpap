@@ -1300,20 +1300,20 @@ let shoalClock = 0;
 function spawnShoals() {
   shoals.length = 0; minnows.length = 0;
   const small = W * H < 850000, wide = W / H > 2;
-  const groups = small ? 3 : wide ? 5 : 4, count = small ? 8 : wide ? 12 : 11;
-  const band = LW.layout.clear, size = clamp(Math.min(W,H) * 0.19,110,300) * 0.13;
+  const groups = small ? 2 : 3, count = small ? 6 : wide ? 10 : 9;   // owner: bigger, fewer
+  const band = LW.layout.clear, size = clamp(Math.min(W,H) * 0.19,110,300) * 0.22;   // ~1/5–1/4 of a koi, readable at full size
   for (let i = 0; i < groups; i++) {
     const hx = (i + 0.65) / (groups + 0.3), hy = i % 2 ? 0.68 : 0.32;
     const x = W * lerp(band[0]+0.07,band[1]-0.07,hx), y = H * hy;
     const a = rand(TAU);
     const s = {start:minnows.length, end:minnows.length+count, x,y, vx:Math.cos(a),vy:Math.sin(a),
-      hx,hy, tx:x,ty:y, seed:rand(1000), next:rand(4,9), turn:0, fear:0, fx:x,fy:y, gold:i===3 ? 1 : 0};
+      hx,hy, tx:x,ty:y, seed:rand(1000), next:rand(4,9), turn:0, fear:0, fx:x,fy:y, gold:groups>2&&i===groups-1 ? 1 : 0};
     shoals.push(s);
     for (let j = 0; j < count; j++) {
       const angle = j * 2.39996, r = size * Math.sqrt(j) * 0.85;
       minnows.push({x:x+Math.cos(angle)*r,y:y+Math.sin(angle)*r, vx:Math.cos(a)*45,vy:Math.sin(a)*45,
         nx:0,ny:0, ang:a, bend:0, speed:45, phase:rand(TAU), L:size*rand(0.9,1.1),
-        z:rand(0.62,0.87), seed:rand(1000), shade:rand(0.93,1.07), flash:0, nibble:rand(0.5), school:s});
+        z:rand(0.45,0.7), seed:rand(1000), shade:rand(1.05,1.18), flash:0, nibble:rand(0.5), school:s});
     }
   }
 }

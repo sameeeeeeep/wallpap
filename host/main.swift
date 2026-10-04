@@ -221,6 +221,22 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             let why = want ? "" : (userPaused ? "user" : (energyMode == "battery" && onBattery ? "battery" : "away"))
             windows.forEach { $0.js("__lw('pauseReason','\(why)'); __lw('focus',\(want))") }
             panelHostIfLoaded?.push()
+            engagementChanged()
+        }
+    }
+    /// A paused wallpaper should cost ~nothing: while nobody's looking the host stops its own polling
+    /// (60 Hz pointer poll, Music/Spotify AppleScript, beat-sync audio capture, Finder icon scan) and
+    /// holds page updates (env, layout, companions) — then catches the page up in one go on resume.
+    func engagementChanged() {
+        if engaged {
+            if NSApp.isActive { startActivePointerPoll() }
+            if musicMode && isPro { startMusicMode() } else { updateBeatSync() }
+            flushAgentActivity()
+            pushEnv(); pushLayout(); pushAgents()
+        } else {
+            stopActivePointerPoll()
+            musicTimer?.invalidate(); musicTimer = nil
+            updateBeatSync()
         }
     }
     func touchDesktop(click: Bool = false) {
@@ -268,17 +284,19 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     /// Listen only while it matters: beat sync on, Pro, and music actually playing.
     func updateBeatSync() {
         let playing = lastNowPlayingJSON.contains("\"playing\":true")
-        if isPro && beatSyncOn && musicMode && playing { beat.start() } else if beat.running { beat.stop() }
+        if isPro && beatSyncOn && musicMode && playing && engaged { beat.start() } else if beat.running { beat.stop() }
     }
     var lastTrackKey = ""
     var lastNowPlayingJSON = "null"
     var artworkCache: [String: String] = [:]
 
     func startMusicMode() {
-        musicTimer?.invalidate()
+        musicTimer?.invalidate(); musicTimer = nil
         guard musicMode, isPro else { lastNowPlayingJSON = "null"; windows.forEach { $0.js("__lw('nowplaying',null)") }; return }
+        guard engaged else { return }   // paused: engagementChanged() restarts polling on resume
         pollNowPlaying()
         musicTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pollNowPlaying() }
+        musicTimer?.tolerance = 0.5
     }
 
     func isRunning(_ bundleID: String) -> Bool {
@@ -432,8 +450,21 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         fsStream = stream
     }
 
-    func noteAgentActivity(_ paths: [String]) {
+    /// Session logs that changed while the wallpaper was paused (path → when): parsed on resume, not per write.
+    var pendingAgentPaths: [String: Date] = [:]
+    func flushAgentActivity() {
+        guard !pendingAgentPaths.isEmpty else { return }
+        let pending = pendingAgentPaths; pendingAgentPaths = [:]
+        noteAgentActivity(Array(pending.keys), at: pending)
+    }
+    func noteAgentActivity(_ paths: [String], at seen: [String: Date] = [:]) {
+        guard engaged else {
+            let now = Date()
+            for p in paths where p.hasSuffix(".jsonl") { pendingAgentPaths[p] = now }
+            return
+        }
         for p in paths where p.hasSuffix(".jsonl") {
+            let when = seen[p] ?? Date()
             let kind = p.contains("/.codex/") ? "codex" : "claude"
             var key = p, project = ""
             if kind == "claude", let r = p.range(of: "/.claude/projects/") {
@@ -451,8 +482,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
                 if automatedSessions[key] ?? false { continue }
             }
             var waiting = agentSessions[key]?.waiting
-            if isMain { waiting = App.agentWaiting(p, kind) ? (waiting ?? Date()) : nil }
-            agentSessions[key] = (kind, project, Date(), waiting)
+            if isMain { waiting = App.agentWaiting(p, kind) ? (waiting ?? when) : nil }
+            agentSessions[key] = (kind, project, max(when, agentSessions[key]?.last ?? .distantPast), waiting)
         }
         pushAgents()
     }
@@ -492,6 +523,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     func pushAgents(force: Bool = false) {
+        guard engaged || force else { return }   // a paused page gets the current list on resume
         let now = Date()
         agentSessions = agentSessions.filter { now.timeIntervalSince($0.value.last) < 90
             || ($0.value.waiting.map { now.timeIntervalSince($0) < App.attentionSeconds } ?? false) }
@@ -575,11 +607,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         startAmbient()
         startMusicMode()
         startCompanions()
-        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pushAgents() }
+        // Generous tolerances let macOS coalesce these wakeups with others (they matter most while paused).
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.pushAgents() }.tolerance = 0.5
         checkPower()
-        Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.checkPower() }
-        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkEngagement() }
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.pushLayout() }   // widgets moved/added
+        Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.checkPower() }.tolerance = 4
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkEngagement() }.tolerance = 0.2
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in if self?.engaged == true { self?.pushLayout() } }.tolerance = 1   // widgets moved/added
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
         let ws = NSWorkspace.shared.notificationCenter
@@ -630,6 +663,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
                 }
             } else if cmd.hasPrefix("interact:") {   // perf runs: scripted pointer through the real input path
                 self.simulateInteraction(seconds: Double(cmd.dropFirst(9)) ?? 30)
+            } else if cmd == "pause" || cmd == "resume" {   // perf runs: the real Pause menu path (host + page)
+                self.userPaused = cmd == "pause"; self.applyPause()
             } else if cmd == "play-toggle" { self.playHost.toggle()
             } else if cmd == "state" {
                 let d = (try? JSONSerialization.data(withJSONObject: self.panelState(), options: [.prettyPrinted])) ?? Data()
@@ -760,7 +795,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     private var activePointerPoll: Timer?
     private var lastPolledPointer = NSPoint(x: -1, y: -1)
     func startActivePointerPoll() {
-        guard activePointerPoll == nil else { return }
+        guard activePointerPoll == nil, engaged else { return }   // paused: only a click wakes it
+        // Event monitors can't see moves while WE are the active app; poll instead, while it matters.
         let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             guard let self else { return }
             let p = NSEvent.mouseLocation
@@ -806,7 +842,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     func onMove() {
         if playHost.isOpen { return }
-        if paused { return }
+        if paused || !engaged { return }   // paused scenes ignore hover; only a click continues
         let now = CACurrentMediaTime()
         let p = NSEvent.mouseLocation
         if now - lastDesktopCheck > 0.15 {
@@ -894,8 +930,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         loc.delegate = self
         loc.desiredAccuracy = kCLLocationAccuracyReduced
         if preciseLocation { loc.startUpdatingLocation() } else { locateByTimeZone() }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.pushEnv() }
-        Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in self?.fetchWeather() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.pushEnv() }.tolerance = 5
+        Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in self?.fetchWeather() }.tolerance = 30
         scheduleReminders()
     }
 
@@ -988,7 +1024,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         }.resume()
     }
 
-    func pushEnv() {
+    func pushEnv(force: Bool = false) {
+        guard engaged || force else { return }   // paused: engagementChanged() pushes on resume
         var e = env
         e["view"] = timeView
         if let c = coord { e["location"] = ["latitude": c.latitude, "longitude": c.longitude, "approximate": weatherPlace != "your location"] as [String: Any] }
@@ -1076,7 +1113,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
 
     // Page loaded → hand it the current env + its saved settings.
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        pushEnv()
+        pushEnv(force: true)
         pushSettings()
         webView.evaluateJavaScript("__lw('perf',{fps:\(fps)}); __lw('focus',\(engaged)); __lw('nowplaying',\(lastNowPlayingJSON.isEmpty ? "null" : lastNowPlayingJSON))", completionHandler: nil)
         pushSoundscape()

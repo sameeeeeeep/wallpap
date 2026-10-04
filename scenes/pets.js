@@ -1,4 +1,5 @@
-/* Shared illustrated pets, built on pet-motion.js. Load after lw.js + pet-motion.js.
+/* Shared illustrated pets, built on pet-motion.js. Load after lw.js + pet-motion.js;
+ * painted cats also load cat-atlas.js + cat-motion.js before this script.
  *
  * const pets = LW.pets.create({scene:'cafe', roster:['grey','golden'], stage:()=>STAGE});
  * pets.step(dt, seconds); pets.draw(ctx); pets.click(x,y); pets.toy(x,y);
@@ -22,7 +23,7 @@
  * A ledge's y is its paw baseline; depth is its supporting floor, used for scale/sorting.
  * Links are the ONLY legal jumps between surfaces ('floor' is the default surface).
  * Floor polygons are a union; every path segment is sampled inside them. All travel is
- * lateral or the art's 3/4 heading; animals lacking a complete directional cycle stay
+ * along a drawn floor heading (cats have all eight); animals lacking a complete directional cycle stay
  * strictly lateral. Species share reservations and predictive personal-space checks.
  * Settings pets=false/0/'false'/'0' walk everyone to exits; re-enable returns them.
  * Pandas mei/bao/cub are private to scene:'grass', outside the common seven-pet roster.
@@ -75,6 +76,7 @@ function sprContact(im) {
   return im.petContact={x:pts.reduce((a,p)=>a+p[0],0)/pts.length,y:pts.reduce((a,p)=>a+p[1],0)/pts.length,span:pts[pts.length-1][0]-pts[0][0]};
 }
 function asset(spec) {
+ if(spec.kind==='cat'&&LW.cats){const atlas=LW.cats.load(spec);if(atlas)return atlas;}
  const s={spec,img:{},seq:{},seqRaw:{},ready:false};
  for(const p of spec.poses){const im=new Image();im.onload=()=>{if(im.naturalWidth)s.img[p]=defringe(im)};im.src=LW.petArtPath('art/sprites/',spec.set,p)}
  s.cyc=LW.petCycleLoad('art/sprites/',spec.set);
@@ -85,6 +87,7 @@ function asset(spec) {
  return s;
 }
 function prep(s){
+ if(s.atlas)return s.ready;
  const w=s.img.walk1;if(!w)return false;
  if(!s.unit){s.unit=s.spec.height/w.height;s.ref=LW.petCycleMeasure(w);}
  if(!s.cyclesPrepared){LW.petCyclePrep(s.cyc,{im:w,k:1,fa:.555},defringe);Object.assign(s.img,s.cyc.img);s.cyclesPrepared=s.cyc.ready;}
@@ -124,10 +127,11 @@ function scaleAt(depth,map){
  return map[map.length-1][1];
 }
 // Same heading decomposition as Santorini, including shallow trips (no depth drift in side art).
-function headings(a,b,slope=.55,directional=true){
+function headings(a,b,slope=.55,directional=true,eight=false){
  const dx=b[0]-a[0],dy=b[1]-a[1];
  if(!directional||Math.abs(dy)<1e-5)return [[a,[b[0],a[1]]]];
  const run=Math.abs(dy)/slope,sx=Math.sign(dx)||1;
+ if(eight){const x=sx*Math.min(Math.abs(dx),run),y=Math.sign(dy)*Math.min(Math.abs(dy),Math.abs(dx)*slope);return [[a,[a[0]+x,a[1]+y],b],[a,[b[0]-x,b[1]-y],b]];}
  if(run<=Math.abs(dx))return [[a,[a[0]+sx*run,b[1]],b],[a,[b[0]-sx*run,a[1]],b]];
  return [1,-1].map(s=>{const k=(run+s*dx)/2;return [a,[a[0]+s*k,a[1]+Math.sign(dy)*k*slope],b]});
 }
@@ -188,7 +192,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   const valid=pts=>validPath(p,pts,exit,!ignorePets);
   if(p.surf!=='floor'||!directions(p))y=p.y;
   const a=[p.x,p.y],b=[x,y],slope=S.slope||.55;
-  let candidates=headings(a,b,slope,directions(p));
+  let candidates=headings(a,b,slope,directions(p),!!p.asset.atlas);
   let best=candidates.filter(q=>valid(q)).sort((a,b)=>length(a)-length(b))[0];
   if(!best&&p.surf==='floor'&&directions(p)){
    // Route around pets/props using visibility candidates; every edge still uses drawn headings.
@@ -198,7 +202,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    for(const o of items)if(o!==p&&!o.away){const b=box(o),h=p.spec.height*size(p);ys.push(b[1]-18,b[3]+h*1.3+18)}
    for(const yy of ys)for(const xx of [a[0],b[0],(a[0]+b[0])/2]){
     const m=[xx,clamp(yy,bounds[1],bounds[3])];
-    for(const q of headings(a,m,slope,true))if(valid(q))for(const r of headings(m,b,slope,true)){
+    for(const q of headings(a,m,slope,true,!!p.asset.atlas))if(valid(q))for(const r of headings(m,b,slope,true,!!p.asset.atlas)){
      const v=[...q,...r.slice(1)];if(valid(v)&&(!best||length(v)<length(best)))best=v;
     }
    }
@@ -219,10 +223,10 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const dd=Math.hypot(xx-x,yy-y);if(dd<d&&allowed(p,xx,yy)&&clearRest(p,xx,yy)&&free(p,xx,yy)){best=[xx,yy];d=dd;}
   }return best;
  }
- function walk(p,x,y,{gait='walk',next=null,exit=false}={}){
+ function walk(p,x,y,{gait=null,next=null,exit=false}={}){
   if(p.away||p.j)return false;
   if(!directions(p)||p.surf!=='floor')y=p.y;
-  p.goal={x,y,surf:p.surf};p.path=plan(p,x,y,exit);p.exitPath=exit;p.next=next;p.gait=gait;p.waited=0;
+  p.goal={x,y,surf:p.surf};p.path=plan(p,x,y,exit);p.exitPath=exit;p.next=next;p.gait=gait||(p.asset.atlas&&Math.hypot(x-p.x,(y-p.y)/(S.slope||.55))>p.spec.height*p.k*3?'run':'walk');p.waited=0;
   state(p,'move',1e9);pose(p,0);p.blocked=0;return !!p.path;
  }
  // A landing declared just outside a floor edge is clamped to that physical edge.
@@ -238,15 +242,15 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(surf==='floor'){const q=floorPoint(x,y);if(!q)return false;[x,y]=q;}else{const l=ledge(surf);if(!l)return false;x=clamp(x,l.x0,l.x1);y=l.y;}
   if(p.away||!free(p,x,y,surf))return false;
   const d0=depth(p),d1=surf==='floor'?y:ledge(surf).depth;
-  const dir=LW.petJumpDirection(p,x-p.x,d1-d0),key=action?(action+(dir.view==='side'?'':'-'+dir.view)):LW.petJumpKey(dir.view,q=>p.asset.seq[q]);
-  if(action&&!p.asset.seq[key])return false;
-  if(!key)return false;
+  const dir=p.asset.atlas?LW.cats.direction(x-p.x,d1-d0,S.slope||.55,p._catDir):LW.petJumpDirection(p,x-p.x,d1-d0),key=p.asset.atlas?'jump-'+dir.view:action?(action+(dir.view==='side'?'':'-'+dir.view)):LW.petJumpKey(dir.view,q=>p.asset.seq[q]);
+  if(action&&!p.asset.atlas&&!p.asset.seq[key])return false;
+  if(!key||p.asset.atlas&&!p.asset.clips[key])return false;
   // A missing depth jump cannot glide: take the lateral jump only when depth is unchanged.
   if(dir.view!=='side'&&key==='jump'&&Math.abs(d1-d0)>1)return false;
   p.j={x0:p.x,y0:p.y,x1:x,y1:y,s0:p.surf,s1:surf,d0,d1,k0:size(p),k1:size(p,y,surf),view:dir.view,key,action,
-   dur:.36+Math.abs(y-p.y)*.0007+Math.abs(x-p.x)*.00055,h:34+Math.max(0,p.y-y)*.32,next};
+   dur:.36+Math.abs(y-p.y)*.0007+Math.abs(x-p.x)*.00055,h:(action?22:34)+Math.max(0,p.y-y)*.32,next,catDir:p.asset.atlas?dir:null};
   if(!flightClear(p,p.j)){p.j=null;return false;}
-  p.dir=dir.face;p.goal={x,y,surf};p.sequence=null;p.prev=null;LW.petJumpLand(p);state(p,'jumpPrep',.34);pose(p,0);return true;
+  p.dir=dir.face;if(p.asset.atlas){p._catDir=dir;p._catTransition=null;}p.goal={x,y,surf};p.sequence=null;p.prev=null;LW.petJumpLand(p);state(p,'jumpPrep',.34);pose(p,0);return true;
  }
  function trip(p,target,rest='sit'){
   if(p.away)return false;
@@ -267,7 +271,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const start=a.surf==='floor'?floorPoint(a.x,ay):[a.x,ay];
    walk(q,...start,{next:r=>{
     const launch=()=>{if(!jump(r,b.x,by,b.surf,leg)){r.goal=null;state(r,'sit',2)}};
-    if(r.picked){const d1=b.surf==='floor'?by:ledge(b.surf).depth,dir=LW.petJumpDirection({dir:r.dir},b.x-r.x,d1-depth(r));turnTo(r,dir.view,dir.face,launch);}
+    if(r.picked){const d1=b.surf==='floor'?by:ledge(b.surf).depth,dir=r.asset.atlas?LW.cats.direction(b.x-r.x,d1-depth(r),S.slope||.55,r._catDir):LW.petJumpDirection({dir:r.dir},b.x-r.x,d1-depth(r));turnTo(r,dir.view,dir.face,launch);}
     else launch();
    }});
   }leg(p);return true;
@@ -314,7 +318,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const sp=spots.find(s=>s.kind===kind&&(!S.supplies||S.supplies[kind]>.01));if(sp&&trip(p,sp,kind==='food'?'eat':'drink'))return;
   }
   const sl=clamp(p.lazy*.2+p.awake/500+(S.night||0)*.2),r=Math.random();
-  if(r<.45){const b=S.bounds,pt=nearest(p,rand(b[0]+20,b[2]-20),rand(b[1],b[3]));if(pt&&walk(p,...pt,{gait:r<.035?'run':'walk'}))return;}
+  if(r<.45){const b=S.bounds,pt=nearest(p,rand(b[0]+20,b[2]-20),rand(b[1],b[3]));if(pt&&walk(p,...pt,{gait:r<.035||p.asset.atlas&&Math.hypot(pt[0]-p.x,(pt[1]-p.y)/(S.slope||.55))>p.spec.height*p.k*3?'run':'walk'}))return;}
   if(r<.72&&spots.length){const sp=pick(spots);if(trip(p,sp,sp.kind==='bed'||sp.kind==='sun'?'sleep':'loaf'))return;}
   if(r>.96){const o=items.find(o=>o!==p&&!o.away);if(o&&p.surf===o.surf){const x=o.x+(p.x<o.x?-1:1)*(p.spec.height*p.k+o.spec.height*o.k)*1.1;if(walk(p,x,o.y,{next:q=>state(q,'sniff',3)}))return;}}
   state(p,pick(['sit','sit','loaf','groom',...(sl>.35?['sleep','sleep']:['stand'])]),rand(5,sl>.35?30:12));
@@ -355,6 +359,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   p.path=null;p.goal=null;p.next=null;p.turn=null;p.sequence=null;p.prev=null;state(p,name,seconds);
  }
  function turnTo(p,view,face,next){
+  if(p.asset.atlas){const v={f:'near',b:'far'}[view]||view,octant=v==='toward'?2:v==='away'?6:v==='near'?(face<0?3:1):v==='far'?(face<0?5:7):face<0?4:0;return LW.cats.startTurn(p,{view:v,face,octant},next);}
   const old=p._petDirection||{view:'side',face:p.dir},steps=[];
   const add=(key,rev,dir)=>{if(p.asset.seq[key])for(let i=0;i<5;i++)steps.push({name:key+'-'+(rev?5-i:i+1),dir});};
   if(old.view!==view||old.face!==face){
@@ -382,7 +387,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  function pickPet(p){
   if(p.picked){release(p);return;}
   p.picked=true;p.follow={phase:'picked',cooldown:1.8,repath:0};p.mission='follow';p.happyT=0;p.awake=0;
-  const begin=()=>{halt(p,'picked',1.05);turnTo(p,directions(p)?'f':'side',p.dir);};
+  const begin=()=>{halt(p,'picked',p.asset.atlas?1e9:1.05);turnTo(p,p.asset.atlas?'toward':directions(p)?'f':'side',p.dir);};
   if(p.j)p.j.next=()=>{if(p.picked)begin();};else begin();
   purr();
  }
@@ -397,12 +402,12 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  function finishHunt(p){
   if(!p.picked||!p.follow)return;
   p.follow.phase='wiggle';halt(p,'wiggle',.6+(p.id%3)*.25);p.follow.wiggleFor=p.dur;
-  const q=p.follow.prey,dir=LW.petJumpDirection({dir:p.dir},q[0]-p.x,q[1]-p.y);p.follow.view=dir.view;turnTo(p,dir.view,dir.face);
+  const q=p.follow.prey,dir=p.asset.atlas?LW.cats.direction(q[0]-p.x,q[1]-p.y,S.slope||.55,p._catDir):LW.petJumpDirection({dir:p.dir},q[0]-p.x,q[1]-p.y);p.follow.view=dir.view;turnTo(p,dir.view,dir.face);
  }
  function beginHunt(p,q){
   const f=p.follow,range=bodyLength(p)*.72,slope=S.slope||.55;
-  // Choose a takeoff on one of the six drawn rays. Steep approaches walk a zigzag first.
-  const dirs=[[1,0],[-1,0],...[1,-1].flatMap(x=>[1,-1].map(y=>[x/Math.hypot(1,slope),y*slope/Math.hypot(1,slope)]))];
+  // Choose a takeoff on a drawn ray (eight for cats, six for legacy directional pets).
+  const dirs=[[1,0],[-1,0],...(p.asset.atlas?[[0,1],[0,-1]]:[]),...[1,-1].flatMap(x=>[1,-1].map(y=>[x/Math.hypot(1,slope),y*slope/Math.hypot(1,slope)]))];
   const candidates=dirs.map(([x,y])=>[q[0]-x*range,q[1]-y*range]).filter(a=>allowed(p,...a)&&clearRest(p,...a)&&free(p,...a)&&validPath(p,[a,q]));
   candidates.sort((a,b)=>Math.hypot(a[0]-p.x,a[1]-p.y)-Math.hypot(b[0]-p.x,b[1]-p.y));
   for(const a of candidates){
@@ -417,7 +422,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(p.j||p.turn)return;
   if(!cursor.inside){if(p.state!=='followWait')halt(p);f.phase='wait';return;}
   if(f.phase==='picked'){
-   if(p.state==='picked'&&p.t<1.05)return;
+   if(p.state==='picked'&&(p.t<1.05||p.asset.atlas&&(p._catTransition||(p._catActionTime||0)<.8)))return;
    f.phase='follow';halt(p);f.repath=0;
   }
   const q=project(p,cursor.x,cursor.y);if(!q){halt(p);return;}f.target=q;
@@ -454,6 +459,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  function pose(p,dt){
   const s=p.asset;if(!prep(s))return;
   const moving=p.state==='move',st=p.state;
+  if(s.atlas){LW.cats.pose(p,dt);p.k=p.j?lerp(p.j.k0,p.j.k1,st==='jumpPrep'?0:st==='land'?1:clamp(p.t/p.j.dur)):size(p);p.light=S.light?S.light(p.x,p.y):[1-(S.night||0)*.45,1-(S.night||0)*.42,1-(S.night||0)*.32];p.head=p.headW=[p.x+p.dir*25*p.k,p.y-p.z-p.spec.height*p.k*.75];return;}
   const gf=moving||st==='stand'?LW.petGait(p,s.cyc,p.gd,p.spec.height,p.gait,{dt,vx:p.groundVX,vy:p.groundVY}):null;
   if(moving&&p._petDirection)p.dir=p._petDirection.face;
   let name=gf||'walk1';
@@ -484,7 +490,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(p.away)return;
   if(p.turn){
    p.groundVX=p.groundVY=0;p.turn.t+=dt;
-   if(p.turn.t>=p.turn.steps.length*.065){const turn=p.turn;p.turn=null;p.dir=turn.face;p._petDirection={view:turn.view,face:turn.face};LW.petJumpLand(p);if(turn.next)turn.next();}
+   if(p.turn.t>=p.turn.steps.length*.065){const turn=p.turn;p.turn=null;p.dir=turn.face;p._petDirection={view:turn.view,face:turn.face};if(p.asset.atlas){p._catDir={view:turn.view,face:turn.face,octant:turn.octant};if(p._catMotion)p._catMotion.phase=0;}LW.petJumpLand(p);if(turn.next)turn.next();}
    pose(p,dt);return;
   }
   p.t+=dt;p.awake+=dt;p.happyT=Math.max(0,p.happyT-dt);p.groundVX=p.groundVY=0;
@@ -503,12 +509,14 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const path=p.path,to=path.pts[path.i];
    if(!to){const next=p.next;p.path=null;p.goal=null;state(p,'stand',.4);if(next)next(p);else think(p);pose(p,dt);return;}
    const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy);
-   if(p.picked&&dist>.01){const view=Math.abs(dy)<.01?'side':dy>0?'f':'b',face=Math.sign(dx)||p.dir;
+   if(p.asset.atlas&&dist>.01){const dir=LW.cats.direction(dx,dy,S.slope||.55,p._catDir);if(LW.cats.startTurn(p,dir)){pose(p,dt);return;}}
+   if(!p.asset.atlas&&p.picked&&dist>.01){const view=Math.abs(dy)<.01?'side':dy>0?'f':'b',face=Math.sign(dx)||p.dir;
     if(turnTo(p,view,face)){pose(p,dt);return;}}
    const speed=(p.gait==='stalk'?19:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
-   const d=Math.min(dist,speed*dt),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
+   const floorDistance=p.asset.atlas?Math.hypot(dx,dy/(S.slope||.55)):dist;
+   const d=Math.min(dist,speed*dt*(floorDistance?dist/floorDistance:1)),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
    if(free(p,x,y,p.surf,false)){
-    p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=d/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
+    p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=(p.asset.atlas?Math.hypot(x-p.x,(y-p.y)/(S.slope||.55)):d)/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
     if(dist<=d+.01){path.i++;LW.petJumpLand(p);}
    }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;state(p,'sit',1);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}
   }else{
@@ -523,7 +531,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   S=stage();items.forEach((p,i)=>{
    const h=(S.homes||[])[i]||{x:S.bounds[0]+(i+1)*150,y:S.bounds[3]-15};
    p.surf=h.surf||'floor';p.x=h.x;p.y=h.y??ledge(p.surf)?.y;p.z=0;p.k=size(p);p.dir=h.dir||1;p.j=null;p.goal=null;p.path=null;p.sequence=null;
-   p.picked=false;p.follow=null;p.turn=null;p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;
+   p.picked=false;p.follow=null;p.turn=null;p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;p._catDir=null;p._catRest=null;p._catTransition=null;p._catMotion=null;
   });
   items.forEach(p=>{if(p.surf==='floor'&&!p.away&&!free(p,p.x,p.y)){const q=nearest(p,p.x,p.y);if(q)[p.x,p.y]=q;}});
  }
@@ -552,11 +560,11 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   const f=LW.poseFrame(p.prev,p.spP,p.poseT/.24),key=s.img[f.pose]?f.pose:p.spP,im=s.img[key];if(!im)return null;
   const sc=p.k*s.unit*LW.petPoseScale(p.kind,key,s.img.walk1,im),anchor=(im.petFa0??(key==='walk1'||key==='walk2'?.555:.5))*im.width;
   const foot=im.height-1-(im.petFootPad||0),shift=cycle(key)&&p._gait?.shift||[0,0],sh=shift.map(v=>v*p.k);
-  const breathing=['sleep','loaf','shelter','sit'].includes(p.state)?1+.012*Math.sin(T*1.7+p.id*1.3):1;
+  const breathing=!s.atlas&&['sleep','loaf','shelter','sit'].includes(p.state)?1+.012*Math.sin(T*1.7+p.id*1.3):1;
   const sx=f.sx,sy=f.sy*breathing;
   let contact=sprContact(im);
   if(p.state==='jump'){
-   const a=sprContact(s.img[p.j.key+'-1']),b=sprContact(s.img[p.j.key+'-5']),u=clamp(p.t/p.j.dur);
+   const a=sprContact(s.img[p.j.key+'-1']),b=sprContact(s.img[p.j.key+(s.atlas?'-8':'-5')]),u=clamp(p.t/p.j.dur);
    contact={x:lerp(a.x,b.x,u),y:foot,span:lerp(a.span,b.span,u)};
   }
   const width=Math.max(12*p.k,contact.span*sc*.6)*(1-clamp(p.z/400,0,.35));

@@ -1,14 +1,14 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-function rig(roster=['orange','golden'],extra={},scene='cats'){
+function rig(roster=['orange','golden'],extra={},scene='cats',atlas=false){
  const listeners={},LW={settings:{pets:true},virtual:true,pointer:{x:0,y:0,inside:false},focused:true,on:(k,f)=>(listeners[k]??=[]).push(f)};
  class Image{set src(v){this.srcName=v}}
  const context={LW,Image,performance:{now:()=>0},document:{createElement:()=>({width:200,height:100,getContext:()=>({drawImage(){},fillRect(){},createRadialGradient(){return {addColorStop(){}}}})})}};
- for(const file of ['pet-motion','pets'])vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/'+file+'.js'),'utf8'),context);
+ for(const file of (atlas?['pet-motion','cat-atlas','cat-motion','pets']:['pet-motion','pets']))vm.runInNewContext(fs.readFileSync(require.resolve('../scenes/'+file+'.js'),'utf8'),context);
  LW.petCycleMeasure=im=>({top:0,bot:im.height-1,cx:im.width*.5});LW.petCyclePrep=()=>true;
  const S={floor:[[[0,0],[2000,0],[2000,1000],[0,1000]]],bounds:[0,0,2000,1000],scale:[[0,1],[1000,1]],homes:[{x:300,y:600},{x:950,y:600},{x:1400,y:600}],exits:[{x:-300,y:600}],...extra};
  const pets=LW.pets.create({scene,roster,stage:()=>S});pets.initialized=true;
  const im=()=>({width:200,height:100,petK:1,petFa0:.5,petContact:{x:100,y:99,span:100}});
- for(const p of pets.items){const a=p.asset;a.img={walk1:im(),sit:im(),sleep:im(),lie:im()};a.unit=p.spec.height/100;a.seq=Object.fromEntries(['jump','jump-f','jump-b','pounce','pounce-f','pounce-b','hunt','hunt-f','hunt-b','perk','turn','turn-f','turn-b'].map(k=>[k,true]));a.cyc={img:{},cyc:{walk:true,'walk-f':true,'walk-b':true},has:q=>!!a.cyc.cyc[q]};
+ for(const p of pets.items){const a=p.asset; if(a.atlas){a.img={};for(const [key,clip] of Object.entries(a.clips))clip.frames.forEach(([x,y,w,h,ax,ay],i)=>{a.img[key+'-'+(i+1)]={...im(),width:w,height:h,petFa0:ax/w,petFootPad:h-1-ay};});a.img.walk1=a.img['walk-side-1'];a.ready=true;a.cyc.has=q=>['walk','walk-f','walk-b'].includes(q);continue;}a.img={walk1:im(),sit:im(),sleep:im(),lie:im()};a.unit=p.spec.height/100;a.seq=Object.fromEntries(['jump','jump-f','jump-b','pounce','pounce-f','pounce-b','hunt','hunt-f','hunt-b','perk','turn','turn-f','turn-b'].map(k=>[k,true]));a.cyc={img:{},cyc:{walk:true,'walk-f':true,'walk-b':true},has:q=>!!a.cyc.cyc[q]};
  for(const key of ['walk','walk-f','walk-b','run','run-f','run-b','stalk','stalk-f','stalk-b']){a.cyc.cyc[key]=true;for(let i=1;i<=(key.startsWith('walk')?8:6);i++)a.img[key+'-'+i]=im();}
  for(const key of Object.keys(a.seq))for(let i=1;i<=5;i++)a.img[key+'-'+i]=im();a.ready=true;}
  pets.reset();pets.step(.01,0);return {LW,pets,S,context,emit:(k,...args)=>(listeners[k]||[]).forEach(f=>f(...args)),tick:(n=1)=>{for(let i=0;i<n;i++)pets.step(1/30,i/30)}};
@@ -151,4 +151,67 @@ test('Play screen occluder maps through mirrored canvas transforms and blocks ne
  for(let i=0;i<600;i++){tick();assert.ok(!LW.pets.geometry.overlap(pets.box(pets.items[0]),[600,300,1100,900],0));}
  mirrored=true;pets.draw(g);assert.deepEqual(JSON.parse(JSON.stringify(pets.panelBoxes())),[[900,300,1400,900]]);
  LW.pets.setScreenOccluder('play',null);assert.equal(pets.panelBoxes().length,0);
+});
+
+
+test('atlas cats travel on all eight projected headings including direct toward and away',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];
+ for(const [dx,dy,view,face] of [[200,0,'side',1],[160,88,'near',1],[0,160,'toward',1],[-160,88,'near',-1],[-200,0,'side',-1],[-160,-88,'far',-1],[0,-160,'away',1],[160,-88,'far',1]]){
+  Object.assign(p,{j:null,turn:null,sequence:null,_catTransition:null,_catRest:'stand',_catDir:null,_catMotion:null});
+  r.pets.forceWalk(0,700+dx,500+dy,{from:[700,500]});let travel=0;
+  for(let i=0;i<360&&p.state==='move';i++){r.tick();if(Math.hypot(p.groundVX,p.groundVY)>.01){travel++;assert.equal(p._catDir.view,view);assert.equal(p.dir,face);assert.match(p.spP,/^walk-/);}}
+  assert.ok(travel>0);assert.ok(Math.hypot(p.x-700-dx,p.y-500-dy)<.1);
+ }
+});
+test('atlas sleep/loaf transitions hold feet until awake and preserve front-facing sit',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];r.pets.state(p,'sleep',100);r.tick(90);assert.equal(p.spP,'rest-8');
+ r.pets.walk(p,600,600);const x=p.x;r.tick(10);assert.equal(p.x,x);r.tick(100);assert.ok(p.x>x);r.pets.state(p,'sit',100);r.tick(40);assert.equal(p.spP,'sit-8');assert.equal(p.dir,1);
+ r.pets.state(p,'loaf',100);r.tick(30);assert.equal(p.spP,'rest-5');r.pets.state(p,'sleep',100);r.tick();assert.equal(p.spP,'rest-5');r.tick(30);assert.equal(p.spP,'rest-8');
+});
+test('atlas jumps use five complete views and mirrored facings with no legacy fallback',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];
+ for(const [dx,dy,view] of [[80,0,'side'],[70,38.5,'near'],[0,70,'toward'],[0,-70,'away'],[70,-38.5,'far']]){
+  p.j=null;p.x=600;p.y=600;p.surf='floor';p._catTransition=null;p.sequence=null;
+  assert.ok(r.pets.jump(p,600+dx,600+dy,'floor',q=>r.pets.state(q,'stand',100)));
+  assert.equal(p.j.key,'jump-'+view);const poses=new Set();for(let i=0;i<50;i++){r.tick();poses.add(p.spP);}
+  assert.ok([...poses].some(x=>x==='jump-'+view+'-4'));assert.ok([...poses].some(x=>x==='jump-'+view+'-8'));assert.equal(p.j,null);
+ }
+});
+test('atlas loader shares image frames between scene instances without sharing pet phase',()=>{
+ const r=rig(['orange','orange'],{},'cats',true),[a,b]=r.pets.items;assert.equal(a.asset,b.asset);assert.notEqual(a.tint,b.tint);
+ r.pets.forceWalk(0,600,600);r.tick(60);assert.notEqual(a._catMotion,b._catMotion);
+});
+
+test('atlas follow keeps picked perk, stalk, wiggle and precise directional pounce for every coat',()=>{
+ for(const coat of ['orange','black','grey','calico','siamese']){
+  const r=rig([coat],{},'cats',true),p=r.pets.items[0];assert.ok(p.asset.atlas,coat+' must use atlas');point(r,455,600);tap(r,p);
+  const seen=new Set();for(let i=0;i<1000&&!p.lastPounce;i++){r.tick();seen.add(p.follow?.phase);}
+  assert.ok(p.lastPounce,coat+': '+JSON.stringify({state:p.state,follow:p.follow,x:p.x}));assert.ok(seen.has('stalk')&&seen.has('wiggle')&&seen.has('pounce'));assert.ok(Math.hypot(p.x-455,p.y-600)<.01);
+  point(r,455,600,false);r.emit('leave');const x=p.x;r.tick(40);assert.equal(p.x,x);r.emit('pause');assert.equal(p.picked,false);
+ }
+});
+test('atlas cats leave/return, take shelter and eat through the public API',()=>{
+ const r=rig(['orange'],{spots:[{id:'shelter',x:500,y:600,kind:'shelter'},{id:'food',x:800,y:600,kind:'food'}],supplies:{food:1,water:1}},'cats',true),p=r.pets.items[0];
+ r.LW.settings.pets=false;r.tick(1200);assert.ok(p.away);r.LW.settings.pets=true;r.tick(400);assert.ok(!p.away);
+ r.S.wet=true;r.emit('env');let sheltered=false;for(let i=0;i<800;i++){r.tick();sheltered||=['shelter','sleep'].includes(p.state);}assert.ok(sheltered);
+ r.S.wet=false;p.hunger=.9;r.emit('action','feed');r.tick(800);assert.ok(r.S.supplies.food<1);assert.ok(p.hunger<.9);
+});
+test('atlas paths retain per-step ledge links, landing scale, occlusion and Pets off during flight',()=>{
+ const r=rig(['orange'],{ledges:[{id:'bench',x0:500,x1:900,y:300,depth:700,scale:1.2}],links:[[{surf:'floor',x:500,y:600},{surf:'bench',x:600}]],scale:[[0,.8],[1000,1.4]]},'cats',true),p=r.pets.items[0];
+ assert.ok(r.pets.trip(p,{surf:'bench',x:700},'sit'));let seen=false;
+ for(let i=0;i<700;i++){r.tick();if(p.j){seen=true;assert.equal(p.j.x0,500);assert.equal(p.j.x1,600);assert.ok(p.k>=1.16&&p.k<=1.21);}}
+ assert.ok(seen);assert.equal(p.surf,'bench');assert.equal(r.pets.frame(p).depth,700);
+ r.LW.settings.pets=false;r.tick(1800);assert.ok(p.away);
+});
+
+test('atlas wake-up and picked transitions play complete stretch/perk sheets before following',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];r.pets.state(p,'sleep',100);r.tick(70);
+ r.pets.state(p,'groom',100);let seen=new Set();for(let i=0;i<80;i++){r.tick();seen.add(p.spP);}for(let i=1;i<=8;i++)assert.ok(seen.has('stretch-'+i),'stretch '+i);
+ r.pets.forceWalk(0,1300,600);r.tick(90);point(r,700,600);tap(r,p);seen=new Set();for(let i=0;i<120;i++){r.tick();seen.add(p.spP);}for(let i=1;i<=8;i++)assert.ok(seen.has('perk-'+i),'perk '+i);
+});
+test('atlas running contact frames share the ground instead of inheriting source sheet row drift',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];for(const [key,clip] of Object.entries(p.asset.clips))if(key.startsWith('run-')){
+  for(const i of [0,3,4,7])assert.equal(clip.frames[i][5],clip.frames[i][3]-1,key+' contact '+i);
+  for(const i of [1,2,5,6])assert.ok(clip.frames[i][5]>clip.frames[i][3]-1,key+' suspension '+i);
+ }
 });

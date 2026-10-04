@@ -118,8 +118,8 @@ function create(api) {
   const s=b.s;
   if(api.skin()==='indian')actor(0,s.wait,s.feet,.29,Math.floor(clock*.7)%6);
   actor(2,s.vendor,s.feet,.29,[0,0,1,2,3,4,5,5,4,1][Math.floor(clock*1.2)%10]);
-  // A single traversal while dwelling; no looping teleport or collision with the rooted vendor.
-  const elapsed=calls.phase==='approach'?0:calls.phase==='dwell'?calls.age:calls.dwell;
+  // A single traversal through dwell/departure; no looping teleport or collision with the rooted vendor.
+  const elapsed=calls.phase==='approach'?0:calls.phase==='dwell'?calls.age:calls.dwell+calls.age;
   const walkX=-.10+elapsed*(.11/3);
   if(walkX>.02&&walkX<.98)actor(1,walkX,s.walkFeet,.29,Math.floor(elapsed*3.8)%6);
   if(E.day>.25&&E.snow<.2)actor(3,.59,s.feet+.003,.070,[0,0,1,2,3,4,5,0][Math.floor(clock*1.6)%8]);

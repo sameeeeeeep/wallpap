@@ -695,11 +695,15 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             guard let self else { return }
             let now = NSScreen.screens
             if now.map(\.displayID) == self.windows.map(\.screenID) {
+                var resized = false
                 for (w, screen) in zip(self.windows, now) where w.frame != screen.frame {
                     w.setFrame(screen.frame, display: true)
                     w.web.frame = NSRect(origin: .zero, size: screen.frame.size)
+                    resized = true
                 }
-                self.pushLayout(force: true)
+                // Nothing moved (the usual case: an EDR/brightness change): leave the scene alone.
+                // A layout push makes scenes re-place their actors, e.g. cats teleport home.
+                if resized { self.pushLayout(force: true) }
             } else { self.rebuildWindows() }
         }
         screensWork = work

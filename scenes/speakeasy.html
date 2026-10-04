@@ -13,6 +13,8 @@
 <canvas id="c"></canvas>
 <script src="astronomy.js"></script>
 <script src="lw.js"></script>
+<script src="music.js"></script>
+<script src="art/speakeasy/robots/rig.js"></script>
 <script src="pet-motion.js"></script>
 <script src="pets.js"></script>
 <script>
@@ -20,13 +22,19 @@
 (() => {
 // =====================================================================
 //  Speakeasy — a hidden 1920s jazz bar, late at night, as a live wallpaper.
-//  BEAT-SYNC ONLY: there is no player and no track UI here. A self-playing
-//  upright player piano on the stage plays along with whatever the user is
-//  listening to — its paper roll scrolls, keys go down across the keyboard
-//  with the mids/highs, the low keys and the sustain pedal with the bass —
-//  and the stage spotlight, footlights and the poster's bulbs pulse gently
-//  with the beat. Paused/silent → the piano rests and the lights hold steady
-//  and warm. The jukebox is silent decor. A black cat roams piano lid ↔
+//  BEAT-SYNC ONLY: there is no player and no track UI here. The house band —
+//  three art-deco automata (a black-lacquer pianist seen from behind at the
+//  upright, a copper drummer behind the kit, a chrome bassist behind the double
+//  bass; a chrome singer rises on a stage lift for some songs) — plays along with
+//  whatever the user is listening to, driven by music.js (LW.mx: beat clock,
+//  kicks, chords, sections): strokes land on the beat, the pianist's hands go to
+//  the chord and those keys go down, the bassist walks the roots, the drummer
+//  brushes quiet passages, swells the ride through a build and crashes the drop.
+//  Song start → heads turn to the drummer, sticks count it in; stop → a final
+//  crash and a slow settle; between songs they idle and breathe. Without the
+//  robot art (?noart=1) the old self-playing piano plays instead. The stage
+//  spotlight, footlights and the poster's bulbs pulse gently with the beat.
+//  Paused/silent → the lights hold steady and warm. The jukebox is silent decor. A black cat roams piano lid ↔
 //  stage edge ↔ booths; a golden pup naps by the booths and the stage.
 //  Pets leave (and come back) with LW.settings.pets.
 //
@@ -53,6 +61,9 @@
 //    piano.webp      1030×946 the player piano, straight-on, on transparency
 //                   (drawn at x 900–1148, y 465–693 over the painted one; key,
 //                   paper-roll and pedal geometry: PIANO_ART below)
+//    robots/<bot>.webp + robots/rig.js  the band's cut-out parts (built by
+//                   art-src/speakeasy/robots/build.py); robots/occluder.png masks
+//                   the painted kit/bass/mic that stand in front of them
 //    street-night.jpg / street-day.jpg  ≈2.4:1 painted view through the high
 //                   window (crossfaded by daylight; weather drawn live on top)
 //    Live parts drawn on top (keep these areas simple in a painting):
@@ -373,7 +384,8 @@ function buildNav() {
     surfs: {
       floor: { floor: true, kAt: floorK },
       // the lid: the painted brass lamp stands on its left end, so the cat keeps right of it
-      lid: o.pianoArt ? { y: o.piano.top + 1, k: 0.9, x0: 1032, x1: o.piano.lidX1 - 14 } : { y: o.piano.top - 6, k: 0.9, x0: 972, x1: 1104 },
+      // (with the robot pianist seated in front, the cat keeps right of its crest: x0 1050)
+      lid: o.pianoArt ? { y: o.piano.top + 1, k: 0.9, x0: window.SPEAK_RIG ? 1050 : 1032, x1: o.piano.lidX1 - 14 } : { y: o.piano.top - 6, k: 0.9, x0: 972, x1: 1104 },
       stage: { y: o.stage.edge - 4, k: 0.93, x0: 930, x1: 1460 },
       stool: { y: 656, k: 0.92, x0: 1874, x1: 1874 },
       bar: { y: o.bar.top - 8, k: 0.9, x0: 1800, x1: 1900 },
@@ -459,6 +471,7 @@ function bake(cross) {
     fade = 0;
   } else { prevRoomCv = prevOutCv = prevFgCv = null; fade = 1; }
   bakeRoom(); bakeOutside();
+  if (BAND.ready) { tintBand(); bakeOccluder(); }
   lastBake = nowS(); bakedSnap = envSnap(); bakeMs = Date.now() - tb;
 }
 function bakeRoom() {
@@ -1654,7 +1667,7 @@ function blackNear(i) {
   return best;
 }
 function pianoBeat(s) {
-  if (!pianoPlaying() || !L.keyR) return;
+  if (!pianoPlaying() || !L.keyR || BAND.ready) return;   // the robot pianist plays it now
   const m = LW.music, n = L.keyR.white.length, root = Math.round(n * 0.38), ch = CHORDS[PL.chord % CHORDS.length];
   const hold = 0.16 + 0.24 * s;
   for (const st of ch.slice(0, s > 0.6 ? 4 : 3)) pressKey(root + st, hold);
@@ -1668,7 +1681,7 @@ function pianoBeat(s) {
 }
 function pianoStep(dt) {
   const kr = L.keyR; if (!kr) return;
-  if (pianoPlaying()) {
+  if (pianoPlaying() && !BAND.ready) {
     PL.melT -= dt;
     if (PL.melT <= 0) {
       const m = LW.music, n = kr.white.length, busy = clamp(0.2 + m.mid * 0.9 + m.high * 0.7, 0, 1);
@@ -1688,7 +1701,7 @@ function pianoStep(dt) {
   PL.pedalT -= dt;
   PL.pedal = approach(PL.pedal, PL.pedalT > 0 ? 1 : 0, PL.pedalT > 0 ? 22 : 9, dt);
   // the roll: speed follows the music, eases to a stop when it pauses
-  PL.rollV = approach(PL.rollV, pianoPlaying() ? 6 + 5 * LW.music.level : 0, 2.2, dt);
+  PL.rollV = approach(PL.rollV, pianoPlaying() && !BAND.ready ? 6 + 5 * LW.music.level : 0, 2.2, dt);
   PL.roll += PL.rollV * dt;
 }
 // small integer hash for the roll's perforation pattern (deterministic per row/column)
@@ -1767,14 +1780,625 @@ function drawProceduralKeys(g) {
     for (const b of kr.black) if (b[0] < r[0] + r[2] && b[0] + b[2] > r[0]) { g.fillStyle = '#141010'; g.fillRect(b[0], b[1], b[2], b[3]); }
   }
 }
+// =====================================================================
+//  THE HOUSE BAND — three art-deco automata (brass, chrome, black lacquer) on the piano, the
+//  upright bass and the drums, and on some songs a chrome singer who rises through a stage lift.
+//  Each robot is a cut-out rig: rigid painted parts (art/speakeasy/robots/<bot>.webp, cut by
+//  art-src/speakeasy/robots/build.py; rig.js holds the part frames) articulated every frame by
+//  FK + two-bone IK. Everything is driven by the music layer (music.js → LW.mx): the beat clock
+//  places every stroke ON the beat (hands lift in between and come down exactly on time), kicks
+//  thump the bass drum, chords move the pianist's hands to that chord's keys (and those keys go
+//  down), roots walk the bassist's left hand along the neck, sections change the drummer's
+//  pattern (brushes when it's quiet, a cymbal swell through a build, a crash on the drop).
+//  Between songs they idle and breathe; a new song gets a count-in (sticks clicked overhead,
+//  heads turned to the drummer); a stop gets a final crash and a slow settle.
+//  No art → the old self-playing piano. All motion is eased springs (slight overshoot).
+// =====================================================================
+const RIG = window.SPEAK_RIG || null;
+const MX2 = {
+  mul: (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5]],
+  T: (x, y) => [1, 0, 0, 1, x, y],
+  R: (a) => { const c = Math.cos(a), s = Math.sin(a); return [c, s, -s, c, 0, 0]; },
+  S: (x, y = x) => [x, 0, 0, y, 0, 0],
+  inv: (A) => { const d = A[0] * A[3] - A[1] * A[2]; return [A[3] / d, -A[1] / d, -A[2] / d, A[0] / d, (A[2] * A[5] - A[3] * A[4]) / d, (A[1] * A[4] - A[0] * A[5]) / d]; },
+  ap: (A, x, y) => [A[0] * x + A[2] * y + A[4], A[1] * x + A[3] * y + A[5]],
+  ang: (A) => Math.atan2(A[1], A[0]),
+};
+// where each robot stands (world units; see the header for the stage geometry)
+const BOT_AT = {
+  pianist: { x: 1010, y: 703 },   // stool feet, in front of the keyboard (seen from behind)
+  drummer: { x: 1300, y: 604 },   // hips on the throne behind the kit
+  bassist: { x: 1440, y: 691 },   // feet, behind the double bass
+  singer: { x: 1180, y: 694 },    // feet, behind the microphone (rises through a stage lift)
+};
+// parts drawn in front of the painted kit/bass/mic (the rest stand behind them)
+const FRONT = { drummer: new Set(['upL', 'foL', 'handL', 'upR', 'foR', 'handR']), bassist: new Set(['upL', 'foL', 'upR', 'foR']), singer: new Set(['upL', 'foL', 'upR', 'foR']) };
+// drum contact points (world): stick tip on the head/bow, stick angle at contact (rad, canvas: 0 = right, +π/2 = down)
+const DR = {
+  // fs: how foreshortened the stick looks there (it points toward us over the near drums)
+  hat: { x: 1222, y: 557, a: 2.45, fs: 0.7, cym: 'hat' }, snare: { x: 1238, y: 600, a: 2.05, fs: 0.8 }, crash: { x: 1252, y: 513, a: 2.75, fs: 0.9, cym: 'crash' },
+  ride: { x: 1378, y: 548, a: 0.55, fs: 0.85, cym: 'ride' }, floor: { x: 1362, y: 609, a: 1.2, fs: 0.8 }, tom: { x: 1300, y: 561, a: 1.75, fs: 0.6 },
+  // count-in: sticks crossed above the head
+  clickL: { x: 1297, y: 448, a: -1.2 }, clickR: { x: 1303, y: 448, a: -1.94 },
+  restL: { x: 1243, y: 603, a: 2.3 }, restR: { x: 1352, y: 611, a: 0.95 },
+};
+const BAND = { ready: false, bots: {}, occ: null, occCv: newCanvas(1, 1), occAt: null, mode: 'idle', wasPlaying: false,
+  modeT: 0, countN: 0, lineup: { singer: false }, singerK: 0, idleT: 0, look: 0, lookT: 4, strings: [0, 0, 0, 0], stringPh: [0, 0, 0, 0],
+  kickThump: 0, swing: 0.62, lastHits: {}, crashAt: -1, turn: 0, turnT: 0, twirl: -1, twirlT: 9, flourish: {}, gliss: -1, glissK: -1 };
+function loadBand() {
+  if (!RIG) return;
+  let pending = 0;
+  for (const name of Object.keys(RIG)) {
+    pending++;
+    const im = new Image();
+    im.onload = () => {
+      if (!im.naturalWidth) return;
+      const rig = RIG[name], parts = {};
+      for (const [pn, p] of Object.entries(rig.parts)) {
+        const c = newCanvas(p.w, p.h); c.getContext('2d').drawImage(im, p.x, p.y, p.w, p.h, 0, 0, p.w, p.h);
+        parts[pn] = { ...p, img: c, tc: c };
+      }
+      BAND.bots[name] = makeBot(name, rig, parts);
+      if (--pending === 0 && BAND.occ) bandReady();
+    };
+    im.onerror = () => {};
+    im.src = `art/speakeasy/robots/${name}.webp`;
+  }
+  const oc = new Image();
+  oc.onload = () => { BAND.occ = oc; if (pending === 0) bandReady(); };
+  oc.src = 'art/speakeasy/robots/occluder.png';
+}
+function bandReady() { BAND.ready = Object.keys(BAND.bots).length >= 3; if (L) { tintBand(); bakeOccluder(); } }
+function makeBot(name, rig, parts) {
+  const at = BOT_AT[name], pose = {};
+  for (const pn of Object.keys(parts)) pose[pn] = { r: 0, len: 1, dx: 0, dy: 0, sx: 1, sy: 1, a: 1 };
+  const kids = {};
+  for (const [pn, p] of Object.entries(parts)) if (p.parent) (kids[p.parent] = kids[p.parent] || []).push(pn);
+  // rest direction of each limb part: toward its (first) child's pivot, or its tip
+  const rest = {};
+  for (const [pn, p] of Object.entries(parts)) {
+    const c = (kids[pn] || []).find((k) => !parts[k].attach), tip = rig.tips && rig.tips[pn];
+    const t = c ? [parts[c].px, parts[c].py] : tip;
+    rest[pn] = t ? Math.atan2(t[1] - p.py, t[0] - p.px) : 0;
+  }
+  return { name, rig, parts, pose, kids, rest, x: at.x, y: at.y, ox: 0, oy: 0, rot: 0, M: {}, Mc: {}, k: rig.k,
+    // springs for the IK targets (world) and look/turn values
+    sp: {}, tint: [1, 1, 1], eye: 0, hidden: false };
+}
+// a damped spring toward a target (slight overshoot = weight), per key
+function spring(bot, key, tx, ty, dt, w = 16, z = 0.72) {
+  let s = bot.sp[key];
+  if (!s) s = bot.sp[key] = { x: tx, y: ty, vx: 0, vy: 0 };
+  const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    s.vx += (w * w * (tx - s.x) - 2 * z * w * s.vx) * h; s.vy += (w * w * (ty - s.y) - 2 * z * w * s.vy) * h;
+    s.x += s.vx * h; s.y += s.vy * h;
+  }
+  return s;
+}
+function spring1(bot, key, t, dt, w = 8, z = 0.7) { return spring(bot, key, t, 0, dt, w, z).x; }
+// ---- forward kinematics ----
+function botRoot(bot) { return MX2.mul(MX2.mul(MX2.T(bot.x + bot.ox, bot.y + bot.oy), MX2.mul(MX2.R(bot.rot), MX2.S(bot.k))), MX2.T(-bot.rig.anchor[0], -bot.rig.anchor[1])); }
+function botFK(bot) {
+  const M = bot.M, Mc = bot.Mc, P = bot.parts;
+  const root = botRoot(bot);
+  const solve = (pn) => {
+    if (M[pn]) return;
+    const p = P[pn], q = bot.pose[pn];
+    let base = root;
+    if (p.parent) { solve(p.parent); base = Mc[p.parent]; }
+    const pv = p.attach || [p.px, p.py];
+    let m = MX2.mul(base, MX2.T(pv[0] + q.dx, pv[1] + q.dy));
+    m = MX2.mul(m, MX2.R(q.r));
+    const noScale = MX2.mul(m, MX2.T(-pv[0], -pv[1]));
+    if (p.s !== 1) m = MX2.mul(m, MX2.S(p.s));
+    if (q.len !== 1 || q.sx !== 1 || q.sy !== 1) {   // axial foreshortening / squash in the rest direction
+      const ra = bot.rest[pn];
+      m = MX2.mul(m, MX2.mul(MX2.mul(MX2.R(ra), MX2.S(q.len * q.sx, q.sy)), MX2.R(-ra)));
+    }
+    M[pn] = MX2.mul(m, MX2.T(-p.px, -p.py));
+    // children follow the shortened bone: their pivots slide in along the rest direction
+    if (q.len !== 1) {
+      const ra = bot.rest[pn], ux = Math.cos(ra), uy = Math.sin(ra);
+      const c = (bot.kids[pn] || [])[0], cp = c ? P[c] : null;
+      const d = cp ? ((cp.px - p.px) * ux + (cp.py - p.py) * uy) * (q.len - 1) : 0;
+      Mc[pn] = MX2.mul(noScale, MX2.T(ux * d, uy * d));
+    } else Mc[pn] = noScale;
+  };
+  for (const k in M) delete M[k];
+  for (const k in Mc) delete Mc[k];
+  for (const pn of Object.keys(P)) solve(pn);
+}
+// two-bone IK: put `end` (a point in the source frame, carried by `fo`) on the world target.
+// bend ±1 picks the elbow side; shorten lets the forearm foreshorten (min factor) instead of folding.
+function ik2(bot, up, fo, end, tx, ty, bend, shorten = 1) {
+  const P = bot.parts, pu = P[up], pf = P[fo], par = pu.parent;
+  const Mp = bot.Mc[par];
+  const [lx, ly] = MX2.ap(MX2.inv(Mp), tx, ty);
+  const Sx = pu.px, Sy = pu.py, Ex = pf.px, Ey = pf.py;
+  const l1 = Math.hypot(Ex - Sx, Ey - Sy), l2 = Math.hypot(end[0] - Ex, end[1] - Ey);
+  let d = Math.hypot(lx - Sx, ly - Sy);
+  let q = 1;
+  if (shorten < 1) q = clamp(d / (0.9 * (l1 + l2)) * 1.05, shorten, 1);
+  const L2 = l2 * q;
+  d = clamp(d, Math.abs(l1 - L2) + 0.5, l1 + L2 - 0.5);
+  const base = Math.atan2(ly - Sy, lx - Sx);
+  const a1 = Math.acos(clamp((l1 * l1 + d * d - L2 * L2) / (2 * l1 * d), -1, 1));
+  const abs1 = base + bend * a1;
+  const ex = Sx + l1 * Math.cos(abs1), ey = Sy + l1 * Math.sin(abs1);
+  const abs2 = Math.atan2(ly - ey, lx - ex);
+  const r1 = abs1 - Math.atan2(Ey - Sy, Ex - Sx);
+  const r2 = abs2 - Math.atan2(end[1] - Ey, end[0] - Ex) - r1;
+  bot.pose[up].r = r1; bot.pose[fo].r = r2; bot.pose[fo].len = q;
+}
+// rotation that points a part's rest direction at world angle `a` (given its parent's world frame)
+function aimPart(bot, pn, a) {
+  const p = bot.parts[pn], pa = MX2.ang(bot.Mc[p.parent]);
+  bot.pose[pn].r = wrapA(a - pa - bot.rest[pn]);
+}
+const wrapA = (a) => { while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; };
+function worldOf(bot, pn, x, y) { return MX2.ap(bot.M[pn], x, y); }
+// ---- lighting: each robot's parts are tinted once per bake by the light where it stands ----
+function tintBand() {
+  for (const bot of Object.values(BAND.bots)) {
+    const a = bot.rig.anchor, at = BOT_AT[bot.name];
+    // the painting's stage light is warm and fairly even (the procedural light model is darker over
+    // there than the painted instruments look): a warm stage key per robot, scaled with the room level
+    const lvl = { pianist: 1, drummer: 0.92, bassist: 0.9, singer: 0.95 }[bot.name] * roomLv();
+    const warm = [1.0, 0.86, 0.7].map((v) => v * lvl), top = warm.map((v) => v * 1.06), mid = warm;
+    let minY = 1e9, maxY = -1e9;
+    for (const p of Object.values(bot.parts)) if (p.s === 1) { minY = Math.min(minY, p.oy); maxY = Math.max(maxY, p.oy + p.h / bot.rig.atlasScale); }
+    for (const [pn, p] of Object.entries(bot.parts)) {
+      const c = newCanvas(p.w, p.h), g = c.getContext('2d');
+      g.drawImage(p.img, 0, 0);
+      g.globalCompositeOperation = 'multiply';
+      const col = (lt) => rgba(lt.map((v) => clamp(v, 0.2, 1) * 255));
+      const s = bot.rig.atlasScale * p.s;
+      // vertical light ramp in robot coordinates (top lit by the stage lights, feet in shadow)
+      const y0 = p.s === 1 ? (minY - p.oy) * s : 0, y1 = p.s === 1 ? (maxY - p.oy) * s : p.h;
+      const gr = g.createLinearGradient(0, y0, 0, y1);
+      gr.addColorStop(0, col(top)); gr.addColorStop(0.45, col(mid)); gr.addColorStop(1, col(mid.map((v) => v * 0.62)));
+      g.fillStyle = gr; g.fillRect(0, 0, p.w, p.h);
+      g.globalCompositeOperation = 'destination-in'; g.drawImage(p.img, 0, 0);
+      g.globalCompositeOperation = 'source-over';
+      p.tc = c;
+    }
+    bot.tint = mid;
+  }
+}
+// the painted kit / bass / mic in front of the robots: the baked room through the occluder mask
+function bakeOccluder() {
+  if (!BAND.occ || !roomCv.width) return;
+  const X0 = 1150, Y0 = 330, X1 = 1500, Y1 = 700;
+  const sx = Math.floor(X0 * U + OX), sy = Math.floor(Y0 * U), w = Math.ceil((X1 - X0) * U) + 2, h = Math.ceil((Y1 - Y0) * U) + 2;
+  const c = BAND.occCv; c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(roomCv, -sx, -sy);
+  g.globalCompositeOperation = 'destination-in';
+  g.drawImage(BAND.occ, X0 * U + OX - sx, Y0 * U - sy, (X1 - X0) * U, (Y1 - Y0) * U);
+  g.globalCompositeOperation = 'source-over';
+  BAND.occAt = [sx, sy];
+}
+function drawOccluder(g) {
+  if (!BAND.occAt) return;
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(BAND.occCv, BAND.occAt[0], BAND.occAt[1]); g.restore();
+}
+function drawBot(g, bot, layer) {
+  if (bot.hidden) return;
+  const front = FRONT[bot.name], order = bot.rig.order;
+  for (const pn of order) {
+    const isF = front ? front.has(pn) : false;
+    if ((layer === 'front') !== isF) continue;
+    const p = bot.parts[pn], q = bot.pose[pn];
+    if (q.a <= 0.01 || !bot.M[pn]) continue;
+    const m = MX2.mul(bot.M[pn], MX2.mul(MX2.T(p.ox, p.oy), MX2.S(1 / (bot.rig.atlasScale * p.s))));
+    g.setTransform(U * m[0], U * m[1], U * m[2], U * m[3], U * m[4] + OX, U * m[5]);
+    if (q.a < 1) { g.globalAlpha = q.a; g.drawImage(p.tc, 0, 0); g.globalAlpha = 1; } else g.drawImage(p.tc, 0, 0);
+  }
+  VT(g);
+}
+function drawEyes(g, bot) {
+  if (bot.hidden || !bot.rig.eyes) return;
+  for (const [pn, pts] of Object.entries(bot.rig.eyes)) {
+    if (!bot.M[pn] || bot.pose[pn].a < 0.5) continue;
+    for (const [x, y] of pts) {
+      const [wx, wy] = MX2.ap(bot.M[pn], x, y);
+      const e = clamp(bot.eye, 0, 1.4);
+      drawSprite(g, GLOW_WARM, wx, wy, 5 + 3 * e, 0.22 + 0.28 * e);
+    }
+  }
+}
+function botShadow(g, x, y, rx, a) { drawSpriteE(g, DARK, x, y, rx, rx * 0.16, a, 'source-over'); }
+
+// ---- the performance --------------------------------------------------------------------
+const easeOut = (t) => 1 - (1 - t) * (1 - t) * (1 - t);
+const easeIn = (t) => t * t;
+// a stick/hand stroke between scheduled hits: rebound up, hover, and come down exactly on the next hit
+function strokeH(u) { return u < 0.3 ? easeOut(u / 0.3) : u < 0.68 ? 1 : 1 - easeIn((u - 0.68) / 0.32); }
+// hits = bar positions (beats 0..4), p = current bar position. → {u, tp, tn, prev, next, dur, id}
+function sched(hits, p, bar) {
+  let i = -1;
+  for (let k = 0; k < hits.length; k++) if (hits[k].t <= p) i = k;
+  const prev = i >= 0 ? hits[i] : hits[hits.length - 1], tp = i >= 0 ? prev.t : prev.t - 4;
+  const next = hits[(i + 1) % hits.length], tn = i + 1 < hits.length ? next.t : next.t + 4;
+  return { u: clamp((p - tp) / Math.max(1e-3, tn - tp), 0, 1), prev, next, dur: tn - tp, id: (i >= 0 ? bar : bar - 1) * 64 + (i >= 0 ? i : hits.length - 1) };
+}
+const HT = (t, d, acc = 1) => ({ t, d, acc });
+function grooveFor(sec, en, tension) {
+  const sw = BAND.swing;
+  // R = image-right arm (ride / floor tom), L = image-left arm (snare / hat / crash)
+  if (sec === 'breakdown' || sec === 'intro' || en < 0.16) return { brush: true, R: [HT(0, 'ride', 0.35), HT(2, 'ride', 0.3)], L: null };
+  if (sec === 'build') {
+    const n = tension > 0.66 ? 16 : tension > 0.33 ? 8 : 4;
+    return { R: Array.from({ length: 8 }, (_, i) => HT(i / 2, 'ride', 0.3 + 0.5 * tension)), L: Array.from({ length: n }, (_, i) => HT(i * 4 / n, i % (n / 4) ? 'snare' : 'tom', 0.45 + 0.4 * tension)), swell: true };
+  }
+  if (sec === 'drop') return { R: [HT(0, 'ride', 1), HT(0.5, 'ride', 0.6), HT(1, 'ride', 0.8), HT(1.5, 'ride', 0.6), HT(2, 'floor', 1), HT(2.5, 'ride', 0.6), HT(3, 'ride', 0.8), HT(3.5, 'ride', 0.6)], L: [HT(1, 'snare', 1), HT(3, 'snare', 1), HT(3.5, 'snare', 0.5)] };
+  // groove: the jazz ride ("ding, ding-a ding") + backbeat on the snare
+  return { R: [HT(0, 'ride', 0.8), HT(1, 'ride', 0.7), HT(1 + sw, 'ride', 0.45), HT(2, 'ride', 0.8), HT(3, 'ride', 0.7), HT(3 + sw, 'ride', 0.45)], L: [HT(1, 'snare', 0.8), HT(3, 'snare', 0.85)] };
+}
+function bandStep(dt, T) {
+  if (!BAND.ready || BAND.noStep) return;
+  const mx = LW.mx, B = BAND, playing = !!(mx && mx.playing) && !calm.on;
+  B.modeT += dt; B.idleT += dt;
+  // song start / stop
+  if (playing && !B.wasPlaying) { B.mode = 'countin'; B.modeT = 0; B.countN = 0; pickLineup(); }
+  if (!playing && B.wasPlaying) { B.mode = 'outro'; B.modeT = 0; B.crashAt = T; }
+  if (B.mode === 'countin' && (B.countN >= 4 || B.modeT > 8)) { B.mode = 'play'; B.modeT = 0; }
+  if (B.mode === 'outro' && B.modeT > 4) { B.mode = 'idle'; B.modeT = 0; }
+  B.wasPlaying = playing;
+  B.kickThump = Math.max(0, B.kickThump - dt * 6);
+  for (let i = 0; i < 4; i++) { B.strings[i] *= Math.exp(-dt * 2.2); B.stringPh[i] += dt * (38 + i * 9); }
+  // the singer's lift
+  const singerWanted = B.lineup.singer && (B.mode === 'play' || B.mode === 'countin');
+  B.singerK = approach(B.singerK, singerWanted ? 1 : 0, singerWanted ? 0.55 : 0.7, dt);
+  // the band looks to the drummer on count-in / section changes / the end
+  B.turnT -= dt;
+  const wantTurn = B.mode === 'countin' || (B.mode === 'outro' && B.modeT < 2.5) || B.turnT > 0 ? 1 : 0;
+  B.turn = approach(B.turn, wantTurn, 3.2, dt);
+  const bpm = mx.bpm || 100, p = playing ? (mx.beatIndex % 4) + mx.beatPhase : 0, bar = playing ? Math.floor(mx.beatIndex / 4) : 0;
+  stepDrummer(B.bots.drummer, dt, T, p, bar, bpm);
+  stepPianist(B.bots.pianist, dt, T, p, bar, bpm);
+  stepBassist(B.bots.bassist, dt, T, p, bar, bpm);
+  if (B.bots.singer) stepSinger(B.bots.singer, dt, T, p, bar, bpm);
+}
+const BAND_BOX = { pianist: [982, 436, 1040, 640], drummer: [1262, 432, 1342, 560], bassist: [1404, 398, 1492, 515], singer: [1150, 400, 1212, 690] };
+function bandHit(x, y) {
+  for (const [n, b] of Object.entries(BAND_BOX)) {
+    if (n === 'singer' && (!BAND.bots.singer || BAND.bots.singer.hidden || BAND.singerK < 0.9)) continue;
+    if (x > b[0] && x < b[2] && y > b[1] && y < b[3]) return n;
+  }
+  return null;
+}
+function bandPoke(n) {
+  const B = BAND;
+  if (n === 'drummer') { if (B.mode === 'idle' && B.twirl < 0) B.twirl = 0; else { cym.crashV += 7; B.flourish.crash = 0.5; } }
+  else if (n === 'pianist') { if (B.mode === 'idle' || B.mode === 'outro') B.gliss = 0; else B.turnT = 1.6; }
+  else if (n === 'bassist') { for (let i = 0; i < 4; i++) B.strings[i] = 1; B.turnT = 1.2; sBoof(); }
+  else if (n === 'singer') B.flourish.sing = 1;
+}
+function pickLineup() {
+  const key = LW.mx.trackKey || (music.key || '');
+  BAND.lineup.singer = (hash(key + '|band') % 100) < 38;
+  BAND.swing = 0.6 + (hash(key) % 8) / 100;
+  if (BAND.force) Object.assign(BAND.lineup, BAND.force);   // tests
+}
+const isPlay = () => BAND.mode === 'play';
+// a hit landed: fire its side effects once
+function onceHit(key, id, fn) { if (BAND.lastHits[key] !== id) { BAND.lastHits[key] = id; fn(); } }
+
+function stepDrummer(bot, dt, T, p, bar, bpm) {
+  const B = BAND, mx = LW.mx, q = bot.pose, sec = mx.section, en = mx.energy;
+  // breathing + weight
+  const breathe = Math.sin(T * 1.3) * 0.6;
+  q.torso.dy = breathe * 0.8 - B.kickThump * 3;
+  q.torso.r = spring1(bot, 'lean', 0, dt);
+  q.head.dy = 0; q.head.r = 0;
+  let L = null, R = null;   // {x,y,a} stick tip + angle targets, lift
+  let lift = { L: 0, R: 0 }, brush = false;
+  if (B.mode === 'play') {
+    const gv = grooveFor(sec, en, mx.tension);
+    brush = !!gv.brush;
+    const sR = sched(gv.R, p, bar);
+    R = strokeTarget(sR, 'R');
+    lift.R = strokeH(sR.u) * clamp(sR.dur * 60 / bpm / 0.4, 0.25, 1) * (0.5 + 0.5 * sR.next.acc);
+    onceHit('dR', sR.id, () => hitDrum(sR.prev));
+    if (gv.L) {
+      const sL = sched(gv.L, p, bar);
+      L = strokeTarget(sL, 'L');
+      lift.L = strokeH(sL.u) * clamp(sL.dur * 60 / bpm / 0.4, 0.22, 1) * (0.5 + 0.5 * sL.next.acc);
+      onceHit('dL', sL.id, () => hitDrum(sL.prev));
+    } else {
+      // brushes: the left hand sweeps slow circles on the snare, one turn per beat
+      const ph = (p % 1) * TAU;
+      L = { x: DR.snare.x + Math.cos(ph) * 9, y: DR.snare.y - 1 + Math.sin(ph) * 2.2, a: DR.snare.a + 0.25 };
+      lift.L = 0.05;
+    }
+    if (gv.swell) { cym.rideV += (0.6 + 2.4 * mx.tension) * dt * 6 * Math.sin(T * 40); }
+    // hi-hat foot: the top cymbal closes on 2 and 4
+    const hp = p % 2;
+    cym.hat = brush ? 1 : 0.3 + 0.7 * smooth(Math.abs(hp - 1) * 2.5);
+    // a crash on the downbeat right after a section change into the drop
+    if (sec === 'drop' && mx.sectionT < 60 / bpm * 1.2) { L = { ...DR.crash }; lift.L = strokeH(clamp(mx.sectionT / (60 / bpm), 0, 1)) * 0.6; onceHit('crash', 'drop' + bar, () => { cym.crashV += 9; }); }
+    q.head.dy = 2.2 * Math.exp(-(p % 1) * 5) * (0.4 + en);
+    q.head.r = 0.04 * Math.sin(p * Math.PI / 2);
+    q.torso.r = spring1(bot, 'lean', 0.05 * Math.sin(p * Math.PI / 2) * en, dt);
+  } else if (B.mode === 'countin') {
+    // four clicks overhead on the beat
+    const beat = clamp(B.countN - 1 + LW.mx.beatPhase, -1, 4), u = beat - Math.floor(beat);
+    const gap = beat < 0 ? 10 : 7 * strokeH(u);
+    L = { ...DR.clickL, x: DR.clickL.x - gap }; R = { ...DR.clickR, x: DR.clickR.x + gap };
+    if (beat >= 0) onceHit('click', Math.floor(beat), () => {});
+    q.head.r = 0; q.head.dy = 1.5 * Math.exp(-u * 6);
+  } else if (B.mode === 'outro') {
+    const t = B.modeT;
+    if (t < 1.6) { L = { ...DR.crash }; lift.L = t < 0.12 ? 1 - t / 0.12 : 0; onceHit('fin', B.crashAt, () => { cym.crashV += 12; }); if (t > 0.5) cym.crash *= 0.9; }   // hit, then choke it
+    else L = null;
+    R = null;
+  }
+  if (B.flourish.crash > 0) { B.flourish.crash -= dt; L = { ...DR.crash }; lift.L = Math.max(0, B.flourish.crash - 0.35) * 4; }
+  // idle: sticks rest on the snare rim and floor tom; now and then a stick twirl
+  if (!L) L = { ...DR.restL };
+  if (!R) R = { ...DR.restR };
+  if (B.mode === 'idle' || B.mode === 'outro') {
+    B.twirlT -= dt;
+    if (B.twirlT < 0 && B.twirl < 0 && B.mode === 'idle') { B.twirl = 0; B.twirlT = rand(14, 30); }
+    const look = idleLook(bot, T);
+    q.head.r = look * 0.08; q.head.dx = look * 3;
+    if (B.mode === 'idle') { R = { x: DR.restR.x - 6, y: DR.restR.y - 14, a: DR.restR.a - 0.5 }; }
+  } else q.head.dx = 0;
+  // the wrist springs to its stroke position (lift: wrist up, tip up)
+  bot.eye = 0.5 + (B.mode === 'play' ? 0.4 * LW.mx.level : 0) + 0.1 * Math.sin(T * 0.7);
+  botFK(bot);
+  driveStick(bot, 'L', L, lift.L, dt, +1);
+  driveStick(bot, 'R', R, lift.R, dt, -1);
+  // the right foot works the kick pedal (shin tilts on each kick)
+  q.shinR.r = -0.05 * B.kickThump; q.shinL.r = 0;
+  if (B.twirl >= 0) { B.twirl += dt / 0.9; if (B.twirl >= 1) B.twirl = -1; }
+  botFK(bot);
+}
+function idleLook(bot, T) {
+  const s = bot.sp.look || (bot.sp.look = { t: 0, v: 0, at: rand(3, 7) });
+  s.at -= 1 / 60;
+  if (T > (s.next || 0)) { s.t = rand(-1, 1); s.next = T + rand(3.5, 9); }
+  s.v = approach(s.v, s.t, 2.2, 1 / 30);
+  return s.v;
+}
+// where a scheduled stroke's stick tip is heading (travels between drums while lifted)
+function strokeTarget(s, side) {
+  const a = DR[s.prev.d] || DR.snare, b = DR[s.next.d] || DR.snare;
+  const k = smooth(clamp((s.u - 0.08) / 0.6, 0, 1));
+  return { x: lerp(a.x, b.x, k), y: lerp(a.y, b.y, k), a: lerp(a.a, b.a, k), fs: lerp(a.fs || 1, b.fs || 1, k) };
+}
+function hitDrum(h) {
+  const d = DR[h.d]; if (!d) return;
+  const s = 0.5 + 0.5 * h.acc;
+  if (d.cym === 'ride') cym.rideV += 3.5 * s;
+  if (d.cym === 'crash') cym.crashV += 8 * s;
+  if (h.d === 'snare' || h.d === 'tom' || h.d === 'floor') BAND.headHit = { d: h.d, t: 1 };
+}
+// move a drummer hand so the stick tip sits on target (x,y) at angle a, lifted by h (0..1)
+function driveStick(bot, side, tg, h, dt, sgn) {
+  const hand = 'hand' + side, fo = 'fo' + side, up = 'up' + side;
+  const p = bot.parts[hand], tip = bot.rig.tips[hand];
+  const fs = spring1(bot, 'fs' + side, tg.fs || 1, dt, 18);
+  const len = Math.hypot(tip[0] - p.px, tip[1] - p.py) * bot.k * fs;
+  // lifting rotates the tip up (away from the head) and raises the wrist
+  const up1 = tg.a > Math.PI / 2 ? 1 : -1;
+  const a = tg.a + up1 * h * 1.05;
+  const wx = tg.x - Math.cos(a) * len, wy = tg.y - Math.sin(a) * len - h * 19;
+  const s = spring(bot, 'w' + side, wx, wy, dt, 34, 0.62);
+  const sa = spring(bot, 'a' + side, a, 0, dt, 30, 0.6).x;
+  ik2(bot, up, fo, [p.px, p.py], s.x, s.y, sgn, 0.8);
+  botFK(bot);
+  let r = sa;
+  if (side === 'R' && BAND.twirl >= 0) r += TAU * smooth(BAND.twirl);
+  aimPart(bot, hand, r);
+  bot.pose[hand].len = fs;
+}
+
+// ---- the pianist (seen from behind): hands go to the chord's keys, and those keys go down ----
+const PC_W = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6], PC_B = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0];
+const KEY_TOP = () => (L.keyR && L.keyR.art ? L.keys.y0 + 3 : 588);
+function keyX(i) { const k = L.keys, ww = (k.x1 - k.x0) / k.n; return k.x0 + (clamp(i, 0, k.n - 1) + 0.5) * ww; }
+function keyAtX(x) { const k = L.keys; return clamp(Math.floor((x - k.x0) / ((k.x1 - k.x0) / k.n)), 0, k.n - 1); }
+function pressPc(pc, oct, dur) {   // press pitch class pc in white-key octave `oct` (0 = lowest C)
+  const w = oct * 7 + PC_W[((pc % 12) + 12) % 12] + 2;
+  if (PC_B[((pc % 12) + 12) % 12]) pressKey(blackNear(w), dur, true); else pressKey(w, dur);
+  return w;
+}
+function pianoHits(sec, en) {
+  if (sec === 'breakdown' || sec === 'intro' || en < 0.16) return { RH: [HT(0, 'pad', 0.5), HT(2.66, 'pad', 0.35)], LH: [HT(0, 'root', 0.5)] };
+  if (sec === 'build') return { RH: Array.from({ length: 8 }, (_, i) => HT(i / 2, 'stab', 0.4 + 0.08 * i)), LH: [HT(0, 'root', 0.8), HT(2, 'root', 0.8)] };
+  if (sec === 'drop') return { RH: [HT(0, 'stab', 1), HT(1, 'run', 0.7), HT(1.5, 'run', 0.6), HT(2, 'stab', 0.9), HT(2.5, 'run', 0.6), HT(3, 'run', 0.7), HT(3.5, 'run', 0.6)], LH: [HT(0, 'root', 1), HT(1, 'fifth', 0.7), HT(2, 'oct', 0.9), HT(3, 'fifth', 0.7)] };
+  return { RH: [HT(0, 'stab', 0.8), HT(1 + BAND.swing, 'stab', 0.6), HT(3, 'stab', 0.55)], LH: [HT(0, 'root', 0.9), HT(2, 'fifth', 0.7)] };
+}
+function stepPianist(bot, dt, T, p, bar, bpm) {
+  const B = BAND, mx = LW.mx, q = bot.pose, sec = mx.section, en = mx.energy;
+  const root = mx.root, third = (root + (mx.minor ? 3 : 4)) % 12, fifth = (root + 7) % 12;
+  const kt = KEY_TOP();
+  let lx = keyX(10), rx = keyX(30), lh = 0, rh = 0, lp = 0;
+  q.torso.r = 0; q.head.r = 0; q.head.dy = 0;
+  if (B.mode === 'play' || B.mode === 'countin') {
+    const hv = pianoHits(sec, en);
+    // left hand: the chord root low on the keyboard (fifths/octaves walk around it)
+    const sl = sched(hv.LH, p, bar), wantL = (h) => h.d === 'fifth' ? fifth : root;
+    const lOct = (h) => h.d === 'oct' ? 2 : 1;
+    lx = lerp(keyX(lOct(sl.prev) * 7 + PC_W[wantL(sl.prev)] + 2), keyX(lOct(sl.next) * 7 + PC_W[wantL(sl.next)] + 2), smooth(clamp((sl.u - 0.2) / 0.5, 0, 1)));
+    lh = B.mode === 'play' ? strokeH(sl.u) * 0.8 : 0.4;
+    if (B.mode === 'play') onceHit('pL', sl.id, () => { const d = sl.dur * 60 / bpm * 0.9; pressPc(wantL(sl.prev), lOct(sl.prev), d); if (sl.prev.d === 'oct') pressPc(root, 1, d); PL.pedalT = Math.max(PL.pedalT, d); });
+    // right hand: the chord (third + fifth + root above), runs up the treble on busy bars
+    const sr = sched(hv.RH, p, bar);
+    const chordC = 3 * 7 + 2 + (PC_W[third] + PC_W[fifth] + PC_W[root] + (PC_W[root] < PC_W[third] ? 7 : 0)) / 3;
+    const runAt = (h, t) => h.d === 'run' ? chordC + 4 + 6 * ((t * 1.7 + bar * 0.37) % 1) : chordC;
+    rx = keyX(lerp(runAt(sr.prev, sr.prev.t), runAt(sr.next, sr.next.t), smooth(clamp((sr.u - 0.15) / 0.55, 0, 1))));
+    rh = B.mode === 'play' ? strokeH(sr.u) * clamp(sr.dur * 60 / bpm / 0.35, 0.3, 1) : 0.4;
+    if (B.mode === 'play') onceHit('pR', sr.id, () => {
+      const d = sr.dur * 60 / bpm * (sr.prev.d === 'pad' ? 0.95 : 0.6), at = keyAtX(rx);
+      if (sr.prev.d === 'run') pressKey(at, d * 0.8);
+      else { pressPc(third, 3, d); pressPc(fifth, 3, d); if (sr.prev.acc > 0.6) pressPc(root, 4, d); }
+    });
+    // body: lean into the hand that's travelling furthest, nod on the beat, sway with the bar
+    q.torso.r = spring1(bot, 'lean', 0.06 * ((rx - 1010) / 100) - 0.04 * ((1010 - lx) / 100) + 0.025 * Math.sin(p * Math.PI / 2), dt, 6);
+    q.head.dy = 1.6 * Math.exp(-(p % 1) * 4) * (0.3 + en);
+    q.head.r = 0.05 * Math.sin(p * Math.PI / 2 + 0.6);
+  } else if (B.mode === 'outro') {
+    // hands lift off the last chord and come down slowly into the lap
+    const t = B.modeT, u = clamp(t / 3.5, 0, 1);
+    lx = lerp(keyX(10), 990, smooth(u)); rx = lerp(keyX(30), 1030, smooth(u)); lh = rh = Math.sin(Math.min(1, t / 1.2) * Math.PI) * 1.4;
+    lp = smooth((t - 1.2) / 2.3);
+  } else {
+    lp = 1;
+    const look = idleLook(bot, T); q.head.r = look * 0.07;
+  }
+  let lpR = lp;
+  if (B.gliss >= 0) {   // tapped while resting: a glissando up the treble (the keys go down under the hand)
+    B.gliss += dt / 1.1;
+    const u = smooth(clamp(B.gliss, 0, 1)), at = Math.round(lerp(20, 44, u));
+    rx = keyX(at); rh = 0; lpR = 1 - Math.sin(clamp(B.gliss, 0, 1) * Math.PI) ** 0.4;
+    if (B.gliss < 1 && B.glissK !== at) { B.glissK = at; pressKey(at, 0.18); if (at % 3 === 0) sPiano(at); }
+    if (B.gliss >= 1.25) B.gliss = -1;
+  }
+  // idle: hands resting in the lap (behind the body)
+  const lap = { lx: 999, rx: 1021, y: 600 };
+  const LXT = lerp(lx, lap.lx, lp), RXT = lerp(rx, lap.rx, lpR), LYT = lerp(kt + 9 - lh * 7, lap.y, lp), RYT = lerp(kt + 9 - rh * 7, lap.y, lpR);
+  const sL = spring(bot, 'pl', LXT, LYT, dt, 22, 0.68), sR = spring(bot, 'pr', RXT, RYT, dt, 22, 0.68);
+  // breathing + the turn toward the drummer (a head "card turn": back of head → profile)
+  q.torso.dy = Math.sin(T * 1.1) * 0.7; q.torso.sy = 1;
+  const tr = B.turn;
+  q.head.a = tr < 0.5 ? 1 : 0; q.headSide.a = tr < 0.5 ? 0 : 1;
+  q.head.sx = tr < 0.5 ? 1 - tr * 1.2 : 1; q.headSide.sx = tr >= 0.5 ? 0.4 + (tr - 0.5) * 1.2 : 1;
+  q.headSide.r = q.head.r;
+  bot.eye = tr > 0.5 ? 0.7 + 0.3 * mx.level : 0;
+  botFK(bot);
+  // wrists: the hands point away from us onto the keys (foreshortened up the screen)
+  ik2(bot, 'upL', 'foL', [bot.parts.handL.px, bot.parts.handL.py], sL.x, sL.y, -1, 0.55);
+  ik2(bot, 'upR', 'foR', [bot.parts.handR.px, bot.parts.handR.py], sR.x, sR.y, 1, 0.55);
+  botFK(bot);
+  aimPart(bot, 'handL', lerp(-1.45, 0.4, lp)); aimPart(bot, 'handR', lerp(-1.69, 2.75, lpR));
+  q.handL.len = lerp(0.5, 0.75, lp); q.handR.len = lerp(0.5, 0.75, lpR);
+  botFK(bot);
+}
+
+// ---- the bassist: left hand walks the neck with the roots, right hand plucks on the beat ----
+const NECK = { x0: 1414, y0: 398, x1: 1426, y1: 540 };   // the playable neck, nut → end of fingerboard
+const PLUCK = { x: 1427, y: 560 };
+function bassHits(sec, en) {
+  if (sec === 'breakdown' || sec === 'intro' || en < 0.16) return [HT(0, 0, 0.6), HT(2, 2, 0.5)];
+  if (sec === 'build') return Array.from({ length: 8 }, (_, i) => HT(i / 2, i % 4, 0.5 + 0.06 * i));
+  return [HT(0, 0, 1), HT(1, 1, 0.75), HT(2, 2, 0.9), HT(3, 3, 0.7)];   // walking quarter notes
+}
+function stepBassist(bot, dt, T, p, bar, bpm) {
+  const B = BAND, mx = LW.mx, q = bot.pose, sec = mx.section, en = mx.energy;
+  let fret = 0.6, plx = PLUCK.x + 8, ply = PLUCK.y - 6, drag = 0;
+  q.head.dy = 0; q.head.r = 0; q.torso.r = 0;
+  if (B.mode === 'play' || B.mode === 'countin') {
+    const hv = bassHits(sec, en), s = sched(hv, p, bar);
+    // the walking line: root, third, fifth, approach → a place on the neck (lower notes nearer the nut)
+    const iv = [0, mx.minor ? 3 : 4, 7, 11][s.next.d] || 0;
+    const note = (mx.root + iv) % 12;
+    fret = 0.32 + 0.6 * (note / 12);
+    if (B.mode === 'play') {
+      // the pluck: the fingers pull across the strings on the hit, then reset
+      const pu = clamp(s.u * s.dur * 60 / bpm / 0.16, 0, 1);
+      drag = pu < 1 ? 1 - pu : 0;
+      plx = PLUCK.x - 6 + 14 * (1 - drag) - (1 - strokeH(s.u)) * 2; ply = PLUCK.y;
+      onceHit('b', s.id, () => { const st = s.prev.d % 4; B.strings[st] = 0.7 + 0.3 * s.prev.acc; });
+    }
+    q.head.dy = 2.4 * Math.exp(-(p % 1) * 4.5) * (0.4 + en);   // nods with the tempo
+    q.head.r = 0.035 * Math.sin(p * Math.PI / 2);
+    q.torso.r = spring1(bot, 'lean', -0.05 + 0.02 * Math.sin(p * Math.PI / 2), dt, 5);
+  } else {
+    const look = idleLook(bot, T); q.head.r = -0.04 + look * 0.06;
+    if (B.mode === 'outro' && B.modeT < 2) { plx = PLUCK.x + 12; ply = PLUCK.y - 10; }
+    q.torso.r = spring1(bot, 'lean', -0.03, dt, 4);
+  }
+  if (B.turn > 0.05) q.head.r -= 0.07 * B.turn;   // looks over to the drummer
+  q.torso.dy = Math.sin(T * 1.05 + 1) * 0.8;
+  const fx = lerp(NECK.x0, NECK.x1, fret), fy = lerp(NECK.y0, NECK.y1, fret);
+  const sF = spring(bot, 'fret', fx - 3, fy, dt, 14, 0.7), sP = spring(bot, 'pluck', plx, ply, dt, 30, 0.6);
+  bot.eye = 0.55 + (B.mode === 'play' ? 0.35 * mx.bass : 0);
+  botFK(bot);
+  ik2(bot, 'upL', 'foL', bot.rig.tips.foL, sF.x, sF.y, 1, 0.75);
+  ik2(bot, 'upR', 'foR', bot.rig.tips.foR, sP.x, sP.y, -1, 0.75);
+  botFK(bot);
+}
+
+// ---- the guest singer: rises on the stage lift for the songs she joins, sways and sings ----
+function stepSinger(bot, dt, T, p, bar, bpm) {
+  const B = BAND, mx = LW.mx, q = bot.pose, k = B.singerK;
+  bot.hidden = k < 0.003;
+  if (bot.hidden) return;
+  bot.oy = (1 - easeOut(k)) * 310;
+  const en = mx.energy, singing = B.mode === 'play';
+  q.torso.r = spring1(bot, 'sway', singing ? 0.04 * Math.sin(p * Math.PI / 2) : 0, dt, 4);
+  q.head.r = singing ? 0.06 * Math.sin(p * Math.PI / 2 + 0.8) - 0.04 : 0;
+  q.head.dy = singing ? 1.2 * Math.exp(-(p % 1) * 4) : 0;
+  B.flourish.sing = Math.max(0, (B.flourish.sing || 0) - dt * 0.8);
+  bot.eye = (singing ? 0.4 + 1.1 * clamp(mx.mid * 1.2, 0, 1) : 0.3) + B.flourish.sing;
+  // right hand rests on the mic stand; the left lifts with the phrase
+  const phr = singing ? smooth(clamp(mx.energy * 1.4 - 0.2, 0, 1)) * (0.6 + 0.4 * Math.sin(T * 0.6)) : 0;
+  const sR = spring(bot, 'mic', 1186, 588, dt, 10, 0.75);
+  const sL = spring(bot, 'gest', 1128 - phr * 14, 600 - phr * 70, dt, 6, 0.75);
+  botFK(bot);
+  ik2(bot, 'upR', 'foR', bot.rig.tips.foR, sR.x, sR.y + bot.oy, 1, 0.85);
+  ik2(bot, 'upL', 'foL', bot.rig.tips.foL, sL.x, sL.y + bot.oy, -1, 0.85);
+  botFK(bot);
+}
+function drawSinger(g, layer) {
+  const bot = BAND.bots.singer; if (!bot || bot.hidden) return;
+  // the lift: everything below the stage floor is hidden; a brass ring glows while it moves
+  g.save(); g.beginPath(); g.rect(1100, 300, 160, 694 - 300); g.clip();
+  drawBot(g, bot, layer);
+  if (layer === 'front') drawEyes(g, bot);
+  g.restore();
+  if (layer === 'back') {
+    const mv = BAND.singerK > 0.02 && BAND.singerK < 0.98 ? 1 : 0.35;
+    g.fillStyle = `rgba(214,176,98,${0.55 * mv})`; g.beginPath(); g.ellipse(BOT_AT.singer.x, 694, 30, 4, 0, 0, TAU); g.fill();
+    drawSpriteE(g, GLOW_WARM, BOT_AT.singer.x, 692, 46, 10, 0.25 * mv * BAND.singerK);
+  }
+}
+function drawBandBack(g) {
+  if (!BAND.ready) return;
+  const b = BAND.bots;
+  botShadow(g, BOT_AT.pianist.x, BOT_AT.pianist.y - 1, 34, 0.6);
+  drawBot(g, b.drummer, 'back');
+  drawBot(g, b.bassist, 'back');
+  drawSinger(g, 'back');
+}
+function drawPianist(g) {
+  if (!BAND.ready) return;
+  const b = BAND.bots.pianist;
+  drawBot(g, b, 'back'); drawEyes(g, b);
+}
+function drawBandFront(g) {
+  if (!BAND.ready) return;
+  const b = BAND.bots;
+  drawBot(g, b.drummer, 'front'); drawEyes(g, b.drummer);
+  drawBot(g, b.bassist, 'front'); drawEyes(g, b.bassist);
+  drawSinger(g, 'front');
+}
+
 function drawStrings(g, T) {
   // nobody is playing the bass: its strings just catch the light
+  // (the robot bassist plucks them: a plucked string blurs sideways for a moment and rings down)
   const lt = lightAt(L.bass.x, 560);
   g.lineCap = 'round'; g.strokeStyle = rgba(mul([210, 200, 180], lt), 0.75); g.lineWidth = 0.9;
-  g.beginPath(); for (const [a, b] of L.strings) { g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); } g.stroke();
+  g.beginPath();
+  L.strings.forEach(([a, b], i) => {
+    const A = BAND.strings[i] || 0, off = A * 1.3 * Math.sin(BAND.stringPh[i] * 6.1);
+    const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy), nx = -dy / n, ny = dx / n;
+    g.moveTo(a[0], a[1]);
+    if (A > 0.02) g.quadraticCurveTo((a[0] + b[0]) / 2 + nx * off * 2, (a[1] + b[1]) / 2 + ny * off * 2, b[0], b[1]); else g.lineTo(b[0], b[1]);
+  });
+  g.stroke();
+  for (let i = 0; i < 4; i++) if ((BAND.strings[i] || 0) > 0.05) {   // the blur of a ringing string
+    const [a, b] = L.strings[i]; g.strokeStyle = rgba(mul([230, 214, 180], lt), 0.18 * BAND.strings[i]); g.lineWidth = 2.6 * BAND.strings[i];
+    g.beginPath(); g.moveTo(lerp(a[0], b[0], 0.15), lerp(a[1], b[1], 0.15)); g.lineTo(lerp(a[0], b[0], 0.85), lerp(a[1], b[1], 0.85)); g.stroke();
+  }
 }
 const cym = { ride: 0, rideV: 0, crash: 0, crashV: 0, hat: 0 };
 function updateCymbals(dt) {
+  if (BAND.headHit) BAND.headHit.t *= Math.exp(-dt * 12);
   for (const k of ['ride', 'crash']) { cym[k + 'V'] += (-cym[k] * 160 - cym[k + 'V'] * 5) * dt; cym[k] += cym[k + 'V'] * dt; }
 }
 function drawCymbal(g, x, y, r, tilt, lt) {
@@ -1795,9 +2419,13 @@ function drawDrumLive(g, T) {
   drawCymbal(g, C.hat[0], hy, C.hat[2], 0, ltH);
   // kick head with the band's name
   const k = L.kick, lt = lightAt(k.x, k.y);
-  g.drawImage(kickCv, k.x - k.r, k.y - k.r, k.r * 2, k.r * 2);
-  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => clamp(v * 1.1, 0, 1) * 255)); g.beginPath(); g.arc(k.x, k.y, k.r, 0, TAU); g.fill();
+  const th = 1 + 0.012 * BAND.kickThump;   // the head flexes with each kick
+  g.drawImage(kickCv, k.x - k.r * th, k.y - k.r * th, k.r * 2 * th, k.r * 2 * th);
+  g.globalCompositeOperation = 'multiply'; g.fillStyle = rgba(lt.map((v) => clamp(v * 1.1, 0, 1) * 255)); g.beginPath(); g.arc(k.x, k.y, k.r * th, 0, TAU); g.fill();
   g.globalCompositeOperation = 'source-over';
+  if (BAND.kickThump > 0.02) drawSprite(g, GLOW_SOFT, k.x - 8, k.y - 10, k.r * 0.9, 0.12 * BAND.kickThump);
+  const hh = BAND.headHit;
+  if (hh && hh.t > 0.02) { const d = DR[hh.d]; drawSpriteE(g, GLOW_SOFT, d.x, d.y + 2, 22, 6, 0.22 * hh.t); }
 }
 function drawMarquee(g, T) {
   const m = L.mq, w = m.x1 - m.x0, h = m.y1 - m.y0;
@@ -1916,14 +2544,25 @@ function drawSpot(g, T) {
   const gr = g.createLinearGradient(0, s.y, 0, s.py);
   gr.addColorStop(0, rgba(col, 0.16 * lv)); gr.addColorStop(0.5, rgba(col, 0.07 * lv)); gr.addColorStop(1, rgba(col, 0.05 * lv));
   g.fillStyle = gr; g.fill(beam);
-  // haze drifting through the beam
-  g.save(); g.clip(beam);
-  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, hazeT * 7, hazeT * 2.2, 0.5 * lv);
-  hazeFill(g, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, -hazeT * 4.5 + 200, hazeT * 1.1 + 90, 0.32 * lv);
-  g.restore();
+  // haze drifting through the beam (soft texture: composed at low resolution, then scaled up)
+  hazeInBeam(g, beam, s.px - s.rx - 10, s.y, s.rx * 2 + 20, s.py - s.y, [[hazeT * 7, hazeT * 2.2, 0.5 * lv], [-hazeT * 4.5 + 200, hazeT * 1.1 + 90, 0.32 * lv]]);
   // pool on the stage floor
   drawSpriteE(g, GLOW_SOFT, s.px, s.py - 4, s.rx * (1.25 + 0.25 * b * calm.lv), s.ry * (1.6 + 0.3 * b * calm.lv), 0.55 * lv);
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+}
+// haze inside a light beam: the beam path filled with the scrolling haze as a pattern (one fill per
+// layer, no clip — a clip + tiled drawImage cost ~0.6 ms per beam)
+let hazePat = null, hazePatG = null;
+function hazeInBeam(g, path, x, y, w, h, layers) {
+  if (hazePatG !== g) { hazePat = g.createPattern(HAZE, 'repeat'); hazePatG = g; }
+  const m = new DOMMatrix();
+  for (const [ox, oy, a] of layers) {
+    if (a < 0.005) continue;
+    m.e = -(((ox % 512) + 512) % 512); m.f = -(((oy % 256) + 256) % 256);
+    hazePat.setTransform(m);
+    g.globalAlpha = Math.min(1, a); g.fillStyle = hazePat; g.fill(path);
+  }
+  g.globalAlpha = 1;
 }
 // tile the haze texture over a rect, scrolled by (ox, oy)
 function hazeFill(g, x, y, w, h, ox, oy, a) {
@@ -1945,9 +2584,7 @@ function drawShaft(g, T) {
   const gr = g.createLinearGradient(w.x0, w.y0, w.x0 + 420, 800);
   gr.addColorStop(0, rgba(col, 0.2 * a)); gr.addColorStop(1, rgba(col, 0));
   g.fillStyle = gr; g.fill(beam);
-  g.save(); g.clip(beam);
-  hazeFill(g, w.x0, w.y0, 900, 760, T * 5, T * 1.5, 0.6 * a);
-  g.restore();
+  hazeInBeam(g, beam, w.x0, w.y0, 900, 760, [[T * 5, T * 1.5, 0.6 * a]]);
   g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
 }
 // floating haze in the room + bottle glints on the beat
@@ -2361,6 +2998,8 @@ function onDown(px, py) {
     petAnimal(an, T);
     return;
   }
+  // the band: a tap gets a little flourish (a stick twirl, a glissando, a slap of the strings)
+  if (BAND.ready) { const who = bandHit(x, y); if (who) { bandPoke(who); return; } }
   // the piano's keys can be played by hand (the jukebox and the poster are decor: no media controls here)
   const kr = L.keyR, p = L.piano;
   if (kr && x > L.keys.x0 && x < L.keys.x1 && y > L.keys.y0 - 6 && y < L.keys.y1 + 6) {
@@ -2394,6 +3033,9 @@ LW.on('beat', (s) => {
   }
   for (const an of animals) if (!an.gone) animalOnBeat(an, s);
 });
+if (LW.mx) LW.mx.on('track', () => { if (BAND.ready && BAND.wasPlaying && LW.mx.playing) { pickLineup(); BAND.mode = 'countin'; BAND.modeT = 0; BAND.countN = 0; } });
+if (LW.mx) LW.mx.on('beat', () => { if (BAND.mode === 'countin') BAND.countN++; });
+if (LW.mx) LW.mx.on('kick', (s) => { if (BAND.mode === 'play') BAND.kickThump = Math.max(BAND.kickThump, s); });
 LW.on('reminder', (r) => {
   if (!r) return;
   if (r.kind === 'water') startWater(r.text);
@@ -2430,6 +3072,7 @@ function frame() {
 }
 function step(dt, T) {
   runTimers();
+  if (LW.mx) LW.mx.update(dt);
   ptrSpeed *= Math.exp(-dt * 6);
   if (calm.on) { calm.t += dt; if (calm.auto && calm.t > calm.auto) setCalm(false); }
   calm.lv = approach(calm.lv, calm.on ? 1 : 0, calm.on ? 0.6 : 0.9, dt);
@@ -2440,6 +3083,8 @@ function step(dt, T) {
   music.beatPh += dt * music.bpm / 60 * (playing ? 1 : 0.3);
   music.beatEnv = Math.max(0, music.beatEnv - dt * 2.2);
   pianoStep(dt);
+  bandStep(dt, T);
+  updateCymbals(dt);
   updateHaze(dt, T);
   hazeT += dt * calmPace();
   updateOutside(dt, T);
@@ -2459,9 +3104,15 @@ function render(T) {
   drawBottleGlints(ctx);
   drawMarquee(ctx, T);
   drawPianoLive(ctx);
+  // the band: robots behind the painted kit / bass / mic, those instruments, the pianist in front
+  if (BAND.ready && !BAND.noDraw) { drawBandBack(ctx); drawOccluder(ctx); }
   drawSpot(ctx, T);
+  // the pianist sits in the follow-spot, in front of its haze (a dark lacquer body under an additive
+  // veil read as a ghost); the spot's warmth is already in its tint
+  if (BAND.ready && !BAND.noDraw) drawPianist(ctx);
   drawStrings(ctx, T);
   drawDrumLive(ctx, T);
+  if (BAND.ready && !BAND.noDraw) drawBandFront(ctx);
   drawMotes(ctx);
   drawFootlights(ctx, T);
   drawJukebox(ctx, T);
@@ -2512,6 +3163,7 @@ addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(rebuild, 
 computeTarget();
 E.amb = envAmb();
 rebuild();
+if (new URLSearchParams(location.search).get('noart') !== '1') loadBand();
 if (LW.nowPlaying) onNowPlaying(LW.nowPlaying);
 if (LW.calm) setCalm(true);
 requestAnimationFrame(frame);
@@ -2532,7 +3184,7 @@ function selfTest(secs = 60) {
   for (let f = 0; f < secs * 30; f++) { LW.advance(1 / 30); animals.forEach((p, i) => { if (p.id + ':' + p.rosterId !== ids[i] || animals[i] !== p) err++; }); }
   return { err, ids };
 }
-window.__speak = { pets:petSystem, get animals() { return animals; }, NAV: () => NAV, planTo, player, dbgAlb: (k) => { const c = newCanvas(cv.width, cv.height), a = c.getContext("2d"); VT(a); const fns = [paintFloor, paintRug, paintWindowFrame, paintBackBar, paintMarqueeFrame, paintStage]; paintAlbedo(a); return c; }, get E() { return E; }, get L() { return L; }, get outCv() { return outCv; }, get roomCv() { return roomCv; }, cat, dog, music, calm, setCalm, startWater, startStretch, benchRaw, selfTest, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, bake, onDown, PL, pressKey };
+window.__speak = { pets:petSystem, get animals() { return animals; }, NAV: () => NAV, planTo, player, dbgAlb: (k) => { const c = newCanvas(cv.width, cv.height), a = c.getContext("2d"); VT(a); const fns = [paintFloor, paintRug, paintWindowFrame, paintBackBar, paintMarqueeFrame, paintStage]; paintAlbedo(a); return c; }, get E() { return E; }, get L() { return L; }, get outCv() { return outCv; }, get roomCv() { return roomCv; }, cat, dog, music, calm, setCalm, startWater, startStretch, benchRaw, selfTest, get perfMs() { return perfMs; }, get bakeMs() { return bakeMs; }, bake, onDown, PL, pressKey, BAND };
 window.__pets=petSystem;
 })();
 </script>

@@ -9,18 +9,21 @@
 <body>
 <script src="astronomy.js"></script>
 <script src="kit.js"></script>
+<script src="gull-sheet.js"></script>
 <script src="lw.js"></script>
 <script>
 'use strict';
 // Beach — a high-angle shoreline. Waves (kit) do sand, swell, bores, swash, wet sand, foam lace, caustics and
-// night bioluminescence; this file adds shells + ghost crabs (under the water line), gulls with shadows,
-// click splashes, and hands the swash to the breath in calm mode.
-// atlas.png (generated, see art-src/kit-addons): gullL/gullR wing halves, crab, cockle, scallop, whelk, tellin.
+// night bioluminescence; this file adds shells + ghost crabs (under the water line), gulls seen from above (flying
+// groups with altitude shadows, a few standing/walking at the waterline that take off and land), click splashes,
+// and hands the swash to the breath in calm mode.
+// atlas.png (generated, see art-src/kit-addons): crab, cockle, scallop, whelk, tellin (its old gullL/gullR are unused).
+// gull-sheet.js paints the gull sprite sheet at load (see art-src/beach/refs/README.md for references + licences).
 const FRAMES = {"gullL":[10,10,150,174],"gullR":[180,10,150,174],"crab":[350,10,150,138],"cockle":[520,10,84,85],"scallop":[624,10,84,80],"whelk":[728,10,84,98],"tellin":[832,10,84,57]};
 const { rand, clamp, lerp, smooth, ease, angDiff, pick, noise1, TAU } = Kit.math;
 const WHITE = [1, 1, 1];
 
-let sheet, crabSheet, shells = [], crabs = [], gulls = [];
+let sheet, crabSheet, shells = [], crabs = [];
 const surf = Kit.waves({ shore: { a: [0.28, -0.05], b: [0.66, 1.05] }, period: 11, runup: 0.075, backwash: 0.03, breakAt: 0.3,
   under(b, k) {   // things on the sand: drawn unlit (the waves shader lights + refracts them)
     b.use(sheet);
@@ -43,7 +46,7 @@ function sandSpot(k, sMin, sMax) {   // a point on the beach (shore coordinate r
 function crabGoal(c, k, fast) { [c.tx, c.ty] = sandSpot(k, -0.3, surf.edge - 0.03); c.speed = fast ? rand(230, 300) : rand(80, 150); c.state = 'scuttle'; }
 function updateCrabs(dt, t, k) {
   const want = k.L.night > 0.5 ? 5 : ['rain', 'storm', 'snow'].includes(LW.env.weather) ? 1 : 3;   // ghost crabs come out at night
-  while (crabs.length < want) { const [x, y] = sandSpot(k, -0.28, -0.04); crabs.push({ x, y, vx: 0, vy: 0, size: rand(54, 66), body: rand(TAU), a: 0, state: 'emerge', timer: rand(1, 3), step: 0, seed: rand(99) }); }
+  while (crabs.length < want) { const [x, y] = sandSpot(k, -0.28, -0.04); crabs.push({ x, y, vx: 0, vy: 0, size: rand(28, 34) * k.mpx / MPM, body: rand(TAU), a: 0, state: 'emerge', timer: rand(1, 3), step: 0, seed: rand(99) }); }
   for (let i = crabs.length - 1; i >= 0; i--) {
     const c = crabs[i], s = surf.s(c.x, c.y), cur = k.cursor;
     if (i >= want && c.state !== 'burrow') { c.state = 'burrow'; c.timer = 0.8; }
@@ -66,53 +69,230 @@ function updateCrabs(dt, t, k) {
   }
 }
 
-// ── Gulls: long glides in lazy loops, the odd flap, a shadow sliding over sand and sea ──
-function updateGulls(dt, t, k) {
-  const wx = LW.env.weather, want = k.L.night > 0.55 || wx === 'storm' ? 0 : wx === 'rain' || wx === 'snow' ? 1 : 3;
-  if (gulls.length < want && (k.gullWait = (k.gullWait ?? 0) - dt) <= 0) { k.gullWait = rand(3, 9); const fromLeft = Math.random() < 0.6; const ang = fromLeft ? rand(-0.4, 0.4) : rand(1.2, 1.9); gulls.push({ x: fromLeft ? k.mx(-120) : k.clearX(rand(0.1, 0.8)), y: fromLeft ? rand(k.H * 0.1, k.H * 0.9) : -120, ang: k.layout.mirror ? Math.PI - ang : ang, speed: 90, z: rand(140, 260), span: rand(100, 135), flap: 0, flapT: rand(2, 6), seed: rand(99), bank: 0, wx: rand(0.1, 0.6), wy: rand(0.15, 0.85) }); }
-  for (let i = gulls.length - 1; i >= 0; i--) {
-    const g = gulls[i], leaving = i >= want;
-    // a wandering anchor in the left/middle sky; gulls circle it and drift on
-    const ax = k.mx(k.W * (g.wx + 0.12 * Math.sin(t * 0.05 + g.seed))), ay = k.H * (g.wy + 0.15 * Math.cos(t * 0.04 + g.seed));
-    let [fx, fy] = Kit.steer.wander(g, t, 0.08, 0.9);
-    const [sx, sy, d] = Kit.steer.seek(g, ax, ay, 1); const pull = smooth(80, 420, d);
-    fx += sx * pull * 1.4; fy += sy * pull * 1.4;
-    const [px, py] = Kit.steer.separate(g, gulls, 240, 2.6); fx += px; fy += py;
-    if (leaving) { fx = Math.cos(g.ang) + (k.layout.mirror ? -0.5 : 0.5); fy = Math.sin(g.ang); }
-    const before = g.ang;
-    Kit.steer.turnMove(g, fx, fy, dt, (leaving ? 130 : 85 + 25 * noise1(g.seed + t * 0.2)) * (1 + g.flap * 0.3), 0.5, 0.6);
-    g.bank = ease(g.bank, clamp(angDiff(before, g.ang) / dt * 0.9, -0.6, 0.6), 2, dt);
-    g.flapT -= dt; if (g.flapT <= 0) { g.flap = 1; g.flapT = rand(4, 11); if (Math.random() < 0.35) k.sound.gull(g.x); }
-    g.flap = Math.max(0, g.flap - dt * 0.45);
-    if (leaving && (g.x < -200 || g.x > k.W + 200 || g.y < -200 || g.y > k.H + 200)) gulls.splice(i, 1);
+// ── Gulls (owner 2026-10-04: "the sea gulls are all wrong") ──
+// Seen from straight above, drawn from a painted sprite sheet (gull-sheet.js): a jointed-wing flap cycle (10 frames) +
+// glide, flare and fold frames for flight; stand / look / walk ×6 / crouch / sleep on the sand. Opaque, lit like the
+// rest of the scene, each with a shadow: flying birds cast a soft one offset by their altitude (sun direction × height,
+// blurrier and fainter the higher they are, weaker on the water); standing birds a short contact shadow.
+// Scale: the plate reads as a low drone shot at ~MPM px per metre (@1000 px) — sand ripples ≈ 10 cm apart, the swash
+// a few metres wide. Gulls are ring-billed/herring sized (span ~1.25 m, body ~0.47 m); crabs and shells are kept ~2×
+// life size so they stay legible. Flying birds sit between the sand and a camera CAMH m up, so they draw a little
+// larger than life (1 / (1 − z / CAMH)) and their shadows at ground scale.
+const MPM = 100, CAMH = 55;
+const persp = (z) => 1 / (1 - Math.min(z, CAMH * 0.6) / CAMH);
+let G = null, gullSheet = null, gulls = [], groupId = 0;
+function gullWant(k) {
+  const wx = LW.env.weather, night = k.L.night > 0.8, wet = wx === 'rain' || wx === 'storm';
+  return { ground: wx === 'storm' ? 1 : wet ? 2 : 3, air: night || wx === 'storm' ? 0 : wet || wx === 'snow' ? 1 : 2 };
+}
+function gullSpot(k, near) {   // a resting spot on the damp sand just above the swash, inside the clear band
+  for (let i = 0; i < 40; i++) {
+    let x, y;
+    if (near && i < 25) { const a = rand(TAU), r = rand(0.6, 2.4) * k.mpx; x = near[0] + Math.cos(a) * r; y = near[1] + Math.sin(a) * r; }
+    else { x = k.clearX(rand(0.05, 0.9)); y = rand(k.H * 0.1, k.H * 0.9); }
+    const s = surf.s(x, y);
+    if (s > -0.2 && s < -0.095 && k.restOK(x, y, 30) && !gulls.some((o) => o.mode !== 'air' && Math.hypot(o.x - x, o.y - y) < 0.9 * k.mpx)) return [x, y];
+  }
+  return null;
+}
+function newGull(k, mode, x, y) {
+  return { mode, x, y, z: 0, ang: rand(TAU), body: rand(TAU), vx: 0, vy: 0, speed: 0, bank: 0, seed: rand(99), size: rand(0.94, 1.08),
+    st: 'stand', timer: rand(1, 4), look: 0, step: 0, flap: 0, beats: 0, glideT: rand(1, 4), fold: 0, t0: 0, leader: null, off: [0, 0], leaving: false,
+    tx: x, ty: y, flightT: 0, flare: 0, foldIn: 0, beatEnd: 0 };
+}
+function startBeats(g, n) { g.flap = Math.floor(g.flap) + 0.25; g.beatEnd = Math.floor(g.flap) + n; g.beats = n; }   // from a level downstroke
+function spawnGroup(k) {
+  const n = Math.random() < 0.5 ? 1 : Math.random() < 0.6 ? 2 : 3, fromLeft = Math.random() < 0.6;
+  const ang0 = fromLeft ? rand(-0.35, 0.35) : rand(1.25, 1.85), ang = k.layout.mirror ? Math.PI - ang0 : ang0;
+  const x0 = fromLeft ? k.mx(-160) : k.clearX(rand(0.15, 0.75)), y0 = fromLeft ? rand(k.H * 0.15, k.H * 0.85) : -160;
+  let lead = null; groupId++;
+  for (let i = 0; i < n; i++) {
+    const g = newGull(k, 'air', x0, y0);
+    g.ang = ang; g.z = rand(6, 14); g.speed = 1.9 * k.mpx; g.wx = rand(0.12, 0.6); g.wy = rand(0.2, 0.8);
+    if (lead) { g.leader = lead; g.off = [rand(1.2, 2.6) * (i % 2 ? 1 : -1), rand(1.6, 3.2) * i]; g.z = lead.z + rand(-2.5, 2.5); const c = Math.cos(ang), s = Math.sin(ang); g.x -= c * g.off[1] * k.mpx; g.y -= s * g.off[1] * k.mpx; }
+    else lead = g;
+    g.group = groupId; g.flap = rand(3); if (!i) startBeats(g, 3);
+    gulls.push(g);
   }
 }
-function drawGull(b, g, k, t, shadow) {
-  const fl = g.flap > 0 ? Math.sin((1 - g.flap) * TAU * 3.2) : 0, fold = 0.06 * Math.sin(t * 0.7 + g.seed);
-  const rot = g.ang + Math.PI / 2, c = Math.cos(rot), s = Math.sin(rot), w = g.span / 2, h = g.span * sheet.f.gullL.aspect;
-  const sd = k.L.sunDir, ox = shadow ? sd[0] * g.z * 0.6 : 0, oy = shadow ? sd[1] * g.z * 0.6 : 0;
-  for (const side of [-1, 1]) {
-    const lift = clamp(fl * 0.55 + fold + side * g.bank * 0.5, -0.6, 0.9), sx = Math.cos(lift) * (1 - Math.max(0, lift) * 0.12);
-    const x0 = side < 0 ? -w * sx : 0, x1 = side < 0 ? 0 : w * sx, y0 = -h / 2, y1 = h / 2;
-    const P = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => [g.x + ox + x * c - y * s, g.y + oy + x * s + y * c]);
-    const f = side < 0 ? sheet.f.gullL : sheet.f.gullR;
-    if (shadow) b.quad4(f, P, [0, 0, 0], 0.11 * k.L.day * (1 - k.L.cloud * 0.6), 4, 3.6);
-    else { const lit = 1 - Math.max(0, lift) * 0.25 + (side * g.bank > 0 ? -0.08 : 0.04); b.quad4(f, P, k.L.tint.map((v) => v * lit * 0.92), 1); }
+function seedGround(k) {   // on load the beach already has its resting birds
+  const want = gullWant(k).ground;
+  for (let i = 0; i < want; i++) { const p = gullSpot(k, i ? [gulls[0].x, gulls[0].y] : null); if (p) { const g = newGull(k, 'ground', ...p); g.st = k.L.night > 0.8 ? 'sleep' : 'stand'; gulls.push(g); } }
+}
+function startTakeoff(g, k, awayX, awayY) {
+  g.mode = 'takeoff'; g.t0 = 0; g.st = 'crouch';
+  g.ang = awayX == null ? Math.atan2(-k.wind.dir[1], -k.wind.dir[0]) + rand(-0.6, 0.6) : Math.atan2(g.y - awayY, g.x - awayX) + rand(-0.3, 0.3);   // into the wind, or away from a fright
+  g.speed = 0; g.wx = rand(0.12, 0.6); g.wy = rand(0.2, 0.8); g.beats = 0; g.fold = 1; g.z = 0;
+  if (Math.random() < 0.6) k.sound.gull(g.x);
+}
+function updateGulls(dt, t, k) {
+  const want = gullWant(k), cur = k.cursor, onGround = gulls.filter((g) => g.mode === 'ground' && !g.leaving), inAir = gulls.filter((g) => g.mode !== 'ground');
+  // arrivals and departures (never pop: everyone flies in or out)
+  if (!k.gullsSeeded) { k.gullsSeeded = true; seedGround(k); if (want.air) { spawnGroup(k); for (const g of gulls) if (g.mode === 'air') { g.x = k.clearX(rand(0.2, 0.6)); g.y = rand(0.25, 0.7) * k.H; } } }
+  const flying = inAir.filter((g) => !g.leaving && g.mode === 'air');
+  if (flying.length < want.air && (k.gullWait = (k.gullWait ?? rand(2, 6)) - dt) <= 0) { k.gullWait = rand(8, 20); spawnGroup(k); }
+  if (flying.length > (want.air ? want.air + 1 : 0)) { const g = flying.find((o) => !o.leader) || flying[0]; g.leaving = true; }
+  for (const g of gulls) if (g.leader && g.leader.leaving) g.leaving = true;   // a group leaves together
+  if (onGround.length > want.ground) { const g = onGround[0]; g.leaving = true; startTakeoff(g, k); }
+  for (let i = gulls.length - 1; i >= 0; i--) {
+    const g = gulls[i];
+    if (g.mode === 'ground') groundGull(g, dt, t, k, want, onGround);
+    else airGull(g, dt, t, k, want, onGround);
+    if ((g.mode === 'air' && g.leaving) && (g.x < -260 || g.x > k.W + 260 || g.y < -260 || g.y > k.H + 260)) gulls.splice(i, 1);
   }
+}
+function groundGull(g, dt, t, k, want, onGround) {
+  if (g.foldIn > 0) { g.foldIn -= dt; return; }                // just landed: wings folding away
+  const cur = k.cursor, s = surf.s(g.x, g.y), night = k.L.night > 0.8, wet = ['rain', 'storm'].includes(LW.env.weather);
+  g.timer -= dt;
+  // fright: a fast cursor or a click close by → walk off, or take off when it comes right at them
+  const dc = Math.hypot(cur.x - g.x, cur.y - g.y) / k.mpx;
+  if (cur.inside && dc < 2.6 && cur.speed > 380 && g.st !== 'crouch') {
+    if (dc < 1.4 || cur.speed > 1100 || Math.random() < dt * 3) { startTakeoff(g, k, cur.x, cur.y); return; }
+    const a = Math.atan2(g.y - cur.y, g.x - cur.x); g.tx = g.x + Math.cos(a) * 2.2 * k.mpx; g.ty = g.y + Math.sin(a) * 2.2 * k.mpx; g.st = 'walk'; g.fast = 1.9; g.timer = 3;
+  }
+  // the swash is coming: hurry up the beach
+  if (s > surf.edge - 0.035 && g.st !== 'walk') { const along = (g.x * surf.tangent()[0] + g.y * surf.tangent()[1]) / k.H; [g.tx, g.ty] = surf.toXY(Math.min(-0.11, surf.edge - 0.08), along + rand(-0.02, 0.02)); g.st = 'walk'; g.fast = 1.7; g.timer = 4; }
+  if (g.st === 'walk') {
+    const dx = g.tx - g.x, dy = g.ty - g.y, d = Math.hypot(dx, dy), v = 0.5 * k.mpx * (g.fast || 1);
+    const want = Math.atan2(dy, dx); g.body += angDiff(g.body, want) * (1 - Math.exp(-dt * 7));
+    const facing = Math.cos(angDiff(g.body, want));   // turn on the spot first, then step
+    const sp = v * clamp(facing, 0, 1) * smooth(0, 0.25 * k.mpx, d);
+    g.x += Math.cos(g.body) * sp * dt; g.y += Math.sin(g.body) * sp * dt;
+    g.step += dt * (2.1 * (g.fast || 1)) * (sp > 2 ? 1 : 0.4);   // stride cycles per second
+    if (d < 4 || g.timer < -6) { g.st = night ? 'sleep' : 'stand'; g.timer = rand(2, 6); g.fast = 1; }
+  } else if (g.st === 'stand' || g.st === 'look') {
+    if (g.timer <= 0) {
+      const r = Math.random();
+      if (night || (wet && r < 0.5)) { g.st = 'sleep'; g.timer = rand(20, 60); }
+      else if (r < 0.45) { g.st = 'look'; g.look = Math.random() < 0.5 ? -1 : 1; g.timer = rand(0.8, 2.5); }
+      else if (r < 0.8) { const p = gullSpot(k, [g.x, g.y]); if (p) { [g.tx, g.ty] = p; g.st = 'walk'; g.timer = 8; } else g.timer = 1; }
+      else if (r < 0.86 && want.air > 0 && onGround.length >= 2) { startTakeoff(g, k); return; }   // the odd one just goes
+      else { g.st = 'stand'; g.timer = rand(1.5, 4); }
+    }
+  } else if (g.st === 'sleep') { if (g.timer <= 0 && !night) { g.st = 'stand'; g.timer = rand(1, 3); } }
+}
+function airGull(g, dt, t, k, want, onGround) {
+  const u = k.mpx;
+  if (g.mode === 'takeoff') {
+    g.t0 += dt;
+    if (g.t0 < 0.35) { g.body += angDiff(g.body, g.ang) * (1 - Math.exp(-dt * 10)); return; }   // crouch, turning to go
+    if (g.fold === 1 && g.t0 - dt < 0.35) g.ang = g.body;
+    g.fold = clamp(1 - (g.t0 - 0.35) / 0.24, 0, 1);            // wings unfold…
+    g.flap += dt * 4.2 * (g.fold > 0 ? 0 : 1);                 // …then strong, quick wingbeats
+    g.speed = ease(g.speed, 2.3 * u, 1.4, dt); g.z = Math.min(16, g.z + dt * lerp(0.8, 3.2, smooth(0.4, 1.4, g.t0)));
+    g.x += Math.cos(g.ang) * g.speed * dt; g.y += Math.sin(g.ang) * g.speed * dt;
+    if (g.z > 3.5) { g.mode = 'air'; g.beats = 3; g.glideT = 0; g.flightT = 0; if (!g.leaving && Math.random() < 0.3) g.leaving = true; }
+    return;
+  }
+  if (g.mode === 'land') {
+    const dx = g.tx - g.x, dy = g.ty - g.y, d = Math.hypot(dx, dy);
+    g.t0 += dt;
+    g.ang += clamp(angDiff(g.ang, Math.atan2(dy, dx)), -1.6 * dt, 1.6 * dt);
+    g.speed = ease(g.speed, clamp(d * 0.9, 0.25 * u, 1.8 * u), 2, dt);
+    g.x += Math.cos(g.ang) * g.speed * dt; g.y += Math.sin(g.ang) * g.speed * dt;
+    g.z = Math.max(0, Math.min(g.z, (d / u) * 0.55 + 0.05) - dt * 0.4);
+    g.flare = smooth(1.6 * u, 0.4 * u, d);
+    if (g.flare > 0.5 && g.flare < 0.95) g.flap += dt * 3.2;   // a couple of braking beats
+    if (d < 0.12 * u || (g.z <= 0.02 && d < 0.5 * u)) { g.mode = 'ground'; g.z = 0; g.body = g.ang; g.st = 'stand'; g.timer = rand(1, 3); g.foldIn = 0.4; g.speed = 0; g.leader = null; }
+    return;
+  }
+  g.flightT += dt;
+  // leaders wander around an anchor that drifts through the clear band; followers hold a loose slot off their leader
+  let fx, fy, d = 0;
+  const L = g.leader && gulls.includes(g.leader) && g.leader.mode === 'air' ? g.leader : null;
+  if (!L) g.leader = null;
+  if (L && !g.leaving) {
+    const c = Math.cos(L.ang), s = Math.sin(L.ang), ox = (-s * g.off[0] - c * g.off[1]) * u, oy = (c * g.off[0] - s * g.off[1]) * u;
+    let sx, sy; [sx, sy, d] = Kit.steer.seek(g, L.x + ox + noise1(g.seed + t * 0.3) * 0.6 * u, L.y + oy + noise1(g.seed * 2 + t * 0.3) * 0.6 * u, 1);
+    fx = Math.cos(L.ang) * 0.6 + sx * smooth(0, 3 * u, d); fy = Math.sin(L.ang) * 0.6 + sy * smooth(0, 3 * u, d);
+    g.z = ease(g.z, L.z + g.off[0] * 0.8, 0.4, dt);
+  } else if (g.leaving) { fx = Math.cos(g.ang) + (k.layout.mirror ? -0.4 : 0.4); fy = Math.sin(g.ang); }
+  else {
+    const ax = k.mx(k.W * (g.wx + 0.12 * Math.sin(t * 0.05 + g.seed))), ay = k.H * (g.wy + 0.15 * Math.cos(t * 0.04 + g.seed));
+    [fx, fy] = Kit.steer.wander(g, t, 0.08, 0.9);
+    const [sx, sy, dd] = Kit.steer.seek(g, ax, ay, 1), pull = smooth(1 * u, 5 * u, dd); fx += sx * pull * 1.4; fy += sy * pull * 1.4;
+    const [cx] = Kit.steer.calmZone(g, k, 1.6); fx += cx;   // pass over the widget side, don't circle there
+    g.z = ease(g.z, 9 + 4 * noise1(g.seed * 3 + t * 0.05), 0.2, dt);
+  }
+  const [px, py] = Kit.steer.separate(g, gulls.filter((o) => o.mode === 'air' && o.group !== g.group), 3.5 * u, 2.4); fx += px; fy += py;
+  const before = g.ang, catchUp = L ? clamp(d / (3 * u), 0.85, 1.35) : 1;
+  Kit.steer.turnMove(g, fx, fy, dt, (g.leaving ? 2.6 : 1.7 + 0.35 * noise1(g.seed + t * 0.2)) * u * catchUp * (1 + (g.beats > 0 ? 0.15 : 0)), 0.55, 0.6);
+  g.bank = ease(g.bank, clamp(angDiff(before, g.ang) / dt * 0.9, -0.55, 0.55), 2, dt);
+  // soaring most of the time; now and then a short bout of wingbeats (~3 Hz), ending on a level downstroke
+  if (g.beats > 0) { g.flap += dt * 3.0; if (g.flap >= g.beatEnd) { g.beats = 0; g.flap = g.beatEnd; } }
+  else { g.glideT -= dt; if (g.glideT <= 0) { startBeats(g, Math.round(rand(2, 5))); g.glideT = rand(3.5, 9); if (Math.random() < 0.2) k.sound.gull(g.x); } }
+  // the odd bird (and its group) comes down to the waterline
+  if (!g.leader && !g.leaving && g.flightT > 14 && onGround.length < want.ground && Math.random() < dt / 8) {
+    startLanding(g, k);
+  }
+}
+function startLanding(g, k) {   // a bird (and its group) comes down to a spot on the damp sand
+  const p = gullSpot(k); if (!p) return false;
+  g.mode = 'land'; [g.tx, g.ty] = p; g.t0 = 0; g.leader = null;
+  for (const f of gulls) if (f.leader === g) { const q = gullSpot(k, p); f.leader = null; if (q) { f.mode = 'land'; [f.tx, f.ty] = q; f.t0 = 0; } }
+  return true;
+}
+// ── drawing ──
+function gullTint(k) { const n = smooth(0.4, 1, k.L.night); return k.L.tint.map((v) => v * 0.97 * (1 + 0.65 * n)); }   // white plumage is the brightest thing on a moonlit beach
+// flying (or landing / taking-off) bird as body + two mirrored wing quads; shadow=true → the same silhouette on the sand
+function drawFlyer(b, g, k, shadow) {
+  const sh = G, S = sh.S, span = 1.25 * g.size * k.mpx * (shadow ? 1 : persp(g.z)), q = span / S;
+  let wing, body = 'body';
+  const foldK = g.mode === 'takeoff' ? g.fold : g.mode === 'ground' ? 1 - g.foldIn / 0.4 : 0;
+  if (foldK > 0) wing = sh.fold[Math.min(2, Math.floor(foldK * 3))];
+  else if (g.mode === 'land' && g.flare > 0.35) { wing = g.flare > 0.5 && g.flare < 0.95 ? sh.flap[Math.floor(g.flap * 10) % 10] : 'wFlare'; body = 'bodyFan'; }
+  else if (g.beats > 0 || g.mode === 'takeoff') wing = sh.flap[Math.floor(g.flap * 10) % 10];
+  else wing = 'wGlide';
+  if (Math.abs(g.bank) > 0.25 && body === 'body') body = 'bodyFan';
+  const rot = g.ang + Math.PI / 2, c = Math.cos(rot), s = Math.sin(rot), sd = k.L.sunDir;
+  const ox = shadow ? sd[0] * g.z * k.mpx : 0, oy = shadow ? sd[1] * g.z * k.mpx : 0;
+  const X = (x, y) => [g.x + ox + x * c - y * s, g.y + oy + x * s + y * c];
+  const fw = gullSheet.f[wing], ww = sh.wing.w * q * Math.cos(g.bank * 0.6), wh = sh.wing.h * q, ax = sh.wing.ax * ww, ay = sh.wing.ay * wh, rx = S * 0.03 * q, ry = -S * 0.01 * q;
+  const fb = gullSheet.f[body], bw = sh.body.w * q, bh = sh.body.h * q;
+  const blur = shadow ? 1.5 + g.z * 0.55 : 0, overWater = shadow && surf.waterAt(g.x + ox, g.y + oy);
+  const shA = shadow ? 0.42 * k.L.direct * (1 - k.L.cloud * 0.55) * lerp(1, 0.45, smooth(2, 16, g.z)) * (overWater ? 0.5 : 1) : 1;
+  const tint = gullTint(k, g);
+  for (const side of [1, -1]) {
+    const lit = 1 + side * g.bank * 0.22;   // the raised wing catches more light
+    const P = [[-ax, -ay], [ww - ax, -ay], [ww - ax, wh - ay], [-ax, wh - ay]].map(([x, y]) => X(side * (rx + x), ry + y));
+    if (shadow) b.quad4(fw, P, [0.02, 0.03, 0.04], shA, 4, blur); else b.quad4(fw, P, tint.map((v) => v * lit), 1);
+  }
+  const PB = [[-bw / 2, -bh / 2], [bw / 2, -bh / 2], [bw / 2, bh / 2], [-bw / 2, bh / 2]].map(([x, y]) => X(x, y));
+  if (shadow) b.quad4(fb, PB, [0.02, 0.03, 0.04], shA, 4, blur); else b.quad4(fb, PB, tint, 1);
+}
+function drawStander(b, g, k, shadow) {
+  const sh = G, q = 1.25 * g.size * k.mpx / sh.S, w = sh.ground.w * q, h = sh.ground.h * q;
+  let f = 'stand';
+  if (g.st === 'walk') f = sh.walk[Math.floor(g.step * 6) % 6];
+  else if (g.st === 'look') f = g.look < 0 ? 'lookL' : 'lookR';
+  else if (g.st === 'sleep') f = 'sleep';
+  else if (g.mode === 'takeoff') f = 'crouch';
+  const rot = g.body + Math.PI / 2, sd = k.L.sunDir;
+  if (shadow) {   // short cast shadow (the bird stands ~0.3 m tall) + a soft contact patch under the belly
+    const hgt = 0.28 * k.mpx;
+    b.shadow(gullSheet.f[f], g.x + sd[0] * hgt, g.y + sd[1] * hgt, w * 1.02, h, rot, 0.4 * (1 - k.L.cloud * 0.5), 2.2);
+    b.shadow(gullSheet.f[f], g.x + sd[0] * 4, g.y + sd[1] * 4, w * 0.8, h * 0.8, rot, 0.28, 5);
+    return;
+  }
+  b.sprite(gullSheet.f[f], g.x, g.y, w, h, rot, gullTint(k, g), 1);
 }
 
+const isStander = (g) => (g.mode === 'ground' && !(g.foldIn > 0)) || (g.mode === 'takeoff' && g.t0 < 0.35);
 const beach=Kit.scene({
   assets: { atlas: 'atlas.png', crab:'art/crab.webp' }, onReminder(){},
-  setup(k) { sheet = k.sheet(k.assets.atlas, FRAMES); crabSheet=k.sheet({crab:k.assets.crab}); },
+  setup(k) { sheet = k.sheet(k.assets.atlas, FRAMES); crabSheet=k.sheet({crab:k.assets.crab}); G = GullSheet.build(); gullSheet = k.sheet(G.canvas, G.frames); k.mpx = MPM * Math.min(k.W, k.H) / 1000; },
   resize(k) {
+    k.mpx = MPM * Math.min(k.W, k.H) / 1000;
     shells = [];
-    for (let i = 0; i < 16; i++) { const [x, y] = sandSpot(k, -0.22, i < 4 ? 0.05 : -0.01), f = sheet.f[pick(['cockle', 'scallop', 'whelk', 'tellin', 'cockle'])], w = rand(16, 26); shells.push({ x, y, f, w, h: w * f.aspect, r: rand(TAU) }); }
+    for (let i = 0; i < 16; i++) { const [x, y] = sandSpot(k, -0.22, i < 4 ? 0.05 : -0.01), f = sheet.f[pick(['cockle', 'scallop', 'whelk', 'tellin', 'cockle'])], w = rand(9, 14) * k.mpx / MPM; shells.push({ x, y, f, w, h: w * f.aspect, r: rand(TAU) }); }
   },
   layers: [
     surf,
-    Kit.sprites((b, k, t) => { b.use(sheet); for (const g of gulls) drawGull(b, g, k, t, true); }),
+    Kit.sprites((b, k) => { b.use(gullSheet); const st = gulls.filter(isStander).sort((p, q) => p.y - q.y); for (const g of st) drawStander(b, g, k, true); for (const g of st) drawStander(b, g, k, false); }, 'gulls-ground'),
+    Kit.sprites((b, k) => { b.use(gullSheet); for (const g of gulls) if (!isStander(g)) drawFlyer(b, g, k, true); }, 'gull-shadows'),
     Kit.particles(),
-    Kit.sprites((b, k, t) => { b.use(sheet); for (const g of gulls) drawGull(b, g, k, t, false); }),
+    Kit.sprites((b, k) => { b.use(gullSheet); for (const g of gulls.filter((o) => !isStander(o)).sort((p, q) => p.z - q.z)) drawFlyer(b, g, k, false); }, 'gulls-air'),
     Kit.light({ glow: 0.45, threshold: 0.8, vignette: 0.32 }),
   ],
   update(dt, t, k) { updateCrabs(dt, t, k); updateGulls(dt, t, k); },
@@ -121,6 +301,7 @@ const beach=Kit.scene({
     const P = k.layer('particles');
     if (surf.waterAt(x, y)) { k.ripples.drop(x, y, 14, -0.9); P.burst(x, y, 18, k.L.tint.map((v) => v * 0.95 + 0.05), 240, 0.55, 3.2, 22); k.sound.splash(x); }
     else { P.burst(x, y, 8, [0.85, 0.74, 0.55].map((v, i) => v * k.L.tint[i]), 120, 0.4, 1.6); for (const c of crabs) if (Math.hypot(c.x - x, c.y - y) < 160 && c.state !== 'hidden') { c.state = 'burrow'; c.timer = 0.5; } }
+    for (const g of gulls) if (g.mode === 'ground' && !(g.foldIn > 0) && Math.hypot(g.x - x, g.y - y) < 2.6 * k.mpx) startTakeoff(g, k, x, y);   // a clap on the sand: up they go
   },
   onMove(x, y, k) { if (k.cursor.speed > 120 && surf.waterAt(x, y) && Math.random() < 0.5) k.ripples.drop(x, y, 7, -0.22); },
   // Calm: the swash follows the breath — a wave runs in on the in-breath, holds, slides back on the out-breath.
@@ -149,7 +330,7 @@ const beach=Kit.scene({
     },
   },
 });
-window.beach={scene:beach,crabs,surf};
+window.beach={scene:beach,crabs,surf,get gulls(){return gulls},startTakeoff,startLanding,spawnGroup};
 </script>
 </body>
 </html>

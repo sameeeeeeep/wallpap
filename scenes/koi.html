@@ -1341,6 +1341,7 @@ function shoalQuiet(x,y) {
 }
 function updateShoals(dt,t) {
   const pace=(1-0.38*L.night)*(1-0.42*calmFade), step=dt*pace;
+  const speedEase=1-Math.exp(-dt*5), bendEase=1-Math.exp(-dt*8), depthEase=1-Math.exp(-dt*1.2);
   shoalClock+=step;
   const band=LW.layout.clear, lo=W*band[0]+45, hi=W*band[1]-45;
   const rain=LW.env.weather==='rain'||LW.env.weather==='storm';
@@ -1395,9 +1396,9 @@ function updateShoals(dt,t) {
         for(let j=0;j<SEG-1;j+=4) {
           const p=k.p[j],q=k.p[Math.min(SEG-1,j+4)],kx=q[0]-p[0],ky=q[1]-p[1];
           const u=clamp(((f.x-p[0])*kx+(f.y-p[1])*ky)/(kx*kx+ky*ky||1),0,1);
-          const rx=f.x-p[0]-kx*u,ry=f.y-p[1]-ky*u,dd=Math.hypot(rx,ry)||1;
+          const rx=f.x-p[0]-kx*u,ry=f.y-p[1]-ky*u,dd2=rx*rx+ry*ry;
           const R=k.L*(j<8?0.23:0.15)+length;
-          if(dd<R) {const push=(1-dd/R);steerX+=rx/dd*push*8;steerY+=ry/dd*push*8;threat=Math.max(threat,push);}
+          if(dd2<R*R) {const dd=Math.sqrt(dd2)||1, push=(1-dd/R);steerX+=rx/dd*push*8;steerY+=ry/dd*push*8;threat=Math.max(threat,push);}
         }
       }
       if(s.fear>0) {
@@ -1425,11 +1426,11 @@ function updateShoals(dt,t) {
       }
       speed*=1-quiet*0.5;
       const turn=clamp(angDiff(f.ang,Math.atan2(steerY,steerX)),-step*6,step*6);
-      f.ang+=turn;f.bend=lerp(f.bend,turn/Math.max(step,0.001),1-Math.exp(-dt*8));
-      f.speed=lerp(f.speed,speed,1-Math.exp(-dt*5));
+      f.ang+=turn;f.bend=lerp(f.bend,turn/Math.max(step,0.001),bendEase);
+      f.speed=lerp(f.speed,speed,speedEase);
       f.nx=Math.cos(f.ang)*f.speed;f.ny=Math.sin(f.ang)*f.speed;
       f.phase=(f.phase+step*(5+f.speed/length*5))%TAU;
-      f.z=lerp(f.z,0.7+0.08*Math.sin(f.seed+shoalClock*0.3)+(rain?0.22:0)+(s.fear?0.08:0),1-Math.exp(-dt*1.2));
+      f.z=lerp(f.z,0.7+0.08*Math.sin(f.seed+shoalClock*0.3)+(rain?0.22:0)+(s.fear?0.08:0),depthEase);
       const flank=Math.max(0,Math.sin(f.ang)*L.sunDir[0]-Math.cos(f.ang)*L.sunDir[1]);
       f.flash=s.turn*Math.pow(flank,8)*0.7*(1-L.night*0.7)*(1-quiet);
     }

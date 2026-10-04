@@ -708,7 +708,30 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         if let m = NSEvent.addGlobalMonitorForEvents(matching: moveMask, handler: { [weak self] _ in self?.onMove() }) { monitors.append(m) }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in self?.onButton("down") }) { monitors.append(m) }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in self?.onButton("up") }) { monitors.append(m) }
+        // Global monitors only see events posted to OTHER apps. Right after the user picks a scene in
+        // our panel or menu, wallpap is the active app, so hover went dead until something else took
+        // focus. Also watch our own events, and poll the pointer while we're active as a backstop
+        // (some moves reach neither monitor when the active app has no key window).
+        if let m = NSEvent.addLocalMonitorForEvents(matching: moveMask, handler: { [weak self] e in self?.onMove(); return e }) { monitors.append(m) }
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.startActivePointerPoll() }
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.stopActivePointerPoll() }
+        if NSApp.isActive { startActivePointerPoll() }
     }
+
+    private var activePointerPoll: Timer?
+    private var lastPolledPointer = NSPoint(x: -1, y: -1)
+    func startActivePointerPoll() {
+        guard activePointerPoll == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let p = NSEvent.mouseLocation
+            if p != self.lastPolledPointer { self.lastPolledPointer = p; self.onMove() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        activePointerPoll = t
+    }
+    func stopActivePointerPoll() { activePointerPoll?.invalidate(); activePointerPoll = nil }
 
     /// Is the topmost on-screen window under the cursor below the normal window
     /// layer (i.e. Finder's desktop or us)? Then the cursor is on bare desktop.

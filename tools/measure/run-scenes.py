@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+"""Measure every scene in the REAL app on this Mac: CPU, memory and energy.
+
+Needs wallpap running with LIVEWALL_DEV=1 (so ./dev.sh can switch scenes). For each scene it switches,
+lets it settle, then for N seconds records (a) the app + its WebKit helpers via .build/wpmeter (CPU %,
+memory footprint, CPU-side energy) and (b) whole-Mac power from the battery (current x voltage, only
+meaningful on battery). A 'paused' baseline is taken first and last; the battery delta vs paused is the
+wallpaper's real battery cost, GPU and compositor included. Run it while the Mac is otherwise idle.
+
+    python3 tools/measure/run-scenes.py [--settle 15] [--seconds 30] [scene ...]  → docs/perf/<date>.json
+"""
+import argparse, json, os, re, subprocess, threading, time, datetime, platform
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.chdir(ROOT)
+ap = argparse.ArgumentParser()
+ap.add_argument('--settle', type=float, default=15); ap.add_argument('--seconds', type=float, default=30)
+ap.add_argument('--interact', action='store_true', help='drive each scene with the scripted pointer while measuring')
+ap.add_argument('--extras', action='store_true', help='also: scene-switch spike, Play open, 10-min memory soak (koi, cats)')
+ap.add_argument('--soak', type=float, default=600)
+ap.add_argument('scenes', nargs='*', default=['koi', 'bowls', 'cats', 'grass', 'cafe', 'records', 'ramen', 'rooftop', 'speakeasy', 'cabin', 'train', 'cymatics'])
+a = ap.parse_args()
+
+def dev(cmd): subprocess.run(['./dev.sh', cmd], capture_output=True, timeout=30)
+def devjs(js): return subprocess.run(['./dev.sh', 'js', js], capture_output=True, text=True, timeout=30).stdout.strip()
+
+def battery_w():
+    out = subprocess.run(['ioreg', '-rn', 'AppleSmartBattery'], capture_output=True, text=True).stdout
+    amp = re.search(r'"InstantAmperage" = (\d+)', out); volt = re.search(r'"Voltage" = (\d+)', out)
+    ext = '"ExternalConnected" = Yes' in out
+    if not amp or not volt: return None, ext
+    ma = int(amp.group(1)); ma = ma - (1 << 64) if ma >= (1 << 63) else ma
+    return -ma * int(volt.group(1)) / 1e6, ext          # discharge current is negative → positive watts
+
+def measure(label):
+    watts, plugged = [], False
+    stop = threading.Event()
+    def poll():
+        nonlocal plugged
+        while not stop.is_set():
+            w, ext = battery_w(); plugged |= ext
+            if w is not None: watts.append(w)
+            stop.wait(1)
+    t = threading.Thread(target=poll); t.start()
+    r = subprocess.run(['.build/wpmeter', str(a.seconds)], capture_output=True, text=True)
+    stop.set(); t.join()
+    m = json.loads(r.stdout)
+    sysw = sum(watts) / len(watts) if watts and not plugged else None
+    row = {'label': label, **m['total'], 'systemW': round(sysw, 2) if sysw is not None else None,
+           'procs': m['procs']}
+    print(f"{label:12s} cpu {m['total']['cpu']:5.1f}%  mem {m['total']['mb']:5.0f} MB  cpu-energy {m['total']['mw']:4.0f} mW  "
+          f"system {('%.2f W' % sysw) if sysw is not None else 'n/a (plugged in)'}", flush=True)
+    return row
+
+if not os.path.exists('.build/wpmeter'):
+    subprocess.run(['swiftc', '-O', 'tools/measure/wpmeter.swift', '-o', '.build/wpmeter'], check=True)
+info = {'date': datetime.datetime.now().isoformat(timespec='seconds'),
+        'model': subprocess.run(['sysctl', '-n', 'hw.model'], capture_output=True, text=True).stdout.strip(),
+        'chip': subprocess.run(['sysctl', '-n', 'machdep.cpu.brand_string'], capture_output=True, text=True).stdout.strip(),
+        'macos': platform.mac_ver()[0], 'settle': a.settle, 'seconds': a.seconds}
+rows = []
+# Keep the wallpaper engaged for the whole run (the owner may be away); restore their mode after.
+DOM = 'live.wallpap.mac'
+prev_mode = subprocess.run(['defaults', 'read', DOM, 'energyMode'], capture_output=True, text=True)
+prev_mode = prev_mode.stdout.strip() if prev_mode.returncode == 0 else None
+subprocess.run(['defaults', 'write', DOM, 'energyMode', 'always'])
+def restore_mode():
+    if prev_mode is None: subprocess.run(['defaults', 'delete', DOM, 'energyMode'], capture_output=True)
+    else: subprocess.run(['defaults', 'write', DOM, 'energyMode', prev_mode])
+prev_scene = subprocess.run(['defaults', 'read', DOM, 'scene'], capture_output=True, text=True).stdout.strip() or 'koi'
+import atexit; atexit.register(restore_mode); atexit.register(lambda: dev(f'scene:{prev_scene}'))
+def paused(label):
+    devjs("__lw('pauseReason','user'); __lw('focus',false)"); time.sleep(a.settle)
+    rows.append(measure(label)); devjs("__lw('pauseReason',''); __lw('focus',true)")
+paused('paused-start')
+for s in a.scenes:
+    dev(f'scene:{s}'); time.sleep(a.settle)
+    devjs("__lw('focus',true)")
+    if a.interact: dev(f'interact:{a.seconds + 2:.0f}')
+    rows.append(measure(s + ('+interact' if a.interact else '')))
+if a.extras:
+    # Switching cost: measure the 10 s right after a scene change (teardown + load + art decode).
+    for s in ['cats', 'koi', 'train']:
+        dev(f'scene:{s}'); r = subprocess.run(['.build/wpmeter', '10'], capture_output=True, text=True)
+        m = json.loads(r.stdout); rows.append({'label': f'switch->{s}', **m['total'], 'systemW': None, 'procs': m['procs']})
+        print(f"switch->{s:7s} cpu {m['total']['cpu']:5.1f}%  mem {m['total']['mb']:5.0f} MB (first 10 s)", flush=True); time.sleep(a.settle)
+    # Play open over the live scene.
+    dev('scene:cats'); time.sleep(a.settle); dev('play-toggle'); time.sleep(4)
+    rows.append(measure('play-open')); dev('play-toggle'); time.sleep(3)
+    # Memory soak: does footprint keep growing? Sample every 30 s.
+    for s in ['koi', 'cats']:
+        dev(f'scene:{s}'); time.sleep(a.settle); series = []
+        for i in range(int(a.soak // 30)):
+            if a.interact and i % 4 == 0: dev('interact:25')
+            m = json.loads(subprocess.run(['.build/wpmeter', '30'], capture_output=True, text=True).stdout)
+            series.append(m['total']['mb'])
+        rows.append({'label': f'soak-{s}', 'mbSeries': series, 'mbStart': series[0], 'mbEnd': series[-1], 'mbPeak': max(series)})
+        print(f"soak {s:5s} memory {series[0]:.0f} → {series[-1]:.0f} MB (peak {max(series):.0f}) over {len(series)*30} s", flush=True)
+paused('paused-end')
+base = [r['systemW'] for r in rows if r['label'].startswith('paused') and r['systemW'] is not None]
+if base:
+    b = sum(base) / len(base)
+    for r in rows: r['wallpaperW'] = round(r['systemW'] - b, 2) if r['systemW'] is not None else None
+os.makedirs('docs/perf', exist_ok=True)
+out = f"docs/perf/{info['date'][:10]}-{info['model']}{'-interact' if a.interact else ''}{'-extras' if a.extras else ''}.json"
+json.dump({'info': info, 'rows': rows}, open(out, 'w'), indent=1)
+print('saved', out)

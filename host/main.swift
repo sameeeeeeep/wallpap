@@ -628,10 +628,48 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
                           let png = rep.representation(using: .png, properties: [:]) else { return }
                     try? png.write(to: URL(fileURLWithPath: path))
                 }
+            } else if cmd.hasPrefix("interact:") {   // perf runs: scripted pointer through the real input path
+                self.simulateInteraction(seconds: Double(cmd.dropFirst(9)) ?? 30)
+            } else if cmd == "play-toggle" { self.playHost.toggle()
             } else if cmd == "state" {
                 let d = (try? JSONSerialization.data(withJSONObject: self.panelState(), options: [.prettyPrinted])) ?? Data()
                 try? d.write(to: URL(fileURLWithPath: "/tmp/livewall-dev.txt"))
             }
+        }
+    }
+
+    /// Dev-only (LIVEWALL_DEV=1): drive the scene with a scripted pointer for `seconds`, sending exactly
+    /// what real input sends (__lw move/down/up at ~90 Hz) so perf runs include the host → page cost.
+    /// It never moves the real cursor or posts system events. Phases repeat every 8 s: fast sweeps,
+    /// slow circling, a still pause (pets stalk/pounce, koi come to look), clicks, and a drag.
+    var interactTimer: Timer?
+    func simulateInteraction(seconds: Double) {
+        interactTimer?.invalidate()
+        guard let w = windows.first else { return }
+        let W = Double(w.frame.width), H = Double(w.frame.height)
+        let cx = W * 0.36, cy = H * 0.58, rx = W * 0.26, ry = H * 0.22   // inside the scene's clear area
+        let t0 = CACurrentMediaTime()
+        var down = false, lastClick = -1.0
+        interactTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 90, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            let el = CACurrentMediaTime() - t0
+            if el > seconds { if down { w.js("__lw('up',\(cx),\(cy))") }; t.invalidate(); self.interactTimer = nil; return }
+            self.cursorOnDesktop = true; self.touchDesktop()
+            let ph = el.truncatingRemainder(dividingBy: 8)
+            var x = cx, y = cy
+            switch ph {
+            case ..<2:   x = cx + rx * sin(el * 3.1); y = cy + ry * sin(el * 4.3)            // fast sweeps
+            case ..<4:   x = cx + rx * 0.5 * cos(el * 1.2); y = cy + ry * 0.5 * sin(el * 1.2)  // slow circling
+            case ..<5.5: x = cx + rx * 0.3; y = cy + ry * 0.2                                 // hold still
+            case ..<7:                                                                       // clicks
+                x = cx - rx * 0.4 + (ph - 5.5) * 40; y = cy
+                if el - lastClick > 0.5 { lastClick = el; w.js("__lw('down',\(x),\(y))"); w.js("__lw('up',\(x),\(y))") }
+            default:                                                                         // drag
+                x = cx - rx * 0.5 + (ph - 7) * rx; y = cy + ry * 0.3 * sin(ph * 6)
+                if !down { down = true; w.js("__lw('down',\(x),\(y))") }
+            }
+            if ph < 7, down { down = false; w.js("__lw('up',\(x),\(y))") }
+            w.js("__lw('move',\(x),\(y))")
         }
     }
 

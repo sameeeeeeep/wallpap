@@ -11,16 +11,21 @@ function direction(vx,vy,slope=.55,last={view:'side',face:1,octant:0}){
  const octant=(Math.round(Math.atan2(vy/slope,vx)/(Math.PI/4))+8)%8;
  return {view:views[octant],face:octant>2&&octant<6?-1:1,octant};
 }
+// Size match: sheets were drawn at different scales per view and action. These factors keep the
+// cat one size in every angle and pose (matched on head and body size against the jump frames).
+const CLIP_SCALE={'walk-side':.85,'walk-near':1.12,'walk-far':1,'walk-toward':.76,'walk-away':1.1,
+ 'run-toward':.93,'sit':.86,'rest':.8,'perk':.9,'stretch':.86};
 function load(spec){
  if(cache.has(spec.set))return cache.get(spec.set);
  const data=LW.CAT_ATLAS?.[spec.id];if(!data)return null;
+ for(const [k,f] of Object.entries(CLIP_SCALE))if(/^(walk|run)-/.test(k)&&data.clips[k]&&!data.clips[k]._scaled){data.clips[k].stride=(data.clips[k].stride||60)*f;data.clips[k]._scaled=true;}
  const s={spec,atlas:true,img:{},seq:{pounce:true},ready:false,clips:data.clips,unit:data.unit,cyc:{has:()=>false}};
  cache.set(spec.set,s);let left=Object.keys(data.clips).length,bad=false;
  for(const [key,clip] of Object.entries(data.clips)){
   const im=new Image();im.onload=()=>{
    clip.frames.forEach(([x,y,w,h,ax,ay],i)=>{
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(im,x,y,w,h,0,0,w,h);
-    cv.petK=1;cv.petFa0=ax/w;cv.petFootPad=h-1-ay;cv.petContact={x:ax,y:ay,span:clip.span||w*.5};cv.petName=key+'-'+(i+1);
+    cv.petK=CLIP_SCALE[key]||1;cv.petFa0=ax/w;cv.petFootPad=h-1-ay;cv.petContact={x:ax,y:ay,span:clip.span||w*.5};cv.petName=key+'-'+(i+1);
     s.img[cv.petName]=cv;
    });
    if(--left===0&&!bad){s.ready=true;s.img.walk1=s.img['walk-side-1'];s.cyc.has=q=>q==='walk'||q==='walk-f'||q==='walk-b';}

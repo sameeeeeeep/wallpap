@@ -1713,8 +1713,8 @@ if CommandLine.arguments.contains("--play-resource-check") {
     for file in ["play/play.js", "play/card-sdk.js", "play/catalog.js", "play/feeds.json", "play/house-ads.json", "play/cards/word-of-the-day/data/words.json", "play/cards/crossword-of-the-day/data/2026.json"] {
         guard FileManager.default.fileExists(atPath: url.appendingPathComponent(file).path) else { fputs("Missing Play resource\n", stderr); exit(2) }
     }
-    guard PlayConfig.analyticsEndpoint.isEmpty else { fputs("Expected unconfigured endpoint\n", stderr); exit(2) }
-    print("Play resource check PASS: bundled shell, SDK, cards, content, feeds and house ads; analytics endpoint empty. No app windows created.")
+    guard PlayConfig.analyticsEndpoint.isEmpty || PlayConfig.analyticsEndpoint.hasPrefix("https://wallpap.live/") else { fputs("Unexpected analytics endpoint\n", stderr); exit(2) }
+    print("Play resource check PASS: bundled shell, SDK, cards, content, feeds and house ads; analytics endpoint first-party. No app windows created.")
     exit(0)
 }
 let app = NSApplication.shared

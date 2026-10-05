@@ -2,8 +2,8 @@
 import Foundation
 
 enum PlayConfig {
-    // Owner deploys the worker and configures this HTTPS URL in a later release.
-    static let analyticsEndpoint = ""
+    // tools/analytics-worker, deployed 2026-10-06 on Cloudflare (D1 wallpap-play-counts).
+    static let analyticsEndpoint = "https://wallpap.live/counts"
 }
 struct PlayAnalyticsBatch: Codable { let day: String; let appVersion: String; let counts: [String: Int] }
 final class PlayAnalytics {

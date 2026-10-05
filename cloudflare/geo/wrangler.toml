@@ -2,3 +2,7 @@ name = "wallpap-geo"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 routes = [{ pattern = "wallpap.live/geo", zone_name = "wallpap.live" }]
+workers_dev = false
+
+[observability]
+enabled = false

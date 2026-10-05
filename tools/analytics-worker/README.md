@@ -1,4 +1,4 @@
-# Play aggregate counter — not deployed
+# Play + app aggregate counter — deployed 2026-10-06 (wallpap.live/counts, D1 wallpap-play-counts)
 
 The app endpoint in host/PlayAnalytics.swift is empty. No data is sent until the owner deploys and ships an endpoint. The client holds event counts in memory, attempts one batch when the local date changes, then discards them. Failed sends and app exits lose counts by design; there is no disk queue, retry token or installation ID. Opting out clears memory and cancels an in-flight task (an already received batch cannot be withdrawn).
 

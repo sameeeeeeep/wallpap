@@ -49,7 +49,8 @@ function startTurn(p,dir,next){
 function pose(p,dt){
  const s=p.asset;if(!s.ready)return;
  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];p.spP=f.name;p.dir=f.dir;p.prev=null;p.poseT=1;return;}
- const st=p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
+ // A followed cat waits on its feet, ready to go, and only sits after a real pause (~2.5 s).
+ const st=p.picked&&['followWait','followLook'].includes(p.state)&&p.t<2.5?'stand':p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
  let key='walk-'+dir.view,idx=0;
  const motion=p._catMotion||(p._catMotion={distance:p.gd,phase:0,gait:'walk'});
  if(st==='move'||st==='stand'){

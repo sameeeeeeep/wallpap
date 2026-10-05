@@ -400,7 +400,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  const bodyLength=p=>{const b=box(p);return (b[2]-b[0])*.9;};
  function fanTarget(p,q){
   const group=items.filter(o=>o.picked&&!o.away),i=group.indexOf(p),n=group.length;
-  const radius=Math.max(...group.map(bodyLength),bodyLength(p))*(n>1?1.5+.3*(n-2):1.05);
+  const radius=Math.max(...group.map(bodyLength),bodyLength(p))*(n>1?1.4+.3*(n-2):.8);
   const angle=Math.atan2(-cursor.heading[1],-cursor.heading[0])+(n>1?(i/(n-1)-.5)*2.4:0);
   return project(p,q[0]+Math.cos(angle)*radius,q[1]+Math.sin(angle)*radius,true);
  }
@@ -451,15 +451,15 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   }
   const distance=Math.hypot(q[0]-p.x,q[1]-p.y),body=bodyLength(p);
   const busy=items.some(o=>o!==p&&o.picked&&['stalk','wiggle','pounce'].includes(o.follow?.phase));
-  if(p.asset.seq.pounce&&!busy&&f.cooldown===0&&cursor.still>.5&&cursor.speed<20&&distance>body*.35&&distance<body*2.5&&free(p,...q,'floor')){
+  if(p.asset.seq.pounce&&!busy&&f.cooldown===0&&cursor.still>1.2&&cursor.speed<20&&distance>body*.35&&distance<body*2.5&&free(p,...q,'floor')){
    if(beginHunt(p,q))return;
   }
-  if(f.repath>0)return;f.repath=.35;
+  if(f.repath>0)return;f.repath=.2;
   const dest=fanTarget(p,q);if(!dest){halt(p);return;}
   f.slot=dest;
   if(Math.hypot(dest[0]-p.x,dest[1]-p.y)<12*p.k){if(p.state==='move')halt(p);return;}
   const gait=distance>body*1.2||cursor.speed>80*p.k?'run':'walk';
-  f.leap=(f.leap||0)-.35;
+  f.leap=(f.leap||0)-.2;
   if(gait==='run'&&distance>body*1.6&&f.leap<=0&&Math.random()<.5){
    const reach=Math.min(distance-body*.6,body*1.3),ux=(dest[0]-p.x)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y)),uy=(dest[1]-p.y)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y));
    const tx=p.x+ux*reach,ty=p.y+uy*reach;

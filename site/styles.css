@@ -593,7 +593,7 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .zoom-on .hero::before,.zoom-on .tourbar,.zoom-on .journey-entry,.zoom-on .mac-base{opacity:calc(1 - var(--zoom,0)*3)}
 .zoom-on .hero-head{opacity:calc(1 - var(--zoom,0)*5);transform:translateY(calc(var(--zoom,0)*-60px))}
 .zoom-on .monitor{box-shadow:0 0 0 calc(1px - var(--zoom,0)*1px) #8d9297,0 0 0 2px #2a2d31,inset 0 0 0 1px #1d2024}
-.zoom-on #pgScreen>:is(.menubar,.widgets,.desk-icons,.status-pill){opacity:calc(1 - var(--zoom,0)*2.6)}
+.zoom-on #pgScreen>:is(.widgets,.desk-icons,.status-pill),.zoom-on #pgScreen .desktop-add{opacity:calc(1 - var(--zoom,0)*2.6)}
 .zoomed #pgScreen>:is(.app-window,.mplayer,.rcard,.panel-pop,.panel-note,.play-live,.sound-hint,.ghost),.zoomed .ghost{visibility:hidden}
 .zoomed .hero-head,.zoomed .tourbar,.zoomed .journey-entry{pointer-events:none}
 .zoomed>.nav,.zoomed .nav{opacity:0;visibility:hidden;pointer-events:none}
@@ -606,7 +606,7 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .journey-screen .desktop-add{display:none}
 .journey-screen .panel-pop{right:150px;top:calc(var(--mb-h) + 6px)}
 .journey-screen>.journey-shade{z-index:2}
-.journey-top{top:26px;padding-top:18px}
+.journey-top{top:var(--jmb,26px);padding-top:18px}
 .journey-stage .journey-top,.journey-stage .journey-hint,.journey-stage .journey-controls{transition:opacity .25s}
 .journey-stage.menu-open .journey-top,.journey-stage.menu-open .journey-hint,.journey-stage.menu-open .journey-controls{opacity:0;pointer-events:none}
 .journey-stage.coaching .journey-top{opacity:0;pointer-events:none}
@@ -614,7 +614,9 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .zoom-on #mac{transition:opacity .7s ease}
 .zoom-reveal #mac{opacity:0}
 /* First-visit menu tutorial: a note under the wave, the real panel drops open beside it. */
-.journey-coach{position:absolute;z-index:5;top:36px;right:150px;margin:0;padding:9px 14px;max-width:min(360px,calc(100% - 40px));font-size:12.5px;line-height:1.45;color:#fff;background:#0c1913c4;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff2e;border-radius:12px;pointer-events:none;opacity:0;transform:translateY(-4px);transition:opacity .35s,transform .35s}
+.journey-coach{position:absolute;z-index:5;top:calc(var(--jmb,26px) + 10px);right:150px;margin:0;padding:9px 14px;max-width:min(360px,calc(100% - 40px));font-size:12.5px;line-height:1.45;color:#fff;background:#0c1913c4;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff2e;border-radius:12px;pointer-events:none;opacity:0;transform:translateY(-4px);transition:opacity .35s,transform .35s}
 .journey-coach::before{content:'';position:absolute;top:-6px;right:16px;width:10px;height:10px;background:inherit;border-left:1px solid #ffffff2e;border-top:1px solid #ffffff2e;transform:rotate(45deg)}
 .journey-coach.visible{opacity:1;transform:none}
 .journey-stage.menu-open .journey-coach{right:500px!important}
+.screen iframe.scene.warm{opacity:0!important;pointer-events:none;z-index:0}
+.zoom-on .monitor .screen{border-radius:calc(clamp(4px,.45vw,7px)*(1 - var(--zoom,0)))}

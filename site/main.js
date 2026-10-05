@@ -636,6 +636,32 @@ class SceneHost {
     if (!this.frame) return;
     this.frame.remove(); this.frame = null; this.ready = false; this.focusSent = null;
   }
+  // The next scene loads ahead in a hidden frame and is paused as soon as it has loaded (no frames
+  // drawn), so switching to it is instant instead of poster → loading → live.
+  prewarm(id) {
+    if (this.warm && this.warm.id === id) return;
+    this.dropWarm();
+    if (!this.active || !this.wantLive || !id || id === this.sceneId) return;
+    const s = sceneById(id), f = document.createElement('iframe'), w = { id, frame: f, loaded: false };
+    f.className = 'scene warm'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true'); f.setAttribute('allow', 'autoplay');
+    f.src = `scenes/${s.id}.html?${new URLSearchParams({ hour: s.hour.toFixed(2), weather: s.weather, fps: '30', muted: '1' })}`;
+    f.addEventListener('load', () => { w.loaded = true; try { f.contentWindow.__lw('focus', false); } catch (e) {} }, { once: true });
+    this.poster.after(f); this.warm = w;
+  }
+  dropWarm() { if (this.warm) { this.warm.frame.remove(); this.warm = null; } }
+  takeWarm(id) {
+    const w = this.warm;
+    if (!w || w.id !== id || !w.loaded || !this.active) return false;
+    this.warm = null;
+    if (this.frame) this.frame.remove();
+    const f = w.frame, s = this.scene;
+    f.classList.remove('warm'); f.removeAttribute('aria-hidden'); f.tabIndex = 0;
+    f.title = `${s.name} — live wallpap scene. Click and move inside it to interact.`;
+    this.frame = f; this.ready = false; this.focusSent = null;
+    this.onLoad(f);                     // host bridge, listeners, env/sound/focus pushed (focus resumes it)
+    f.classList.add('ready'); this.flushWaiters(); this.applyFocus(); this.emit('live');
+    return true;
+  }
   onLoad(f) {
     if (f !== this.frame || this.ready) return;
     this.ready = true;
@@ -881,7 +907,7 @@ const Live = {
     }
     const linger = this.linger && performance.now() < this.lingerUntil && this.linger !== cand ? this.linger : (this.linger = null);
     this.owner = cand;
-    HOSTS.filter((h) => h !== cand && h !== this.keep && h !== linger).forEach((h) => { h.setActive(false); h.drop(); });
+    HOSTS.filter((h) => h !== cand && h !== this.keep && h !== linger).forEach((h) => { h.setActive(false); h.drop(); h.dropWarm(); });
     if (cand) { cand.setActive(true); if (this.keep) cand.whenLive(null, 8000).then(() => this.update()); }
     syncMusic();
   },
@@ -1363,7 +1389,11 @@ const Journey = {
     this.host.onPick = (id) => { const i = this.order.indexOf(id); if (i >= 0) { this.host.closePanel(); this.go(i); } };
     this.host.on((type) => {
       if (type === 'loaded') this.attach();
-      if (type === 'live') { $('#journeyMode').textContent = 'Live & interactive'; Zoom.update(); if (!Zoom.on || this.welcomed) this.queueHint(); }
+      if (type === 'live') {
+        $('#journeyMode').textContent = 'Live & interactive'; Zoom.update(); if (!Zoom.on || this.welcomed) this.queueHint();
+        clearTimeout(this.warmT);   // then quietly load the next world (the previous one at the end)
+        this.warmT = setTimeout(() => { if (this.active && this.host.isLive()) this.host.prewarm(this.order[this.index + 1] || this.order[this.index - 1]); }, 1200);
+      }
       if (type === 'state') this.stage.classList.toggle('menu-open', !!this.host.panelOpen);
     });
     this.host.onMedia = (cmd) => {
@@ -1426,7 +1456,7 @@ const Journey = {
     if (index !== this.index) this.select(index);
     else if (this.active && !wasActive && this.still()) this.queueHint();
     if (!this.active || document.hidden) this.clearHint();
-    if (!this.host.wantLive) this.host.drop();
+    if (!this.host.wantLive) { this.host.drop(); this.host.dropWarm(); }
     Live.update();
     if (this.host.active) this.host.spawn();
   },
@@ -1434,11 +1464,12 @@ const Journey = {
     this.clearHint(); this.index = index;
     const id = this.order[index], s = sceneById(id), h = this.host;
     // Dispose immediately, even when the user scrolls faster than the network can load.
-    ++h.switchTok; h.drop(); h.sceneId = id; h.env = { hour: s.hour, weather: s.weather };
+    ++h.switchTok; h.sceneId = id; h.env = { hour: s.hour, weather: s.weather };
+    if (!h.takeWarm(id)) h.drop();
     h.poster.src = `img/${id}.jpg`; h.poster.alt = `${s.name} wallpaper preview`;
     h.music = false; h.syncChrome();
     $('#journeyName').textContent = s.name; $('#journeyCategory').textContent = s.cat;
-    $('#journeyMode').textContent = this.still() ? 'Still preview · comes alive on your Mac' : 'Preview · opening this world';
+    $('#journeyMode').textContent = this.still() ? 'Still preview · comes alive on your Mac' : h.isLive() ? 'Live & interactive' : 'Preview · opening this world';
     const number = String(index + 1).padStart(2, '0');
     $('#journeyCount').textContent = `${number} / ${this.order.length}`;
     $('#journeyCount').setAttribute('aria-label', `Scene ${index + 1} of ${this.order.length}`);
@@ -1549,6 +1580,16 @@ const Zoom = {
     const m = this.mac.getBoundingClientRect(), s = this.screen.getBoundingClientRect();
     this.off = [s.left - m.left, s.top - m.top]; this.sw = s.width; this.sh = s.height;
     this.mac.style.transform = t;
+    // The menu bar stays through the zoom; the journey's is sized to what the hero's becomes at full
+    // size, so the hand-off is seamless.
+    const jm = $('#journeyScreen .menubar'), js = $('#journeyScreen'), st = $('#journeyStage');
+    if (!jm) return;
+    if (this.on && this.sw) {
+      const mb = $('.menubar', this.screen), cs = getComputedStyle(mb), S = Math.max(innerWidth / this.sw, innerHeight / this.sh), h = mb.offsetHeight * S;
+      jm.style.height = `${h}px`; jm.style.fontSize = `${parseFloat(cs.fontSize) * S}px`;
+      jm.style.paddingLeft = jm.style.paddingRight = `${parseFloat(cs.paddingLeft) * S}px`;
+      js.style.setProperty('--mb-h', `${h}px`); st.style.setProperty('--jmb', `${h}px`);
+    } else { jm.style.cssText = ''; js.style.removeProperty('--mb-h'); st.style.removeProperty('--jmb'); }
   },
   update() {
     const root = document.documentElement;
@@ -1561,7 +1602,7 @@ const Zoom = {
     // Where the screen sits now (the Mac's parent is never transformed) and where it should end:
     // covering the window, centred.
     const base = this.mac.parentElement.getBoundingClientRect(), sx = base.left + this.off[0], sy = base.top + this.off[1];
-    const S = Math.max(innerWidth / this.sw, innerHeight / this.sh), tx = (innerWidth - this.sw * S) / 2, ty = (innerHeight - this.sh * S) / 2;
+    const S = Math.max(innerWidth / this.sw, innerHeight / this.sh) * 1.006, tx = (innerWidth - this.sw * S) / 2, ty = (innerHeight - this.sh * S) / 2;   // a hair over: no bezel sliver
     this.mac.style.transformOrigin = `${this.off[0]}px ${this.off[1]}px`;
     this.mac.style.transform = e ? `translate(${(tx - sx) * e}px,${(ty - sy) * e}px) scale(${1 + (S - 1) * e})` : '';
     // Hand over once the journey underneath is pinned AND its own scene is live: the screen is never a still.

@@ -1,0 +1,73 @@
+[
+ {
+  "errors": [],
+  "imageErrors": [],
+  "report": {
+   "log": [
+    "0.00 idle/silence/singer:false/sax:false/rest",
+    "2.07 countin/silence/singer:false/sax:false/rest",
+    "2.10 countin/intro/singer:false/sax:false/rest",
+    "4.03 play/intro/singer:false/sax:false/rest",
+    "7.10 play/build/singer:false/sax:false/rest",
+    "11.80 play/drop/singer:false/sax:false/rest",
+    "13.33 play/groove/singer:false/sax:false/rest",
+    "15.43 play/breakdown/singer:false/sax:false/rest",
+    "19.03 outro/silence/singer:false/sax:false/rest",
+    "23.07 idle/silence/singer:false/sax:false/rest"
+   ],
+   "errs": []
+  }
+ },
+ {
+  "errors": [],
+  "imageErrors": [],
+  "report": {
+   "log": [
+    "0.00 idle/silence/singer:false/sax:false/rest",
+    "0.17 countin/silence/singer:true/sax:false/rest",
+    "0.20 countin/intro/singer:true/sax:false/rest",
+    "2.10 play/intro/singer:true/sax:false/rest",
+    "2.67 play/build/singer:true/sax:false/rest",
+    "3.20 play/drop/singer:true/sax:false/rest",
+    "4.73 play/groove/singer:true/sax:false/rest",
+    "8.17 outro/silence/singer:true/sax:false/rest"
+   ],
+   "errs": []
+  }
+ },
+ {
+  "errors": [],
+  "imageErrors": [],
+  "report": {
+   "log": [
+    "0.00 idle/silence/singer:false/sax:false/rest",
+    "0.17 countin/silence/singer:false/sax:true/rest",
+    "0.20 countin/intro/singer:false/sax:true/rest",
+    "2.10 play/intro/singer:false/sax:true/phrase",
+    "3.63 play/build/singer:false/sax:true/phrase",
+    "4.07 play/build/singer:false/sax:true/rest",
+    "6.63 play/drop/singer:false/sax:true/rest",
+    "6.67 play/drop/singer:false/sax:true/SOLO",
+    "8.17 play/groove/singer:false/sax:true/SOLO",
+    "13.13 outro/silence/singer:false/sax:true/rest",
+    "17.13 idle/silence/singer:false/sax:true/rest"
+   ],
+   "errs": []
+  }
+ },
+ {
+  "errors": [],
+  "imageErrors": [],
+  "report": {
+   "log": [
+    "0.00 idle/silence/singer:false/sax:false/rest",
+    "0.17 countin/silence/singer:true/sax:true/rest",
+    "0.20 countin/intro/singer:true/sax:true/rest",
+    "2.10 play/intro/singer:true/sax:true/phrase",
+    "4.07 play/intro/singer:true/sax:true/rest",
+    "5.17 outro/silence/singer:true/sax:true/rest"
+   ],
+   "errs": []
+  }
+ }
+]

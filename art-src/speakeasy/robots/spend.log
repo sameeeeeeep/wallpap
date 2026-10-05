@@ -1,0 +1,3 @@
+concept-lineup | images_generate nano-banana-pro 2k 21:9, style ref = stage crop | 75
+pianist-rear | images_generate nano-banana-pro 2k 16:9, refs = pianist crop + stage | 75
+saxophonist | images_generate nano-banana-pro 2k 16:9, refs = band lineup + stage | 75

@@ -1198,3 +1198,91 @@ dusk).
 Packs: Beach and Butterfly Garden bumped to v3 (`site/scenes-pack/*-3.zip`, catalog order kept). 96 Node tests pass.
 No image generation, no downloads, no push, no app build/install.
 
+## 2026-10-04 — Speakeasy: art-deco robot jazz trio (speakeasy-robots worktree)
+
+Owner: "I like piano playing with music, but can we actually show some sort of futuristic robots operating
+instruments for each song?" → chose an ART-DECO ROBOT JAZZ TRIO (brass/chrome 1920s-futurist automata on piano,
+upright bass and drums; lineup shifts per song).
+
+**Design.** Four original robots: a slender black-lacquer pianist with a stepped gold fin crest (seen from behind at the
+upright, its head turning to a profile toward the band), a stocky copper drummer behind the painted kit, a lanky chrome
+bassist behind the painted double bass, and a chrome-and-ivory guest singer who rises through a brass-ringed stage lift
+for ~38% of songs (hash of the track). Each is a cut-out rig of rigid painted parts (head, torso, seat/legs, upper arm,
+forearm, hand/stick) articulated per frame by FK + two-bone IK with damped springs (slight overshoot) — polish-brief §12
+compliant (jointed rigid parts, nothing slid along a path). Robots stand BEHIND the painted kit/bass/mic: those are
+redrawn from the baked room through `art/speakeasy/robots/occluder.png`; arms/hands/sticks draw in front. Parts are
+tinted once per bake with a warm stage key (top lit, feet in shadow), eyes/visors glow softly.
+
+**Music → motion** (music.js / `LW.mx`, newly loaded by the scene): every stroke is scheduled on the beat clock — hands
+rebound, hover, travel to the next drum and land exactly on the hit. Drummer: jazz ride ("ding ding-a ding", swing from the
+track hash) + snare backbeat in grooves; brushes (slow circles) in intros/breakdowns/quiet; snare 8ths→16ths and a ride
+swell through builds; a crash on the drop; hi-hat closes on 2&4; kicks thump the bass-drum head; cymbals ring on springs.
+Pianist: left hand on the chord root (fifths/octaves), right hand comps the chord (Charleston rhythm; runs in the treble on
+busy bars); the actual keys under the hands go down (and the sustain pedal), the old self-playing roll stops. Bassist:
+walking quarter notes — fretting hand slides along the neck by the note, plucking hand pulls across the strings, which
+ring and blur. Heads nod with the tempo. Song start: heads turn to the drummer and the sticks click a 4-beat count-in
+(also on a track change); stop/calm: a final crash, choke and slow settle; idle: breathing, glances, an occasional stick
+twirl. Taps: drummer twirl/crash, pianist glissando (keys go down under the hand), bassist slap. Without the robot art
+(`?noart=1`) the previous self-playing piano plays.
+
+**Sources/licences.** No suitable CC0/PD/CC-BY figures (searched; only flat clip-art) → original Magnific generations
+(commercial use allowed for the account). Prompts, masters, cut figures and the parts builder: `art-src/speakeasy/robots/`.
+
+**Spend (Magnific, `simulate_cost` before each):**
+| tool | purpose | credits |
+| --- | --- | --- |
+| images_generate (Nano Banana Pro 2k, 21:9, style ref = stage crop) | concept lineup: 4 robots, front A-pose, grey card | 75 |
+| images_generate (Nano Banana Pro 2k, 16:9, refs = pianist crop + stage) | pianist rear view on stool + head profile | 75 |
+| **total** | (budget 800) | **150** |
+
+**Pets.** Pet code untouched. Pet STAGE geometry: the piano-lid ledge now starts at x 1050 (was 1032) so the cat stays
+right of the seated pianist's crest; the lid nap spot (x 1084) is unchanged. 60 s pet self-test with music: 0 identity errors.
+
+**Perf** (`tools/speakeasy-band/bench.py`, isolated WKWebView 1200×750, 7×90 frames, median, six runs, machine shared
+with other agents): playing ≈3.3–3.6 ms (main ≈3.3–3.6), idle ≈3.0–3.3 ms (main ≈3.2–3.9). The band itself costs ≈0.2 ms;
+it is paid for by filling the two light beams with a scrolling haze PATTERN instead of clip + tiled drawImage
+(≈0.6 → ≈0.25 ms per beam). Canvas 2D only; part tints baked per light change; no per-frame image uploads.
+
+Resume pass: the first cut had both elbows solved on the wrong side (the upper arms flipped up into 'wings' and
+the horn read as hanging off a shoulder) — IK bends swapped; solo no longer carries into the outro.
+
+**Verification (LOOKED at):** `shots/speakeasy-robots/` — night and day 22-frame scripted sequences (idle → count-in →
+intro → build → drop → groove → breakdown → stop → idle → singer song → idle), full-room frames, drummer one-beat
+close-up, quartet close-up, taps, `?side=left` and 3440×1440. Zero JS errors / failed images; 96 Node tests pass.
+Reproduce: `python3 devserver.py <port>` then `python3 tools/speakeasy-band/sequence.py <port> night,day`.
+Known gaps: see the backlog follow-ups (sax guest, pianist's hidden left hand, drummer shins, live Beat Sync check in-app).
+
+### 2026-10-04 (later) — Speakeasy band: guest saxophonist, drummer legs, cuff seams
+
+Owner approved a SAX BOT as a second guest. A gold-brass saxophonist (stepped deco chest grille, mouthpiece socket,
+small crest) generated in the same family from the band lineup + stage references; the tenor saxophone is a separate
+rig part (mirrored so its body hangs at the player's right, pivoting at the mouthpiece in the mouth socket, keywork
+pockets of grey card removed). It rides the stage lift like the singer (its own lift a step downstage of the mic, x 1172, drawn in front of the
+mic and kit so the stand never cuts through the horn) and leaves at song end. Lineup per track (hash): ~24% singer,
+~24% sax, ~5% both (the sax then stands front stage-left, x 922; quintet), else the trio.
+
+Driven by music.js: it plays PHRASES of 1–2 bars, chosen on bar lines (more often when the music is busy: onset rate
++ mid/high energy), with BREATHS between (chest swells, the horn dips from the lips); on a drop it takes a 4-bar SOLO
+(leans back, the bell lifts, bigger sway), and at a loud groove phrase line sometimes a 2-bar break; it sways with the groove; both hands hold the horn's upper/lower keys (IK to
+points on the horn; the player's left hand crosses the chest to the upper stack, the right hangs to the lower
+stack) and shift along it with the melody note (the strongest non-root pitch class, each 8th), pressing in on each
+new note; on a breath the chest swells and the head lifts a touch; the bell
+catches the spot when it plays loud; tap it for a short solo.
+
+Also: the drummer's shins are no longer drawn (they only peeked out under the kick drum — legs stay hidden behind the
+kit), and the drummer's wrist/elbow cut seams are covered by round joint caps carried on the hand/forearm parts.
+The lift only clips while it moves (cheaper once the guest is up).
+
+**Spend:** images_generate (Nano Banana Pro 2k, 16:9, refs = band lineup + stage) — saxophonist + saxophone sheet —
+**75 credits**. Scene total **225** of the 800 budget. Prompt: `art-src/speakeasy/robots/README.md`.
+
+Resume pass: the first cut had both elbows solved on the wrong side (the upper arms flipped up into 'wings' and
+the horn read as hanging off a shoulder) — IK bends swapped; solo no longer carries into the outro.
+
+**Verification (LOOKED at):** `shots/speakeasy-robots/night-sequence.jpg` + `day-sequence.jpg` now run 32 frames:
+the trio song, the singer song, then a sax song (rises on the lift, phrase, build, solo on the drop with the bell up,
+groove, stop → sinks) and the rare both-guests quintet; `*-full.jpg` add the sax solo and the quintet;
+`closeup-sax-night-day.jpg` (lift, phrase, breath, solo, groove, sink; night + day). Zero JS errors / failed images.
+96 Node tests pass. Perf: an interleaved in-page A/B (same WKWebView, load avg ~23 from other agents) measured trio
+6.0 / +sax 5.9 / both guests 6.6 ms — the sax adds nothing measurable; `bench.py` now has a sax-only case. The
+unloaded ~3.3–3.6 ms baseline could not be re-measured under that load.

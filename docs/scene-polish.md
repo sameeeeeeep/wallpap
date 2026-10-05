@@ -1286,3 +1286,56 @@ groove, stop → sinks) and the rare both-guests quintet; `*-full.jpg` add the s
 96 Node tests pass. Perf: an interleaved in-page A/B (same WKWebView, load avg ~23 from other agents) measured trio
 6.0 / +sax 5.9 / both guests 6.6 ms — the sax adds nothing measurable; `bench.py` now has a sax-only case. The
 unloaded ~3.3–3.6 ms baseline could not be re-measured under that load.
+## 2026-10-04 — Train station calls (local train-stations branch)
+
+Added four finite painted station strips: Itarsi canopy/benches/bilingual yellow board and tea kiosk;
+Mishima modern canopy/tactile line/glass barriers/LED board; Bergün chalet/flower boxes/clock;
+Venezia iron-and-glass canopy/stone facade/gas lamps. Built-in ImageGen only; no Magnific/Freepik credits.
+Art, lineage and prompt set: `scenes/art/train/stations/`, `art-src/train/stations/prompts.md`.
+Design: `art-src/train/stations/design.md`. Six-frame waiting, walking, serving and pigeon-peck cycles
+were packed into one atlas. The first walk was regenerated to improve passing poses. No still-image
+actor translation. Static architecture moves relative to the train camera as world scenery.
+
+`scenes/train-stations.js` owns randomized 180–360 s cruise intervals, safe-route queuing, 20 s quintic
+braking, 20–40 s dwell, and 24 s acceleration. The analytically integrated trajectory gives exact stop
+positions at different frame rates. Existing panorama/rocking/rumble systems follow the same speed;
+rocking/rail rumble settle at zero. Click surges cannot interrupt station calls. Live skin switches cancel
+and release stale loads. Station imagery loads near the call and releases once the platform clears.
+Night uses cached cool grading and practical light pools (cooler in Japan); roofs exclude weather,
+exposed ridges accumulate snow, wet aprons darken. Walkable apron and fixture footprints are declared;
+Japanese barrier pixels are restored in front of figures. QA hook: `__train.forceStation(24)`.
+
+Rendered and LOOKED at the final four-skin day/night matrix, Indian rain, Swiss snow and Japanese/Swiss
+3440×1440 left-layout sequences: 12 sequences × nine frames = 108 retained snapshots, assembled into
+24 full-scene/window JPEG contact sheets. Night exposure was lifted, Swiss walking feet moved back from
+the stone fascia, pigeon visibility improved, and the QA fixture now settles skin crossfades before capture.
+Evidence: `shots/train-stations/README.md`, `acceptance.json`, `*-scene.jpg`, `*-windows.jpg`, `life-frames.jpg`.
+All reports show zero JS/image errors, fixed dwell distance/zero speed, and one art load/release per call.
+The three day sheets affected by the last pigeon refinement were recaptured and inspected.
+All capture PNGs deleted. The disk guard stopped an earlier pass at 2.0 GiB; after space recovered above
+3 GiB, the full final matrix was completed. No unrelated files were deleted to make room.
+
+The final full suite passes **103/103** (`shots/train-stations/tests.log`), including seven station tests:
+frame-rate-independent trajectories at four cruise speeds, easing/integration, route safety, scheduling,
+calm departure, asynchronous asset ownership and actor/fixture grounding. Reproduction and performance
+methodology: `tools/train-stations/README.md`.
+
+Limits: one station design per skin; walking/vendor art is shared. No explicit boarding/door-opening
+animation: current life waits/walks/serves/pecks. Captures were muted; speed-linked sound changes were
+code-reviewed, not auditioned. Visual acceptance is the agent's inspection, not owner sign-off.
+
+Final serial frame-work medians (three 90-frame samples, ms/frame): prior baseline **7.18**, new cruise
+**6.64**, dwell **2.26**, cruise after release **3.70**. Scheduler/GPU variation is substantial; these are
+frame-budget evidence, not a claimed speedup. Equal-warmup native 30-fps kernel measurements include
+host/WebContent/GPU/Networking: median CPU **16.9% / 17.0% / 15.2% of one core**, physical footprint
+**271 / 280 / 280 MiB** for prior baseline / new cruise / released cruise. Three 15-second samples each;
+ranges overlap. Station-owned images and tint canvases peak at **9.02 MiB**, return to **0** after departure.
+Total WebKit footprint is not literally zero-delta: median 9 MiB above prior scene. No persistent post-stop
+increase above new-scene cruise was observed. Full ranges/methods/raw-result paths are in the QA README.
+
+The final resource pass explicitly detaches image sources and handlers on departure/stale load completion,
+in addition to resizing released canvases. Re-ran all 103 tests, file:// departure and the released-memory
+profile. Final visual refinement: the traveller keeps walking through departure and exits view naturally,
+instead of holding a mid-stride pose; the full capture matrix was refreshed afterward.
+
+Local commits only. No push, release, app rebuild/install/reload, screen interaction or other-worktree edits.

@@ -105,4 +105,6 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 
 ## Cats GPT replacement — owner 2026-10-04
 - [x] Implement and deliver painted cat motion replacement: five coats, eight floor directions, walk/run/jump, front idle transitions, preserved follow/scene behavior; five 45-second WebKit review videos, contact sheets, 106 passing tests, 24 scene integrations and before/after performance. See docs/cats-gpt.md and shots/cats-gpt/README.md.
-- [ ] Owner motion acceptance (G4-CAT): review delivered reels before installation. Remaining visual refinement: stepped view/action changes, diagonal foot shuffle, approximate calico body markings and faint Siamese tabby texture. See the explicit limitations in docs/cats-gpt.md; automated checks do not close this visual gate.
+- [x] Owner accepted all motion except diagonal walks: “Diagonal walk is glitchy, rest is okay.” Preserve approved non-diagonal art, runs, jumps and transitions.
+- [x] Diagonal walk correction: replace near/far whole-cycle sheets for all five coats, remove sheet-row root drift, match projected paw paths and measured stride; five 20-second 30 fps close-ups plus fresh full orange reel, full-cycle frame review and 107 passing tests. See shots/cats-gpt/diagonal-review.md.
+- [ ] Owner acceptance of corrected diagonal walks (G4-CAT); no installation authorized. Small eight-frame contact slip/occluded far legs remain documented.

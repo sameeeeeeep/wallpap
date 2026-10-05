@@ -1,4 +1,37 @@
-# Painted cats — owner motion review
+# Painted cats — diagonal fix review
+
+Owner approved the original reels except the diagonal walks. Only those walks
+were replaced; the other 85 atlases and runtime remain unchanged.
+
+| Coat | New diagonal close-up | Encoded poses |
+| --- | --- | --- |
+| Orange | [diagonals-orange.mp4](diagonals-orange.mp4) | [contact](diagonals-orange-contact.jpg) |
+| Black | [diagonals-black.mp4](diagonals-black.mp4) | [contact](diagonals-black-contact.jpg) |
+| Grey | [diagonals-grey.mp4](diagonals-grey.mp4) | [contact](diagonals-grey-contact.jpg) |
+| Calico | [diagonals-calico.mp4](diagonals-calico.mp4) | [contact](diagonals-calico-contact.jpg) |
+| Siamese | [diagonals-siamese.mp4](diagonals-siamese.mp4) | [contact](diagonals-siamese-contact.jpg) |
+
+Each is **20 seconds, 30 fps, 960×600**: toward-right, away-left, toward-left,
+away-right (0–8s), the same four passes again (8–16s), then all four diagonal
+runs (16–20s). Labelled cuts pair opposite passes over the same floor segment.
+The cat is enlarged so the legs are easy to inspect.
+
+[orange.mp4](orange.mp4) is also a fresh **45-second full regression reel**, with
+the original day/night timeline below. The other four original full reels and
+original contact sheets below are retained as historical approved references.
+
+Root causes: incorrect diagonal paw trajectories, repeated foreleg reaches and
+sheet-row registration wobble. Two new whole-cycle sheets were registered,
+colour-matched and propagated to all five coats. Painted-paw measurements set
+the new stride. **107 tests pass.** Complete consecutive 30 fps cycles were
+visually inspected in every orange diagonal, with near/far coat-cycle checks.
+
+See [frame-by-frame findings and remaining imperfections](diagonal-review.md),
+[before/after drawings](diagonal-before-after.jpg), and the per-coat JSON frame
+records/quality reports. Some eight-frame stepping, small contact slip and
+occluded far legs remain; no claim of perfect foot locking or owner acceptance.
+
+## Original full-reel timeline and references
 
 Five **45-second, 30 fps, 960×600** videos captured from this worktree's actual
 `file://` scenes in isolated macOS WebKit. The camera stays close to the cat.
@@ -29,7 +62,7 @@ pose, facing and errors. `video-quality.json` verifies coverage and 1,350 frames
 per video. Contact sheets show all eight directions for walk/run/jump plus idle
 and transition poses against light and dark backgrounds.
 
-## What passed
+## Original-run verification (historical)
 
 - 106 Node tests; plain local `./build.sh`; 24 file-origin WebKit integrations
   across the eight pet scenes, day/night and mirrored ultrawide.
@@ -45,9 +78,9 @@ and transition poses against light and dark backgrounds.
   Single samples, potentially throttled by WebKit, not foreground-app guarantees.
   See `baseline-performance.json` and `after-performance.json`.
 
-## Remaining visual limitations
+## Original-run limitations (historical; diagonal update above)
 
-This is the implemented review candidate; owner motion acceptance is still open.
+The owner subsequently approved everything except the diagonal walks; see the correction above.
 Large turns and changes between separately drawn action sheets can look stepped.
 Some diagonal feet shuffle and the stylized gallop has strong extension; the
 strict no-sliding visual gate is not claimed passed. Calico body patches can

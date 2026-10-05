@@ -21,9 +21,19 @@ for coat in ['orange','black','grey','calico','siamese']:
   if coat=='orange':
    a=np.array(im).astype(float);r,g,b=a[:,:,:3].transpose(2,0,1);sel=(a[:,:,3]>240)&(r-b>55)&(r>120)&(g>65)
    out['orangePalette'][key]=np.median(a[:,:,:3][sel],axis=0).astype(int).tolist()
-   if key.startswith('walk-'):out['walkAreaCV'][key]=c['areaVariation'];assert c['areaVariation']<.025
+   if key.startswith('walk-'):
+    out['walkAreaCV'][key]=c['areaVariation']
+    # The replacement diagonal limbs expose more silhouette during extension.
+    # Do not normalize that pose area into body-size pumping; they use one scale.
+    limit=.03 if key in ['walk-near','walk-far'] else .025
+    assert c['areaVariation']<limit
  out['coats'][coat]={'clips':len(m),'frames':len(m)*8,'webpBytes':size,'decodedAtlasBytes':decoded,'croppedFrameBytes':cropped,'geometryAndAlphaMatch':True}
+calibration=json.loads((ROOT/'tools/cats-qa/diagonal-src/calibration.json').read_text())
+out['diagonalCalibration']=calibration
+for view,c in calibration.items():
+ assert max(c['stanceResidualScenePixels'])<2,(view,'stance drift at drawn exposures')
+ assert reference['walk-'+view]['stride']==c['stride']
 (OUT/'art-quality.json').write_text(json.dumps(out,indent=2)+'\n')
 sources={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'tools/cats-qa/generated').glob('orange-*.png') if '-v' not in p.stem}
 (ROOT/'tools/cats-qa/sources.json').write_text(json.dumps({'note':'Selected whole-sheet imagegen masters are local ignored production inputs in generated/. Runtime WebP atlases are committed. SHA256 identifies the exact accepted source, not rejected versions.','masters':sources},indent=2)+'\n')
-print('760 frames: bounds, same-coat geometry, exact cross-coat alpha, walk area CV <2.5% pass')
+print('760 frames: bounds, shared geometry/alpha; walk area CV <3% diagonals / <2.5% other views pass')

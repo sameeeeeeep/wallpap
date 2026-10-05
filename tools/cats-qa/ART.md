@@ -45,3 +45,15 @@ python3 tools/cats-qa/quality.py
 ```
 
 Never regenerate/write atlases while a WebKit capture is loading them. A concurrent write was caught by the capture's image-error check during development, then re-rendered after the art build completed.
+
+## Diagonal correction — 2026-10-05 owner follow-up
+
+The original diagonal walk guides had incorrect projected paw axes, and the rear
+sheet's row placement leaked into registration. Replaced only `walk-near` and
+`walk-far` for all coats. See [selected sources, prompts and calibration](diagonal-src/README.md).
+Run `diagonal_atlas.py` after the historical atlas/coats steps when rebuilding.
+Current floor-distance strides are 43.47 near and 39.78 far. Every other clip and
+runtime behavior stays approved and unchanged. The new silhouette area CV is
+2.68% near / 2.43% far; the higher near area is exposed limbs, not per-frame scale.
+The numerical check allows 3% for these two clips, retaining 2.5% for other walks.
+Actual review evidence is in `shots/cats-gpt/diagonal-review.md`.

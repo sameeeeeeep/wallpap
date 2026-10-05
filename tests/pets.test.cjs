@@ -215,3 +215,23 @@ test('atlas running contact frames share the ground instead of inheriting source
   for(const i of [1,2,5,6])assert.ok(clip.frames[i][5]>clip.frames[i][3]-1,key+' suspension '+i);
  }
 });
+
+test('all coats keep diagonal heading and distance-driven phase at varied depth and floor slope',()=>{
+ for(const coat of ['orange','black','grey','calico','siamese'])for(const slope of [.4,.55,.7])for(const k of [.8,1.4]){
+  const r=rig([coat],{slope,scale:[[0,k],[1000,k]]},'cats',true),p=r.pets.items[0];
+  for(const gait of ['walk','run'])for(const [dx,dy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
+   Object.assign(p,{j:null,turn:null,sequence:null,_catTransition:null,_catRest:'stand',_catMotion:null});
+   const dir=r.LW.cats.direction(dx,dy*slope,slope);p._catDir=dir;
+   r.pets.forceWalk(0,700+dx*350,500+dy*350*slope,{from:[700,500],gait});r.tick();
+   const poses=new Set();
+   for(let i=0;i<60;i++){
+    const x=p.x,y=p.y,phase=p._catMotion.phase;r.tick();
+    assert.equal(p.turn,null);assert.equal(p._catDir.octant,dir.octant);assert.equal(p.dir,dir.face);
+    const clip=p.asset.clips[gait+'-'+dir.view],distance=Math.hypot(p.x-x,(p.y-y)/slope)/k;
+    assert.ok(Math.abs(((p._catMotion.phase-phase+1)%1)-distance/clip.stride)<1e-8);
+    poses.add(p.spP);
+   }
+   assert.equal(poses.size,8,coat+' '+gait+' '+dir.octant);
+  }
+ }
+});

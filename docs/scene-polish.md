@@ -1005,3 +1005,36 @@ recorded in `docs/cats-gpt.md`. 106 Node tests, 24 file-origin scene integration
 and a plain local build pass. Isolated off-screen CPU was 5.6% before / 5.9%
 after, footprint 165 / 216 MiB. These are single headless samples, not installed
 app measurements. Owner visual acceptance remains open; no install or push.
+
+
+## 2026-10-05 — cats-gpt diagonal-only owner correction
+
+Owner approved everything except diagonal walks. Replaced only near/far walk
+atlases for five coats (10 sheets / 80 frames); the other 85 atlases, their
+metadata, runtime, runs, jumps, rests and transitions remain unchanged.
+
+Diagnosis: original guide paw axes (24,26)/(24,-19) did not match the projected
+floor (1,±.55); near foreleg repeats and far source-row registration made the
+walk shuffle/pop. No octant switching was found in the recorded diagonal passes.
+Generated two full eight-frame sprite sheets using corrected four-beat blocking
+(38,±20.9), with the approved orange side style. Rejected two near-view candidates
+for repeating the reach. Selected exact imagegen prompts, lossless masters and
+calibration are retained in [diagonal-src](../tools/cats-qa/diagonal-src/README.md).
+
+Translation-only head/torso registration removes source row drift (including a
+32-pixel shift in the replacement near source); one scale per sheet, no per-frame
+size normalization. Orange palette matched to approved side art, coat variants
+preserve exact alpha and shared geometry. Measured painted stance paw centroids
+set strides to 43.47 near / 39.78 far; a first render using guide strides was
+replaced after this measurement. Other gaits were preserved after visual review.
+
+Evidence: [five diagonal reels and updated full orange reel](../shots/cats-gpt/README.md),
+[frame-by-frame findings](../shots/cats-gpt/diagonal-review.md), before/after
+drawings, per-frame state and quality JSON. 107 Node tests pass, including all
+five coats × four diagonals × two gaits × three floor slopes × two scales.
+Raw PNGs are deleted during encoding; df checks stayed above 5 GiB. No owner
+app/settings, install, push, release, stash or other worktree operation.
+
+Limitations remain explicit: eight-frame cadence/held-frame slip, small painted
+paw deviations, occluded far limbs, slightly more side-on replacement near view,
+and previously approved calico/Siamese approximations. This is not owner signoff.

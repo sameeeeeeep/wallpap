@@ -1,5 +1,22 @@
 # Painted cat motion replacement — cats-gpt
 
+## Owner diagonal follow-up — 2026-10-05
+
+Owner verdict: “Diagonal walk is glitchy, rest is okay.” The approved non-diagonal
+work is preserved. The two diagonal walk views were regenerated as whole
+eight-frame sheets, registered by the upper body, palette-matched and propagated
+to all five coats. Painted stance measurements set strides to 43.47 near / 39.78
+far. No runtime change was needed; the old guides had incorrect projected paw
+axes, repeated reaches and a rear sheet-row anchor jump. The other 85 atlases and
+their metadata are unchanged.
+
+Five 20-second 30 fps diagonal reels, an updated full orange reel, exact frame
+review ranges, numerical limits and remaining imperfections are documented in
+[the diagonal review](../shots/cats-gpt/diagonal-review.md). Tests: 107 passed.
+Sources/prompts: `tools/cats-qa/diagonal-src/`; rebuild/review commands are in that
+review. The sections below describe the original run and retain its historical
+measurements and limitations. Owner acceptance of the new diagonals is pending.
+
 ## Plan and acceptance
 
 1. Baseline: preserve current worktree art references/QA inputs, record tests and isolated WebKit CPU/memory. Never operate the installed app.

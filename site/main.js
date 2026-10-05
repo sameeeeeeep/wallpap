@@ -1195,7 +1195,7 @@ const Tour = {
     return light ? all.filter((x) => !x.heavy) : all;
   },
   maybeStart(delay = 0) {
-    if (this.mode !== 'auto' || this.held || this.running || !this.inView || document.hidden || !PG.host.wantLive) return;
+    if (this.mode !== 'auto' || this.held || this.running || !this.inView || document.hidden || !PG.host.wantLive || Zoom.e > .02) return;
     delay = Math.max(delay, this.lastUser + this.IDLE - performance.now());   // never cut a lull short
     clearTimeout(this.resumeT);
     this.resumeT = setTimeout(() => { this.resumeT = 0; if (this.mode === 'auto' && !this.held && this.inView && !this.running && !document.hidden) this.start(); }, delay);
@@ -1346,11 +1346,15 @@ const Journey = {
     this.motion = motionMQ;
     this.el.style.setProperty('--scene-count', this.order.length);
     this.host = new SceneHost($('#journeyScreen'), { name: 'journey', interactive: true, scene: this.order[0] });
-    // SceneHost supplies the same app bridge as the playground; the journey has no desktop chrome.
-    [...this.host.screen.children].filter((el) => !el.classList.contains('poster')).forEach((el) => { el.hidden = true; });
+    // SceneHost supplies the same app bridge as the playground. The journey keeps the Mac's menu bar
+    // (its wave opens wallpap's real panel for this scene); the desktop clutter goes.
+    $$('.widgets, .desk-icons, .app-window, .status-pill', this.host.screen).forEach((el) => { el.hidden = true; });
+    this.host.screen.insertBefore($('.journey-shade', this.stage), this.host.el.wave.closest('.menubar'));
+    this.host.onPick = (id) => { const i = this.order.indexOf(id); if (i >= 0) { this.host.closePanel(); this.go(i); } };
     this.host.on((type) => {
       if (type === 'loaded') this.attach();
       if (type === 'live') { $('#journeyMode').textContent = 'Live & interactive'; this.queueHint(); }
+      if (type === 'state') this.stage.classList.toggle('menu-open', !!this.host.panelOpen);
     });
     this.host.onMedia = (cmd) => {
       this.dismissHint();
@@ -1394,7 +1398,7 @@ const Journey = {
   still() { return phoneMQ.matches || this.motion.matches || saveData; },
   go(index) {
     const top = this.el.getBoundingClientRect().top + scrollY;
-    const y = index < 0 ? 0 : index >= this.order.length ? $('#journey-end').offsetTop : top + index * this.stage.offsetHeight;
+    const y = index < 0 ? 0 : index >= this.order.length ? $('#journey-end').offsetTop : top + index * this.stage.offsetHeight + (index === 0 && Zoom.on ? Zoom.fade() : 0);
     // A single scroll animation never runs through/loading every intermediate scene on Skip.
     if (index < 0 || index >= this.order.length) {
       scrollTo({ top: y, behavior: 'instant' });
@@ -1404,7 +1408,7 @@ const Journey = {
   update() {
     const r = this.el.getBoundingClientRect(), h = this.stage.offsetHeight;
     const wasActive = this.active;
-    this.active = r.top < innerHeight * .5 && r.bottom > innerHeight * .5;
+    this.active = (Zoom.on ? r.top <= 1 : r.top < innerHeight * .5) && r.bottom > innerHeight * .5;
     document.documentElement.classList.toggle('in-journey', this.active);
     const index = clamp(Math.floor((-r.top + h * .35) / h), 0, this.order.length - 1);
     this.host.wantLive = this.active && !this.still() && !document.hidden;
@@ -1478,11 +1482,65 @@ const Journey = {
   },
 };
 
+// ─── Zoom: scroll into the Mac ───────────────────────────────────────────────
+// The hero is pinned while the Mac's screen grows (one transform on the Mac) until it covers the
+// window; then the Mac fades away over the journey, which is already pinned underneath on the same scene.
+const Zoom = {
+  on: false, e: 0,
+  run() { return innerHeight; },             // scroll spent zooming (--zr)
+  fade() { return innerHeight * .3; },       // scroll spent handing over to the journey (--zf)
+  init() {
+    this.mac = $('#mac'); this.screen = $('#pgScreen'); this.hero = $('#scenes');
+    this.wide = matchMedia('(min-width: 900px) and (min-height: 560px)');
+    const apply = () => {
+      this.on = this.wide.matches && !motionMQ.matches && !phoneMQ.matches;
+      document.documentElement.classList.toggle('zoom-on', this.on);
+      this.measure(); this.update();
+    };
+    [this.wide, motionMQ, phoneMQ].forEach((m) => m.addEventListener('change', apply));
+    let pending = false;
+    const tick = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; this.update(); }); } };
+    addEventListener('scroll', tick, { passive: true });
+    addEventListener('resize', () => { this.measure(); this.update(); });
+    new ResizeObserver(() => { this.measure(); this.update(); }).observe(this.mac.parentElement);
+    apply();
+  },
+  measure() {      // the screen's place inside the Mac, untransformed
+    const t = this.mac.style.transform; this.mac.style.transform = '';
+    const m = this.mac.getBoundingClientRect(), s = this.screen.getBoundingClientRect();
+    this.off = [s.left - m.left, s.top - m.top]; this.sw = s.width; this.sh = s.height;
+    this.mac.style.transform = t;
+  },
+  update() {
+    const root = document.documentElement;
+    if (!this.on || !this.sw) {
+      this.e = 0; this.mac.style.transform = ''; this.mac.style.opacity = '';
+      root.style.removeProperty('--zoom'); root.classList.remove('zoomed', 'zoom-reveal'); return;
+    }
+    const run = this.run();
+    const p = clamp(scrollY / (run * .9), 0, 1), e = p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
+    const fade = clamp((scrollY - run) / this.fade(), 0, 1);
+    // Where the screen sits now (the Mac's parent is never transformed) and where it should end:
+    // covering the window, centred.
+    const base = this.mac.parentElement.getBoundingClientRect(), sx = base.left + this.off[0], sy = base.top + this.off[1];
+    const S = Math.max(innerWidth / this.sw, innerHeight / this.sh), tx = (innerWidth - this.sw * S) / 2, ty = (innerHeight - this.sh * S) / 2;
+    this.mac.style.transformOrigin = `${this.off[0]}px ${this.off[1]}px`;
+    this.mac.style.transform = e ? `translate(${(tx - sx) * e}px,${(ty - sy) * e}px) scale(${1 + (S - 1) * e})` : '';
+    this.mac.style.opacity = fade ? String(1 - fade) : '';
+    this.e = e;
+    root.style.setProperty('--zoom', e.toFixed(4));
+    root.classList.toggle('zoomed', e > .35);
+    root.classList.toggle('zoom-reveal', scrollY >= run - 1);
+    if (e > .02 && Tour.running) Tour.stop();
+  },
+};
+
 // ─── Boot ────────────────────────────────────────────────────────────────────
 Desktop.init();
 PG.init();
 Tour.init();
 Try.init();
+Zoom.init();
 Journey.init();
 Live.update();
 // The live scene starts after the page has loaded and the browser is idle; the poster carries the

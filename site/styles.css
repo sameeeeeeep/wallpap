@@ -475,7 +475,7 @@ html.pg-fs{overflow:hidden}
 #picker{display:none}
 .pg-body{display:block;max-width:min(940px,calc((100svh - 390px)*1.6));margin:auto}
 .pg-body>.panel:not(.open):not(.as-drop){display:none}
-.monitor{padding:5px;border-radius:12px}
+
 .tourbar{margin-top:10px;min-height:30px}
 .tb-cap{font-size:12px}
 .tb-acts{gap:6px}
@@ -577,3 +577,36 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
   .app-sheet .btn-dark{background:var(--ink);color:var(--bg)}
   .app-sheet .btn-dark:hover{background:#cadbc5}
 }
+
+/* ───────── The Mac: the hero scene sits on a MacBook's screen ───────── */
+.mac{position:relative;transform-origin:0 0}
+.monitor{position:relative;background:#0b0c0e;padding:clamp(7px,1.15%,14px) clamp(7px,1.15%,14px) clamp(9px,1.7%,19px);border-radius:clamp(12px,1.5vw,20px) clamp(12px,1.5vw,20px) 3px 3px;box-shadow:0 0 0 1px #8d9297,0 0 0 2px #2a2d31,inset 0 0 0 1px #1d2024}
+.monitor::before{content:'';position:absolute;z-index:1;top:clamp(3px,.55%,7px);left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:#20252b;box-shadow:inset 0 0 0 1px #2f3740}
+.monitor .screen{border-radius:clamp(4px,.45vw,7px)}
+.mac-base{position:relative;height:clamp(10px,1.45vw,19px);margin:0 -7.5%;background:linear-gradient(180deg,#eef0f2 0,#d3d6da 30%,#b5b9be 72%,#8e9398 100%);border-radius:2px 2px 46% 46%/2px 2px 100% 100%;box-shadow:0 22px 34px -20px rgba(18,30,24,.55)}
+.mac-base i{position:absolute;left:50%;top:0;width:14%;height:42%;transform:translateX(-50%);background:linear-gradient(180deg,#a9aeb3,#cdd0d4);border-radius:0 0 9px 9px}
+
+/* Scroll into the Mac: the hero stays pinned while its screen grows to fill the window, then hands
+   over to the full-screen journey (which starts on the same scene) underneath. */
+.zoom-on .hero{--zr:100svh;--zf:30svh;min-height:0;height:calc(100svh - var(--nav-h) + var(--zr) + var(--zf));z-index:2;background:var(--bg)}
+.zoom-on .hero-in{position:sticky;top:calc(var(--nav-h) + clamp(24px,4svh,42px))}
+.zoom-on .hero::before,.zoom-on .tourbar,.zoom-on .journey-entry,.zoom-on .mac-base{opacity:calc(1 - var(--zoom,0)*3)}
+.zoom-on .hero-head{opacity:calc(1 - var(--zoom,0)*5);transform:translateY(calc(var(--zoom,0)*-60px))}
+.zoom-on .monitor{box-shadow:0 0 0 calc(1px - var(--zoom,0)*1px) #8d9297,0 0 0 2px #2a2d31,inset 0 0 0 1px #1d2024}
+.zoom-on #pgScreen>:is(.menubar,.widgets,.desk-icons,.status-pill){opacity:calc(1 - var(--zoom,0)*2.6)}
+.zoomed #pgScreen>:is(.app-window,.mplayer,.rcard,.panel-pop,.panel-note,.play-live,.sound-hint,.ghost),.zoomed .ghost{visibility:hidden}
+.zoomed .hero-head,.zoomed .tourbar,.zoomed .journey-entry{pointer-events:none}
+.zoomed>.nav,.zoomed .nav{opacity:0;visibility:hidden;pointer-events:none}
+.zoom-reveal .hero{background:transparent;pointer-events:none}
+.zoom-on main>.journey{margin-top:calc(-100svh - 30svh);z-index:1}
+
+/* The journey keeps the Mac's menu bar: the wave opens wallpap's real panel for the scene on screen. */
+.journey-screen{--mb-h:26px;font-size:13px}
+.journey-screen .menubar{font-size:13px;padding:0 14px}
+.journey-screen .desktop-add{display:none}
+.journey-screen .panel-pop{right:150px;top:calc(var(--mb-h) + 6px)}
+.journey-screen>.journey-shade{z-index:2}
+.journey-top{top:26px;padding-top:18px}
+.journey-stage .journey-top,.journey-stage .journey-hint,.journey-stage .journey-controls{transition:opacity .25s}
+.journey-stage.menu-open .journey-top,.journey-stage.menu-open .journey-hint,.journey-stage.menu-open .journey-controls{opacity:0;pointer-events:none}
+.journey-stage.menu-open .journey-top a,.journey-stage.menu-open .journey-top button{pointer-events:none}

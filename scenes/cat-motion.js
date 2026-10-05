@@ -52,8 +52,9 @@ function startTurn(p,dir,next){
 function pose(p,dt){
  const s=p.asset;if(!s.ready)return;
  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];p.spP=f.name;p.dir=f.dir;p.prev=null;p.poseT=1;return;}
- // A followed cat that arrives stands a beat, then sits facing you.
- const st=p.picked&&['followWait','followLook'].includes(p.state)&&p.t<.6?'stand':p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
+ // A followed cat that arrives stands, and sits facing you once the cursor has stopped.
+ const seated=p._catRest&&p._catRest!=='stand';
+ const st=p.picked&&['followWait','followLook'].includes(p.state)&&!seated&&(p.t<.6||p.follow&&!p.follow.sitOK)?'stand':p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
  let key='walk-'+dir.view,idx=0;
  const motion=p._catMotion||(p._catMotion={distance:p.gd,phase:0,gait:'walk'});
  if(st==='move'||st==='stand'){
@@ -93,18 +94,24 @@ function pose(p,dt){
   p.dir=1;
  }
  if((st==='move'||st==='stand')&&p._catRest&&p._catRest!=='stand'){
-  const asleep=p._catRest==='sleep'||p._catRest==='loaf';
-  p._catTransition={key:asleep?'rest':'sit',indices:p._catRest==='loaf'?[4,3,2,1,0]:[7,6,5,4,3,2,1,0],t:0,standAfter:asleep,fast:!!p.picked};p._catRest='stand';
+  const asleep=p._catRest==='sleep'||p._catRest==='loaf',tr=p._catTransition;
+  // Still sitting down (the sit only began)? Get up from the frame it has reached, not from fully seated.
+  const shown=tr&&tr.key==='sit'&&!tr.up&&!tr.restAfter?tr.indices[Math.min(tr.indices.length-1,Math.floor(tr.t/(tr.fast?.045:.085)))]:null;
+  p._catTransition=shown!=null?{key:'sit',indices:Array.from({length:shown+1},(_,i)=>shown-i),t:0,fast:!!p.picked,up:true}:
+   {key:asleep?'rest':'sit',indices:p._catRest==='loaf'?[4,3,2,1,0]:[7,6,5,4,3,2,1,0],t:0,standAfter:asleep,fast:!!p.picked,up:true};p._catRest='stand';
  }
  if(p._catTransition){
   const tr=p._catTransition;tr.t+=dt;const i=Math.floor(tr.t/(tr.fast?.045:.085));  // a followed cat gets up quickly
   if(i<tr.indices.length){key=tr.key;idx=tr.indices[i];p.dir=1;p.sequence={cat:true};}
   else if(tr.restAfter){p._catTransition={key:'rest',indices:tr.loaf?[0,1,2,3,4]:[0,1,2,3,4,5,6,7],t:0};}
-  else if(tr.standAfter){p._catTransition={key:'sit',indices:[7,6,5,4,3,2,1,0],t:0,fast:tr.fast};}
+  else if(tr.standAfter){p._catTransition={key:'sit',indices:[7,6,5,4,3,2,1,0],t:0,fast:tr.fast,up:true};}
   else{p._catTransition=null;p.sequence=null;}
  }
  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];p.spP=f.name;p.dir=f.dir;}
- else{p.spP=key+'-'+(idx+1);if(['move','stand','jumpPrep','jump','land','wiggle'].includes(st)&&!p._catTransition)p.dir=dir.face;}
+ else{
+  // Sit and lie-down drawings never skip: a jump of more than one drawing plays through the frames between.
+  const sh=p._shown;if(/^(sit|rest)$/.test(key)&&sh&&sh.key===key&&Math.abs(idx-sh.idx)>1){sh.t+=dt;if(sh.t>=.05){sh.t=0;sh.idx+=Math.sign(idx-sh.idx);}idx=sh.idx;}else p._shown={key,idx,t:0};
+  p.spP=key+'-'+(idx+1);if(['move','stand','jumpPrep','jump','land','wiggle'].includes(st)&&!p._catTransition)p.dir=dir.face;}
  p.prev=null;p.poseT=1;
 }
 LW.cats={load,direction,startTurn,pose,views};

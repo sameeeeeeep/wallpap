@@ -169,6 +169,9 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    (!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q)))&&
    (!reserve||!o.goal||!overlap(b,box(o,o.goal.x,o.goal.y,0,size(o,o.goal.y,o.goal.surf))))));
  }
+ // Walking cats go round cats that are resting, but pass cats that are themselves on the move (following
+ // you, or walking the other way): one passes in front of the other, as real cats do in a narrow spot.
+ function freeIdle(p,x,y){const b=box(p,x,y,0,size(p,y,p.surf));return items.every(o=>o===p||o.away||o.chase||o.picked||(o.state==='move'&&!p.mission&&!o.mission)||(!overlap(b,box(o))&&(!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q)))));}
  function flightClear(p,j){return flightBoxes(p,j).every(b=>panelClear(b)&&items.every(o=>o===p||o.away||(!overlap(b,box(o))&&(!o.j||!flightBoxes(o,o.j).some(q=>overlap(b,q))))));}
  function allowed(p,x,y,surf=p.surf,exit=false){
   if(!panelClear(box(p,x,y))&&panelClear(box(p)))return false;
@@ -186,7 +189,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   // A followed cat already standing in a keep-clear strip may walk out of it, never further in.
   let escaping=p.picked&&!exit&&!clearRest(p,...pts[0]);
   for(let i=1;i<pts.length;i++){
-   const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/12));
+   const a=pts[i-1],b=pts[i],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/4));   // 4 px: never step over a floor notch
    for(let j=1;j<=n;j++){const x=lerp(a[0],b[0],j/n),y=lerp(a[1],b[1],j/n),rest=!p.picked||exit||clearRest(p,x,y);if(rest)escaping=false;
     if(!allowed(p,x,y,p.surf,exit)||(!rest&&!escaping)||(avoidPets&&!free(p,x,y,p.surf,false)))return false;}
   }return true;
@@ -210,7 +213,10 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
     }
    }
   }
-  return best?{pts:best.filter((p,i,a)=>!i||Math.hypot(p[0]-a[i-1][0],p[1]-a[i-1][1])>.01),i:1}:ignorePets?null:plan(p,x,y,exit,true);
+  // No way round the other cats: an idle cat simply doesn't go (it would only walk into them and stall).
+  // Cats leaving, entering or following still take the direct route and wait their turn on it.
+  const idle=!p.picked&&!['leave','enter','qa'].includes(p.mission);
+  return best?{pts:best.filter((p,i,a)=>!i||Math.hypot(p[0]-a[i-1][0],p[1]-a[i-1][1])>.01),i:1}:ignorePets||idle?null:plan(p,x,y,exit,true);
  }
  function state(p,name,dur=rand(4,10)){
   if(p.away&&name!=='away')return;
@@ -365,25 +371,57 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  }
  // Route around props for a chasing cat: A* over a grid of walkable floor points (the floor polygons,
  // panels and keep-clear areas this cat may use), then pulled tight so it walks the fewest straight legs.
+ // Shortest way round a floor corner (stairs notch, terrace edge): a visibility graph over points just
+ // inside each floor-polygon corner. Tried before the coarse grid, which cannot hug corners.
+ const cornerCache=new Map();
+ function cornerRoute(p,tx,ty){
+  const d=Math.max(10,Math.round(p.spec.height*p.k*.12/4)*4);
+  const key=[p.rosterId||p.id,d,JSON.stringify(S.floor||[]).length,JSON.stringify(S.clear||[]),JSON.stringify(panelBoxes())].join('|');
+  let C=cornerCache.get(key);
+  if(!C){const pts=[];for(const poly of S.floor||[])for(const v of poly)for(const [ox,oy] of [[d,d],[-d,d],[d,-d],[-d,-d]]){const x=v[0]+ox,y=v[1]+oy*.6;if(allowed(p,x,y,'floor')&&clearRest(p,x,y))pts.push([x,y]);}
+   C={pts,edge:new Map()};if(cornerCache.size>24)cornerCache.clear();cornerCache.set(key,C);}
+  const pts=C.pts;if(!pts.length||pts.length>80)return null;
+  const all=[[p.x,p.y],...pts,[tx,ty]],n=all.length,dist=new Array(n).fill(Infinity),from=new Array(n).fill(-1),done=new Array(n).fill(false);dist[0]=0;
+  // Corner-to-corner visibility never changes for this stage and size: cached. Only the legs to the cat and the target are checked per call.
+  const ok=(a,b)=>{if(a===0||b===n-1||a===n-1||b===0)return validPath(p,[all[a],all[b]],false,false);const k=a<b?a*512+b:b*512+a;let v=C.edge.get(k);if(v===undefined){v=validPath(p,[all[a],all[b]],false,false);C.edge.set(k,v);}return v;};
+  for(;;){let u=-1;for(let i=0;i<n;i++)if(!done[i]&&dist[i]<Infinity&&(u<0||dist[i]<dist[u]))u=i;if(u<0||u===n-1)break;done[u]=true;
+   for(let v=1;v<n;v++)if(!done[v]){const c=dist[u]+Math.hypot(all[v][0]-all[u][0],all[v][1]-all[u][1]);if(c<dist[v]&&ok(u,v)){dist[v]=c;from[v]=u;}}}
+  if(from[n-1]<0)return null;const route=[];for(let i=n-1;i>0;i=from[i])route.unshift(all[i]);
+  return {pts:[[p.x,p.y],...route],i:1};
+ }
+ const gridCache=new Map();
  function routeAround(p,tx,ty){
-  const b=S.bounds||[0,0,1600,1000],step=Math.max(24,p.spec.height*p.k*.45),nodes=[],at=new Map();
-  for(let y=b[1]+step*.5,r=0;y<b[3];y+=step*.55,r++)for(let x=b[0]+step*.5,c=0;x<b[2];x+=step,c++)if(allowed(p,x,y,'floor')&&clearRest(p,x,y)){at.set(r+','+c,nodes.length);nodes.push({x,y,r,c});}
-  if(!nodes.length)return null;
+  const b=S.bounds||[0,0,1600,1000],step=Math.max(24,Math.round(p.spec.height*p.k*.45/8)*8);
+  // The walkable grid (and which neighbours connect) depends only on the stage and the cat's size: cached.
+  const key=[p.rosterId||p.id,step,b.join(),JSON.stringify(S.floor||[]).length,JSON.stringify(S.clear||[]),JSON.stringify(panelBoxes())].join('|');
+  let G=gridCache.get(key);
+  if(!G){
+   const nodes=[],at=new Map();
+   for(let y=b[1]+step*.5,r=0;y<b[3];y+=step*.55,r++)for(let x=b[0]+step*.5,c=0;x<b[2];x+=step,c++)if(allowed(p,x,y,'floor')&&clearRest(p,x,y)){at.set(r*4096+c,nodes.length);nodes.push({x,y,r,c,nb:null});}
+   const walk=(a,c)=>{for(const u of [.25,.5,.75]){const x=lerp(a.x,c.x,u),y=lerp(a.y,c.y,u);if(!allowed(p,x,y,'floor')||!clearRest(p,x,y))return false;}return true;};
+   for(const n of nodes){n.nb=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const j=at.get((n.r+dr)*4096+n.c+dc);if(j!=null&&walk(n,nodes[j]))n.nb.push(j);}}
+   G={nodes};if(gridCache.size>24)gridCache.clear();gridCache.set(key,G);
+  }
+  const nodes=G.nodes;if(!nodes.length)return null;
   const ok=(a,c)=>validPath(p,[a,c],false,false);
   const near=(x,y)=>nodes.map((n,i)=>[Math.hypot(n.x-x,n.y-y),i]).sort((u,v)=>u[0]-v[0]).slice(0,8).filter(([,i])=>ok([x,y],[nodes[i].x,nodes[i].y])).map(([,i])=>i);
   const starts=near(p.x,p.y),goals=new Set(near(tx,ty));if(!starts.length||!goals.size)return null;
-  const g=new Map(),from=new Map(),open=new Set();for(const i of starts){g.set(i,Math.hypot(nodes[i].x-p.x,nodes[i].y-p.y));open.add(i);}
-  const h=i=>Math.hypot(nodes[i].x-tx,nodes[i].y-ty);let end=null,guard=0;
-  while(open.size&&guard++<4000){
-   let cur=null,best=Infinity;for(const i of open){const f=g.get(i)+h(i);if(f<best){best=f;cur=i;}}
-   if(goals.has(cur)){end=cur;break;}open.delete(cur);const n=nodes[cur];
-   for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const j=at.get((n.r+dr)+','+(n.c+dc));if(j==null)continue;const m=nodes[j];
-    const cost=g.get(cur)+Math.hypot(m.x-n.x,m.y-n.y);if(cost<(g.get(j)??Infinity)&&ok([n.x,n.y],[m.x,m.y])){g.set(j,cost);from.set(j,cur);open.add(j);}}
+  // A* with a binary heap.
+  const g=new Map(),from=new Map(),heap=[],h=i=>Math.hypot(nodes[i].x-tx,nodes[i].y-ty);
+  const push=(i,f)=>{heap.push([f,i]);let k=heap.length-1;while(k){const q=(k-1)>>1;if(heap[q][0]<=heap[k][0])break;[heap[q],heap[k]]=[heap[k],heap[q]];k=q;}};
+  const pop=()=>{const top=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let k=0;for(;;){const l=2*k+1,r=l+1;let m=k;if(l<heap.length&&heap[l][0]<heap[m][0])m=l;if(r<heap.length&&heap[r][0]<heap[m][0])m=r;if(m===k)break;[heap[m],heap[k]]=[heap[k],heap[m]];k=m;}}return top;};
+  for(const i of starts){const c=Math.hypot(nodes[i].x-p.x,nodes[i].y-p.y);g.set(i,c);push(i,c+h(i));}
+  let end=null,guard=0;const done=new Set();
+  while(heap.length&&guard++<6000){
+   const [,cur]=pop();if(done.has(cur))continue;done.add(cur);
+   if(goals.has(cur)){end=cur;break;}const n=nodes[cur];
+   for(const j of n.nb){const m=nodes[j],cost=g.get(cur)+Math.hypot(m.x-n.x,m.y-n.y);if(cost<(g.get(j)??Infinity)){g.set(j,cost);from.set(j,cur);push(j,cost+h(j));}}
   }
   if(end==null)return null;
   const chain=[];for(let i=end;i!=null;i=from.get(i))chain.unshift([nodes[i].x,nodes[i].y]);
+  // Pull the route tight: from each corner, go as far along the chain as is visible in a straight line.
   const raw=[[p.x,p.y],...chain,[tx,ty]],pts=[raw[0]];
-  for(let i=0;i<raw.length-1;){let j=raw.length-1;while(j>i+1&&!ok(raw[i],raw[j]))j--;pts.push(raw[j]);i=j;}
+  for(let i=0;i<raw.length-1;){let j=i+1;while(j+1<raw.length&&ok(raw[i],raw[j+1]))j++;pts.push(raw[j]);i=j;}
   return {pts,i:1};
  }
  function halt(p,name='followWait',seconds=1e9){
@@ -484,6 +522,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
  }
  function followStep(p,dt){
   const f=p.follow;if(!p.picked||!f)return;
+  f.sitOK=!cursor.inside||cursor.still>.9;   // sit down only once the cursor has really stopped
   f.cooldown=Math.max(0,f.cooldown-dt);f.repath-=dt;
   if(p.j||p.turn)return;
   if(!cursor.inside){if(p.state!=='followWait')halt(p);f.phase='wait';return;}
@@ -532,7 +571,8 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(group.length>1){const slot=catSlot(p,q,group)||q;[tx,ty]=slot;gap=Math.hypot(tx-p.x,ty-p.y);stopR=body*.15;startR=body*.5;}
   else{stopR=body*.45;startR=body*.7;gap=distance;}
   if(gap<(p.state==='move'?stopR:startR)){if(p.state==='move'){p.path=null;p.goal=null;p.chase=false;state(p,'followWait',1e9);}return;}
-  if(group.length<2){tx=q[0]-(q[0]-p.x)/distance*stopR*.8;ty=q[1]-(q[1]-p.y)/distance*stopR*.8;}
+  if(group.length<2){tx=q[0]-(q[0]-p.x)/distance*stopR*.8;ty=q[1]-(q[1]-p.y)/distance*stopR*.8;if(!allowed(p,tx,ty,'floor')||!clearRest(p,tx,ty)){tx=q[0];ty=q[1];}}
+  if(f.noRoute>0){f.noRoute-=dt;return;}
   const ux=(tx-p.x)/Math.hypot(tx-p.x,ty-p.y),uy=(ty-p.y)/Math.hypot(tx-p.x,ty-p.y),run=Math.hypot(tx-p.x,ty-p.y);
   // Gait with hysteresis: start running past 1.3 bodies, keep running down to 0.9 — no walk/run flicker.
   const gait=(p.gait==='run'&&p.state==='move'?run>body*.6:run>body*1.1)||cursor.speed>120*p.k&&run>body*.6?'run':'walk';
@@ -546,12 +586,17 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   // Clear line of sight: straight at the cursor. Something in the way (bench, plant, wall): route
   // around it with the planner, keeping that route until the cursor moves on or it is used up.
   f.nav=(f.nav||0)-dt;
-  if(validPath(p,[[p.x,p.y],[tx,ty]],false,false)){p.path={pts:[[p.x,p.y],[tx,ty]],i:1};f.detour=null;}
+  // Line of sight is re-checked ten times a second (or when the target jumps), not every frame.
+  f.los=f.los||{t:0,ok:false,x:0,y:0};f.los.t-=dt;
+  if(f.los.t<=0||Math.hypot(tx-f.los.x,ty-f.los.y)>body*.25){f.los={t:.1,ok:validPath(p,[[p.x,p.y],[tx,ty]],false,false),x:tx,y:ty};}
+  if(f.los.ok){p.path={pts:[[p.x,p.y],[tx,ty]],i:1};f.detour=null;}
   else if(!f.detour||!p.path||p.path.i>=p.path.pts.length||(f.nav<=0&&Math.hypot(f.detour[0]-tx,f.detour[1]-ty)>body*.6)){
-   f.nav=.4;const route=routeAround(p,tx,ty)||plan(p,tx,ty,false,true);
+   f.nav=.4;const route=cornerRoute(p,tx,ty)||routeAround(p,tx,ty)||plan(p,tx,ty,false,true);
    if(route){p.path=route;f.detour=[tx,ty];}
    else{const near=project(p,tx,ty);if(near&&validPath(p,[[p.x,p.y],near],false,false)){p.path={pts:[[p.x,p.y],near],i:1};f.detour=near;}}
   }
+  // No way there at all right now: stand calmly and look again shortly, never freeze mid-stride.
+  if(!p.path||p.path.i>=p.path.pts.length){p.path=null;p.goal=null;p.chase=false;f.detour=null;f.noRoute=.5;state(p,'followWait',1e9);}
  }
  function pose(p,dt){
   const s=p.asset;if(!prep(s))return;
@@ -602,7 +647,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   }else if(p.state==='move'){
    if(!p.asset.cyc.has('walk')){pose(p,dt);return;}
    if(p.sequence||(p.prev&&p.poseT<.24)){pose(p,dt);return;}
-   if(!p.path){p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;state(p,'sit',2);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.8){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}pose(p,dt);return;}
+   if(!p.path){p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if((p.waited>5||!p.picked&&!['leave','enter','qa'].includes(p.mission))&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;state(p,'sit',p.picked?2:rand(6,20));pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.8){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}pose(p,dt);return;}
    const path=p.path,to=path.pts[path.i];
    if(!to){const next=p.next;p.path=null;p.goal=null;state(p,'stand',.4);if(next)next(p);else think(p);pose(p,dt);return;}
    const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy);
@@ -611,11 +656,15 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
     if(turnTo(p,view,face)){pose(p,dt);return;}}
    const speed=(p.gait==='stalk'?32:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
    const floorDistance=p.asset.atlas?Math.hypot(dx,dy/(S.slope||.55)):dist;
-   const d=Math.min(dist,speed*dt*(floorDistance?dist/floorDistance:1)),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
-   if(p.chase?allowed(p,x,y)&&(clearRest(p,x,y)||!clearRest(p,p.x,p.y)):free(p,x,y,p.surf,false)){
+   const d=Math.min(dist,speed*dt*(floorDistance?dist/floorDistance:1));let x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
+   const chaseOk=(x,y)=>allowed(p,x,y)&&(clearRest(p,x,y)||!clearRest(p,p.x,p.y));
+   // A chasing cat that meets an edge or corner slides along it instead of freezing in place.
+   if(p.chase&&!chaseOk(x,y)){if(chaseOk(x,p.y))y=p.y;else if(chaseOk(p.x,y))x=p.x;}
+   // An idle cat already overlapping another may always step away; it never stands frozen in place.
+   if(p.chase?chaseOk(x,y):freeIdle(p,x,y)||!freeIdle(p,p.x,p.y)){
     p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=(p.asset.atlas?Math.hypot(x-p.x,(y-p.y)/(S.slope||.55)):d)/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
     if(dist<=d+.01){path.i++;LW.petJumpLand(p);}
-   }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;state(p,'sit',1);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}
+   }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>(p.picked?5:1.5)&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;p.path=null;state(p,'sit',rand(6,20));pose(p,dt);return;}p.blocked+=dt;if(p.blocked>(!p.picked&&!['leave','enter','qa'].includes(p.mission)?.3:.6)){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}   // idle: no way round, it sits (above) instead of standing frozen
   }else{
    if(p.state==='eat'){p.hunger=Math.max(0,p.hunger-dt*.04);if(S.supplies)S.supplies.food=Math.max(0,S.supplies.food-dt*.005);}else p.hunger=Math.min(1,p.hunger+dt/2400);
    if(p.state==='drink'){p.thirst=Math.max(0,p.thirst-dt*.06);if(S.supplies)S.supplies.water=Math.max(0,S.supplies.water-dt*.003);}else p.thirst=Math.min(1,p.thirst+dt/1500);
@@ -628,7 +677,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   S=stage();items.forEach((p,i)=>{
    const h=(S.homes||[])[i]||{x:S.bounds[0]+(i+1)*150,y:S.bounds[3]-15};
    p.surf=h.surf||'floor';p.x=h.x;p.y=h.y??ledge(p.surf)?.y;p.z=0;p.k=size(p);p.dir=h.dir||1;p.j=null;p.goal=null;p.path=null;p.sequence=null;
-   p.picked=false;p.follow=null;p.turn=null;p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;p._catDir=null;p._catRest=null;p._catTransition=null;p._catMotion=null;
+   p.picked=false;p.follow=null;p.chase=false;p.next=null;p.turn=null;p.mission=null;p.away=p.gone=!wanted(p);p.state=p.away?'away':h.state||'sit';p.t=0;p.dur=rand(4,16);p.prev=null;p.spFam=null;p._catDir=null;p._catRest=null;p._catTransition=null;p._catMotion=null;
   });
   items.forEach(p=>{if(p.surf==='floor'&&!p.away&&!free(p,p.x,p.y)){const q=nearest(p,p.x,p.y);if(q)[p.x,p.y]=q;}});
  }
@@ -682,7 +731,27 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   const entries=[...items.filter(p=>!p.away).map(p=>({depth:depth(p),draw:()=>drawOne(g,p)})),...(S.occluders||[]),...extra];
   entries.sort((a,b)=>a.depth-b.depth);for(const e of entries)e.draw(g);if(screenOccluders.size)g.restore();
  }
- function click(x,y){const p=items.filter(p=>!p.away&&inside([x,y],[[box(p)[0],box(p)[1]],[box(p)[2],box(p)[1]],[box(p)[2],box(p)[3]],[box(p)[0],box(p)[3]]])).sort((a,b)=>depth(b)-depth(a))[0];
+ // Clicks land on the cat whose painted pixels are under the pointer (front-most first). The collision
+ // boxes are loose and overlap between neighbours, so testing them alone picks the wrong cat.
+ function hitPixels(p,x,y){
+  const f=frame(p);if(!f)return 0;
+  const lx=(x-f.x)/(f.dir*f.sx)-f.ox,ly=(y-f.y)/f.sy-f.oy;
+  if(lx<-6||ly<-6||lx>f.w+6||ly>f.h+6)return 0;
+  const im=p.asset.img[f.key];
+  try{
+   const g=im&&im.getContext&&im.getContext('2d',{willReadFrequently:true});if(!g)return 1;
+   const px=Math.round(lx/f.w*im.width),py=Math.round(ly/f.h*im.height),r=Math.max(2,Math.round(6/f.w*im.width));
+   if(g.getImageData(px,py,1,1).data[3]>40)return 3;   // exactly on this cat
+   const d=g.getImageData(Math.max(0,px-r),Math.max(0,py-r),2*r+1,2*r+1).data;
+   for(let i=3;i<d.length;i+=4)if(d[i]>40)return 2;return 0;   // a few pixels off its outline
+  }catch(e){return 1;}
+ }
+ function click(x,y){
+  const live=items.filter(p=>!p.away),front=(a,b)=>depth(b)-depth(a),hits=live.map(p=>[p,hitPixels(p,x,y)]);
+  let p=null;for(const k of [3,2,1]){p=hits.filter(h=>h[1]===k).map(h=>h[0]).sort(front)[0];if(p)break;}
+  // Near miss (between the legs, just off an ear): the cat whose body centre is closest, within its box.
+  if(!p){const b=live.filter(p=>{const r=box(p);return x>=r[0]&&x<=r[2]&&y>=r[1]&&y<=r[3];});
+   p=b.sort((a,c)=>Math.hypot(a.x-x,a.y-a.z-a.spec.height*a.k*.45-y)-Math.hypot(c.x-x,c.y-c.z-c.spec.height*c.k*.45-y))[0];}
   if(p){pickPet(p);return p;}return null;
  }
  function toy(x,y){if(items.some(p=>p.picked))return;const p=items.filter(p=>!p.away&&!p.j&&p.surf==='floor').sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0];if(!p)return;const q=nearest(p,x,y);if(q)walk(p,...q,{gait:'run',next:r=>state(r,'sniff',3)});}

@@ -353,6 +353,7 @@ test('FOLLOW art has complete registered run, stalk, hunt, pounce and social seq
  const {LW}=load(),reports=JSON.parse(fs.readFileSync(require.resolve('../art-src/follow/plant-qa.json'),'utf8'));
  for(const [set,seqs] of Object.entries(LW.PET_FOLLOW_LAYOUT)){
   for(const key of ['perk','turn-f','turn-b','loaf-stretch','hunt','hunt-f','hunt-b','pounce','pounce-f','pounce-b']){
+   if(set==='dogs/golden'){assert.equal(seqs[key],undefined,'golden adult-art sheet '+key+' must stay unused');continue;}   // drawn as an adult; she is a puppy
    assert.equal(seqs[key].centers.length,5);
    for(let i=1;i<=5;i++){const b=fs.readFileSync(spritePath(`${set}/t/${key}-${i}`));assert.ok(b.length>1000);assert.ok(imageSize(b).height>2*seqs[key].pad);}
   }

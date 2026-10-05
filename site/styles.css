@@ -603,7 +603,7 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 /* The journey keeps the Mac's menu bar: the wave opens wallpap's real panel for the scene on screen. */
 .journey-screen{--mb-h:26px;font-size:13px}
 .journey-screen .menubar{font-size:13px;padding:0 14px}
-.journey-screen .desktop-add{display:none}
+.journey-screen .desktop-add,#pgScreen .desktop-add{display:none}
 .journey-screen .panel-pop{right:150px;top:calc(var(--mb-h) + 6px)}
 .journey-screen>.journey-shade{z-index:2}
 .journey-top{top:var(--jmb,26px);padding-top:18px}

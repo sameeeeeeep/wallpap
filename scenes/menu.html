@@ -115,7 +115,8 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .tg svg.i{width:20px;height:20px}
 .swrow{display:flex;align-items:center;justify-content:space-between;width:100%;height:34px;padding:0 10px;border-radius:10px;background:var(--tile);font-size:12px;font-weight:500}
 .swrow:hover{background:var(--tile-2)}
-.look{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:var(--ink-3)}
+.look{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:var(--ink-2)}
+.look>span{width:72px;flex:none}
 .look .seg{flex:1}
 /* the day: a sky gradient with five moments */
 .day{display:grid;grid-template-columns:repeat(5,1fr);height:50px;border-radius:11px;overflow:hidden;background:linear-gradient(90deg,#f6c7b2 0%,#c4e0f3 28%,#b9d9f2 46%,#f7c58e 64%,#c3b6e2 81%,#9eabd6 100%)}
@@ -364,6 +365,10 @@ function render(state) {
       <div class="row" style="margin-top:4px"><span class="lab">Show over my apps<small>A small card under the menu bar</small></span>${sw(S.overApps, locked ? 'openPro' : 'toggleRemindersOverApps')}</div>
       <div class="row"><button class="link" data-a="remindNow">Remind me now</button>${S.overApps ? '<button class="link" data-a="previewReminderCard">Preview the card</button>' : ''}</div>`, true);
 
+  // The world's own settings (pets, kites, skins…): one card, closed by default, summary in its header.
+  const lookNow = (c) => (c.options.find((o) => o.on) || c.options[0] || {}).label;
+  const world = looks.length ? card('world', 'This world', 'spark', esc(looks.slice(0, 3).map((c) => `${c.title} ${String(lookNow(c)).toLowerCase()}`).join(' · ')), null,
+    () => looks.map((c) => `<div class="look"><span>${esc(c.title)}</span>${seg(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting')}</div>`).join('')) : '';
   const settings = card('settings', 'Settings', 'gear', `${esc(energy[1])} · ${esc((PLACE.find((p) => p[0] === (S.layoutMode || 'auto')) || PLACE[0])[1].toLowerCase())} placement`,
     null,
     () => `<div class="cap">Desktop placement<small>${esc(S.layoutSummary || '')}</small></div>
@@ -388,9 +393,8 @@ function render(state) {
     <div class="nm"><b>${esc(cur.title)}</b>${S.paused ? '<span>Paused · click the scene to resume</span>' : ''}</div>
     ${acts.length ? `<div class="acts">${acts.map((c) => { const k = actIcon(String(c.v), c.title); return `<button class="glass" data-a="runAction" data-v='${J(c.v)}' title="${esc(c.title)}">${ic(k)}<span>${esc(ACT_WORD[k] || c.title.split(' ')[0])}</span></button>`; }).join('')}</div>` : ''}
   </div>
-  ${looks.map((c) => `<div class="look"><span>${esc(c.title)}</span>${seg(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting')}</div>`).join('')}
   ${S.clickTip ? `<div class="tip"><p>Clicking a scene also slides your windows away (macOS <b>Click wallpaper to reveal desktop</b>). Set it to <b>Only in Stage Manager</b>.<span><button data-a="openDesktopSettings">Open setting</button><button data-a="dismissClickTip">Keep</button></span></p></div>` : ''}
-  <div class="cards">${worlds}${mood}${sound}${breathe}${water}${settings}</div>
+  <div class="cards">${world}${worlds}${mood}${sound}${breathe}${water}${settings}</div>
   <nav class="foot">
     <button data-a="togglePlay" ${S.playAvailable === false ? 'disabled' : ''} title="${esc(S.playReason || 'Daily puzzles')}">${ic('puzzle')}<span>${S.playOpen ? 'Close puzzles' : 'Puzzles'}</span></button>
     <span class="sp"></span>

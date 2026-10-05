@@ -102,3 +102,9 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [~] Clouds: shared scene-id seed, bounded perspective, broader formations and horizon haze implemented; template/generator wired and sky-kites migrated off repeated still clouds. Seven full before/after day/night/rain + mirrored/ultrawide sequences inspected. Three-scene acceptance remains blocked by missing art.
 
 - [ ] Audit acceptance: recover the missing beach/garden/sky-kites assets with owner authorization, capture their full before/after sequences, and finish ten-scene signoff. Seven available scenes pass G1 (.187–.245 night luma), zero render errors; 64 Node tests pass. Evidence: `shots/audit-fix/`.
+
+## Add to desktop — add-to-desktop worktree (2026-10-05)
+- [x] Register `wallpap://scene/<id>` with optional `?look=<skin>`; queue startup links, select installed official scenes via panel actions, preserve Pro gates, confirm new catalog installs and show native errors.
+- [x] Add website actions to the hero, all picker cards, current preview, fullscreen menu bar/panel and featured gallery; add Mac-only download/retry sheet and remembered-open hint.
+- [x] Add Swift parsing and browser-launcher regression tests, off-screen WebKit UI checks, light/dark/mobile screenshots and scheme/security documentation (`docs/add-to-desktop.md`). Final validation: 110 Node tests pass, `./build.sh` succeeds, 9 WebKit views pass with no JS/image errors; screenshots in `shots/add-to-desktop/`.
+- [ ] Release smoke test on a separate test Mac/profile: actual Launch Services cold/warm delivery, free/Pro upsell and native confirmation/download; the owner's installed app and settings were intentionally left untouched. Publish only with owner authorization.

@@ -452,3 +452,24 @@ svg.pk-mus{width:10px;height:10px;fill:none;stroke:var(--accent);stroke-width:2.
 .screen.is-fs .widgets,.screen.is-fs .desk-icons,.screen.is-fs .app-window,.screen.is-fs .status-pill{display:none}
 .screen.is-fs .menubar{transition:opacity .4s}
 html.pg-fs{overflow:hidden}
+
+/* Scene handoff uses the same paper, ink and pill buttons as the rest of the site. */
+.pg-add{margin:22px 0 6px}
+.pk-card{width:100px;flex:none}
+.pk-card .pk-tile{width:100%}
+.pk-add{display:block;font-size:11px;line-height:1.4;margin-top:8px;padding:5px 0;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.comm-card .btn{margin-top:14px}
+.desktop-add{font-size:clamp(9px,1.1cqw,13px);line-height:1.4;border:1px solid currentColor;border-radius:99px;padding:2px 8px;white-space:nowrap}
+.app-sheet{width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:32px;border:1px solid var(--line);border-radius:20px;background:var(--bg);color:var(--ink);box-shadow:0 24px 80px rgba(0,0,0,.2);font:15px/1.6 var(--sans);text-align:left;-webkit-user-select:text;user-select:text}
+.app-sheet::backdrop{background:rgba(14,25,19,.4);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)}
+.app-sheet h2{font-size:30px;line-height:1.1;margin-bottom:16px}
+.app-sheet .eyebrow{margin-bottom:12px}
+.app-sheet>p:not(.eyebrow){color:var(--ink-2)}
+.app-sheet .btn{margin-top:24px}
+.app-sheet .text-link{display:block;margin:18px auto;text-align:center}
+.app-sheet .fine{margin-top:18px;text-align:center}
+@media(prefers-color-scheme:dark){
+  .app-sheet{--bg:#202822;--ink:#e3ebdf;--ink-2:#bdc8b9;--ink-3:#a6b29f;--line:#3b493e;color-scheme:dark}
+  .app-sheet .btn-dark{background:var(--ink);color:var(--bg)}
+  .app-sheet .btn-dark:hover{background:#cadbc5}
+}

@@ -106,6 +106,51 @@ function fmtHour(h, upper) {
 }
 const isNight = (h) => h < 6 || h >= 20;
 
+// ─── Add to desktop ─────────────────────────────────────────────────────────
+const Desktop = {
+  pending: null,
+  init() {
+    this.sheet = $('#appSheet');
+    this.launcher = WallpapLinks.createLauncher({ win: window, doc: document,
+      storage: { getItem: (k) => localStorage.getItem(k), setItem: (k, v) => localStorage.setItem(k, v), removeItem: (k) => localStorage.removeItem(k) },
+      navigate: (url) => { location.href = url; },
+      showFallback: (request) => this.show(request),
+      onHandled: () => { if (this.sheet.open) this.sheet.close(); },
+    });
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-add-scene]');
+      if (b) this.open(b.dataset.addScene);
+    });
+    $('#appSheetRetry').addEventListener('click', () => {
+      const request = this.pending;
+      this.sheet.close();
+      if (request) this.open(request.id, request.look);
+    });
+    $('#appSheetClose').addEventListener('click', () => this.sheet.close());
+    this.sheet.addEventListener('click', (e) => {
+      const r = this.sheet.getBoundingClientRect();
+      if (e.target === this.sheet && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) this.sheet.close();
+    });
+  },
+  open(id, look) {
+    Tour.userActivity();
+    this.launcher.open(id, look);
+  },
+  show(request) {
+    this.pending = request;
+    const name = sceneById(request.id).id === request.id ? sceneById(request.id).name : request.id;
+    $('#appSheetTitle').textContent = request.mac ? 'Get wallpap for Mac' : 'wallpap is a Mac app';
+    $('#appSheetDetail').textContent = request.mac
+      ? `Install wallpap, then come back to add ${name}. If it’s already open, use a version that supports Add to desktop.`
+      : 'Visit wallpap.live on your Mac to download the app and add this scene to your desktop.';
+    $('#appSheetRetry').hidden = !request.mac;
+    // A modal in the fullscreen element remains visible in Safari as well as overlay mode.
+    const parent = document.fullscreenElement || document.webkitFullscreenElement || $('.screen.is-fs') || document.body;
+    if (this.sheet.parentElement !== parent) parent.append(this.sheet);
+    if (!this.sheet.open) this.sheet.showModal();
+  },
+};
+
 // ─── Demo music: five original tracks, synthesised in the browser ─────────────
 // Chords are MIDI voicings (one per bar unless `per` says otherwise); `bass` = roots.
 const TRACKS = [
@@ -469,6 +514,7 @@ function chromeHTML(o) {
 <div class="menubar">
   <div class="mb-left" aria-hidden="true">${APPLE}<b>Finder</b><span>File</span><span>Edit</span><span>View</span><span>Go</span><span>Window</span><span>Help</span></div>
   <div class="mb-right">
+    <button class="desktop-add" type="button">Add to desktop</button>
     <button class="wave-btn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Open the wallpap menu-bar panel">${WAVE}</button>
     ${WIFI}${BATT}<span class="clock" aria-hidden="true">Fri 4:00 PM</span>
   </div>
@@ -509,7 +555,7 @@ async function getPanelSrc() {
   if (!panelSrc) {
     const r = await fetch('scenes/menu.html');
     if (!r.ok) throw new Error('menu.html missing');
-    panelSrc = (await r.text()).replace('<head>', '<head><base href="scenes/"><script>window.webkit={messageHandlers:{panel:{postMessage:function(m){try{parent.__wpPanel(window.frameElement,m)}catch(e){}}}}};<\/script>');
+    panelSrc = (await r.text()).replace('<div class="now"', '<div class="row" style="padding:8px 0"><button class="pill" data-a="addToDesktop">Add to desktop</button></div><div class="now"').replace('<head>', '<head><base href="scenes/"><script>window.webkit={messageHandlers:{panel:{postMessage:function(m){try{parent.__wpPanel(window.frameElement,m)}catch(e){}}}}};<\/script>');
   }
   return panelSrc;
 }
@@ -542,6 +588,7 @@ class SceneHost {
     this.el.pp.addEventListener('click', () => { Music.toggle(); this.emit('user'); });
     this.el.snd.addEventListener('click', () => Sound.toggle());
     $$('[data-rc]', this.el.card).forEach((b) => b.addEventListener('click', () => this.hideCard()));
+    q('.desktop-add').addEventListener('click', (e) => { e.stopPropagation(); Desktop.open(this.sceneId); });
     this.el.wave.addEventListener('click', (e) => { e.stopPropagation(); this.panelOpen ? this.closePanel() : this.openPanel(); });
     document.addEventListener('click', (e) => { if (this.panelOpen && !e.target.closest('.panel-pop, .wave-btn, #qPanel')) this.closePanel(); });
     new IntersectionObserver((es) => { es.forEach((e) => { this.ratio = e.isIntersecting ? e.intersectionRatio : 0; }); Live.update(); }, { threshold: [0, 0.15, 0.3, 0.5, 0.75] }).observe(screen);
@@ -788,6 +835,7 @@ class SceneHost {
     const v = m.v, P = this.pst;
     switch (m.a) {
       case 'ready': this.renderPanel(); return;
+      case 'addToDesktop': Desktop.open(this.sceneId); return;
       case 'height': this.panelH = v; this.layoutPanel(); return;
       case 'pickScene': (this.onPick || ((id) => this.setScene(id)))(v); break;
       case 'pickWeather': if (v === '') this.note('Live weather follows your sky — in the app, with Pro'); else this.setWeather(v); break;
@@ -1020,6 +1068,7 @@ const PG = {
     this.renderPicker();
     this.picker.addEventListener('click', (e) => { const b = e.target.closest('[data-scene]'); if (b) { this.select(b.dataset.scene); Tour.userActivity(); } });
     this.bindControls();
+    $('#pgAdd').addEventListener('click', () => Desktop.open(this.host.sceneId));
     if (saveData) { $('#playLive').hidden = false; $('#playLive').addEventListener('click', () => { $('#playLive').hidden = true; this.host.wantLive = true; Live.update(); }); }
     this.select(first, { initial: true });
   },
@@ -1028,10 +1077,10 @@ const PG = {
       <div class="pk-group" role="group" aria-label="${c}">
         <p class="pk-label" aria-hidden="true">${c}</p>
         <div class="pk-tiles">${SCENES.filter((s) => s.cat === c).map((s) => `
-          <button class="pk-tile" type="button" data-scene="${s.id}" aria-pressed="false" aria-label="${s.name}${s.music ? ', plays your music' : ''}">
+          <div class="pk-card"><button class="pk-tile" type="button" data-scene="${s.id}" aria-pressed="false" aria-label="${s.name}${s.music ? ', plays your music' : ''}">
             <span class="pk-thumb"><img src="img/${s.id}-xs.jpg" alt="" width="256" height="160" loading="lazy" decoding="async"></span>
             <span class="pk-name">${s.name}${s.music ? '<svg class="pk-mus" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>' : ''}</span>
-          </button>`).join('')}</div>
+          </button><button class="pk-add" type="button" data-add-scene="${s.id}" aria-label="Add ${s.name} to desktop">Add to desktop</button></div>`).join('')}</div>
       </div>`).join('');
   },
   tile(id) { return $(`[data-scene="${id}"]`, this.picker); },
@@ -1300,6 +1349,7 @@ async function renderCommunity() {
     if (url) { const a = mk('a', null, e.author || 'wallpap'); a.href = url; a.rel = 'noopener nofollow'; by.append(a); } else by.append(e.author || 'wallpap');
     li.append(by);
     if (e.blurb) li.append(mk('p', null, e.blurb));
+    if (WallpapLinks.validID(e.id)) { const b = mk('button', 'btn btn-small btn-ghost', 'Add to desktop'); b.type = 'button'; b.dataset.addScene = e.id; b.setAttribute('aria-label', `Add ${e.title} to desktop`); li.append(b); }
     grid.append(li);
   });
   $('#community').hidden = false;
@@ -1307,6 +1357,7 @@ async function renderCommunity() {
 idle(renderCommunity, 4000);
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
+Desktop.init();
 Story.init();
 PG.init();
 Tour.init();

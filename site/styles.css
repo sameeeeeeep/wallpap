@@ -559,7 +559,7 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .phone-preview #tourBtn,.phone-preview #fsBtn,.phone-preview #sheetBtn,.phone-preview #playLive{display:none}
 
 /* Add to desktop: journey pill, menu-bar pill and the get-the-app sheet. */
-.journey-add{font:inherit;font-size:12px;color:inherit;cursor:pointer;padding:10px 16px;border:1px solid #ffffff55;border-radius:99px;background:#12221d44;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin-right:8px}
+.journey-add{font:inherit;font-size:12px;color:inherit;cursor:pointer;padding:10px 16px;border:1px solid #ffffff55;border-radius:99px;background:#12221d44;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin-left:auto;margin-right:8px}
 .journey-add:hover{background:#12221d77}
 @media(max-width:640px){.journey-add{font-size:11px;padding:10px 12px}}
 .desktop-add{font-size:clamp(9px,1.1cqw,13px);line-height:1.4;border:1px solid currentColor;border-radius:99px;padding:2px 8px;white-space:nowrap}

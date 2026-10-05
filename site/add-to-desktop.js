@@ -8,7 +8,7 @@
     return `wallpap://scene/${id}${look == null ? '' : `?look=${look}`}`;
   }
   function isMac(navigator) {
-    return /Mac/.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '') &&
+    return /mac/i.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || '') &&
       !/iPhone|iPad|iPod|Android/.test(navigator.userAgent || '') && !(navigator.maxTouchPoints > 1);
   }
   function createLauncher({ win, doc, storage, navigate, showFallback, onHandled = () => {},

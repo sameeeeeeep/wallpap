@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>Gull sheet preview</title>
+<style>body{margin:0;background:#d9c7a0;font:12px ui-monospace,monospace}canvas{display:block}</style>
+<script src="../../addons/beach/gull-sheet.js"></script>
+<body><canvas id="c"></canvas><script>
+// Review page for the procedural gull sheet: raw sheet on sand + assembled flying poses (body + mirrored wings).
+const G=GullSheet.build(),c=document.getElementById('c'),g=c.getContext('2d');
+c.width=innerWidth;c.height=innerHeight;g.fillStyle='#dcc9a2';g.fillRect(0,0,c.width,c.height);
+const sc=Math.min(1,(c.width*0.5)/G.canvas.width);g.drawImage(G.canvas,0,0,G.canvas.width*sc,G.canvas.height*sc);
+g.strokeStyle='rgba(0,0,0,.15)';for(const k in G.frames){const f=G.frames[k];g.strokeRect(f[0]*sc,f[1]*sc,f[2]*sc,f[3]*sc);}
+const ox=c.width*0.52, span=260;
+function flyer(x,y,wing,body,scale){const k=span/G.S*scale,fw=G.frames[wing],fb=G.frames[body];const bw=fb[2]*k,bh=fb[3]*k;
+ const ww=fw[2]*k,wh=fw[3]*k,ax=G.wing.ax*ww,ay=G.wing.ay*wh,sx=G.S*0.035*k,sy=-G.S*0.02*k;
+ g.drawImage(G.canvas,...fw,x+sx-ax,y+sy-ay,ww,wh);
+ g.save();g.translate(x-sx,y+sy);g.scale(-1,1);g.drawImage(G.canvas,...fw,-ax,-ay,ww,wh);g.restore();
+ g.drawImage(G.canvas,...fb,x-bw/2,y-bh/2,bw,bh);}
+const names=[...G.flap,'wGlide','wFlare',...G.fold];
+names.forEach((n,i)=>{const x=ox+90+(i%5)*185,y=90+Math.floor(i/5)*150;flyer(x,y,n,i==11?'bodyFan':'body',1);g.fillStyle='#333';g.fillText(n,x-20,y+70);});
+const gn=['stand','lookL','lookR','crouch','sleep',...G.walk];
+gn.forEach((n,i)=>{const f=G.frames[n],k=span/G.S*1.6,x=ox+60+i*80,y=600;g.drawImage(G.canvas,...f,x-f[2]*k/2,y-f[3]*k/2,f[2]*k,f[3]*k);g.fillStyle='#333';g.fillText(n,x-18,y+70);});
+</script>

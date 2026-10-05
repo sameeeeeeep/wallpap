@@ -1153,3 +1153,48 @@ before square roots. Full raw numbers/method: `tools/koi-shoals/README.md`.
 `node --test tests/*.cjs`: **104 tests, 104 pass, 0 fail**, including eight new
 behavior/geometry tests. No host changes, pushes, release, app rebuild/install,
 running-app interaction, stashes, or sibling-worktree edits. All commits local.
+
+## 2026-10-04 — Owner touch-ups: garden push, beach gulls, Touch Grass kites (branch scene-touchups)
+
+**Butterfly Garden + shared kit (`scenes/kit.js`).** Owner: "the plants and flowers go away a little too far apart
+with the cursor". The installed v1 garden used `Kit.meadow` (push 30 × sway ≈ 300 px at the centre of a 90 px
+radius); v2 (already in the catalog) is a photo plate with no reaction at all. Shared fix: meadow push amplitude
+0.45×, radius 90 → 64 px, an x·(1−x²)² profile that is zero under the pointer (no flip when the cursor crosses a
+plant), soft-capped at 0.7× the sprite size, driven by a new `k.push` trail of damped springs (ω 15 rad/s, ζ 0.45):
+the live pusher rides the cursor, released ones swing back through rest with ~20% overshoot; identical linear
+springs sum to a constant across hand-overs and the 8-slot pool recycles the most-settled pusher, so nothing pops.
+`Kit.plate({part:{r, amp}})` opts a plate into the same trail as a small monotonic warp (amp ≤ r/3.6); the garden
+uses r 84, amp 9 px. Sky & Kites' foreground blades get the gentler push via the synced kit.js (not repacked).
+Evidence: `shots/touchups/garden-push-old-vs-new.jpg` (held cursor + release, old kit vs new kit on the v1 meadow),
+`after-garden-plate-hold.jpg`, `after-garden-sweep.jpg` (day/night sweep), `after-garden-v1meadow-sweep.jpg`,
+`before-garden-v1-sweep.jpg`, `after-skykites-sweep.jpg`.
+
+**Beach gulls.** Owner: "the sea gulls are all wrong" (audit: see-through, no shadow). Searched for shippable
+top-down gull sheets first (OpenGameArt CC0, itch.io, Kenney): only side-view CC0 sprites or paid top-down packs
+exist, so nothing third-party ships; references + licences in `art-src/beach/refs/README.md`. New
+`addons/beach/gull-sheet.js` paints the sheet at load from a jointed wing model (arm/hand elevation, wrist flex,
+sweep): `w0…w9` flap cycle, `wGlide`, `wFlare`, `wFold1…3`, `body`/`bodyFan`, `stand lookL lookR crouch sleep
+walk0…5` (review page `art-src/beach/gull-sheet-preview.html`, sheet `shots/touchups/beach-gull-sheet.jpg`).
+Flyers: loose 1–3 bird groups, soaring with occasional 2–5 beat bouts from a level downstroke, banking, kept off the
+widget side, soft shadows offset by sun direction × altitude (blurrier/fainter higher, halved on water), drawn a
+little larger with altitude (camera 55 m). Ground: 2–3 on the damp sand above the swash, stand/look/walk, retreat
+from the uprush, sleep at night, take off from a fast cursor or a click (crouch → unfold → strong beats → climb),
+flyers land (approach, flare, braking beats, fold). Brighter under the moon (white plumage). Scale: ~100 px/m at
+1000 px (span 1.25 m, ring-billed size); crabs 54–66 → 28–34 px and shells 16–26 → 9–14 px so a crab is no longer
+larger than a gull (both still ~2× life for legibility). New thumb. Evidence: `before-beach.jpg`, `after-beach.jpg`
+(day/dusk/night/rain), `after-beach-dusknight.jpg`, `after-beach-takeoff.jpg`, `after-beach-landing.jpg`.
+
+**Touch Grass kites.** Owner: "the kites could be awesomer". The scene's only kites were black-kite raptors (tiny
+specks); added toy kites flown from behind the camera — diamond with a bowed tail, striped delta with twin twisting
+ribbons, koi windsock on a verlet spine — sails ripple/billow with the wind + travelling gusts, tails stream with
+follow-through, lines sag and thin with distance, kites ride an underdamped spring that climbs in gusts and dips in
+lulls, bank into drift, tug on click, climb with the in-breath in calm, LEDs at night, haze with distance, come down
+beyond the treeline when rain starts. Count = the existing `kites` setting (0–3, default 2; the raptors still follow
+it). Clear band only, mirrors with `side:left`. Overlay ~0.3 ms/frame with three kites (render phase dominates).
+Drawn procedurally (mesh deformation, no images) — no CC0 kite sheets exist. Evidence: `before-grass.jpg`,
+`t-grass3.jpg` (3 kites day/night), `after-grass-tug-reel.jpg`, `after-grass-left-wide.jpg` (3440×1440 mirrored +
+dusk).
+
+Packs: Beach and Butterfly Garden bumped to v3 (`site/scenes-pack/*-3.zip`, catalog order kept). 96 Node tests pass.
+No image generation, no downloads, no push, no app build/install.
+

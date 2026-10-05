@@ -30,7 +30,8 @@ const SPECIES = {
 let wings, meadow, flies = [], u = 1;
 
 // A single integrated photographic bed: stems, foliage and contact shadows share one geometry.
-meadow=Kit.plate({base:'art/',plates:{day:'garden.webp'},focus:[.5,.5]});
+// part: the bed's leaves and blooms lean a few px away from the cursor and spring back (owner: v1's push was too far)
+meadow=Kit.plate({base:'art/',plates:{day:'garden.webp'},focus:[.5,.5],part:{r:84,amp:9}});
 meadow.bloom=0;meadow.blooms=[];meadow.sheet={f:{hosta:{}}};
 meadow.field={list:[],sway:p=>[p.x,p.y]};
 const flowerSites=[[.096,.17],[.234,.133],[.278,.211],[.324,.205],[.164,.294],[.12,.39],[.174,.366],[.2,.429],[.323,.348],[.331,.43],[.42,.365],[.503,.407],[.255,.521],[.3,.62],[.348,.719],[.485,.657],[.54,.71],[.565,.465],[.508,.10],[.409,.145]];

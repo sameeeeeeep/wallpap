@@ -30,7 +30,7 @@
 //                                                  JS-driven so breath can own them
 //   Kit.meadow({plants, ground, dof})               baked ground + instanced plant sprites swaying in the wind field on the
 //                                                  GPU (static VBO), shadows, cursor push, breath bloom; layer.blooms = perches
-//   Kit.plate({plates, masks, occluders})           photo/painted backdrops (Codex plates): day/dusk/night/overcast crossfade,
+//   Kit.plate({plates, masks, occluders, part})     photo/painted backdrops (Codex plates): day/dusk/night/overcast crossfade,
 //                                                  sky mask → live sky, water → shimmer + ripples, emissive night lights
 //                                                  (auto: night − day), exposed → rain/snow/wet, occluders, coordinate maps
 //   Kit.sprites(fn)                                 your batch drawing at this depth: fn(b, k, t)
@@ -50,6 +50,8 @@
 //                {x,y,elev,vis}, night, day, golden, overcast, direct, cloud, wet, snow (accumulated), fog, sat, wind, spec, caust, flash, tint
 //   k.wind       {base, gust, dir, at(x,y)} — same field as GLSL kitWind(p); k.wind.puff(s) adds a gust
 //   k.cursor     {x, y, vx, vy, speed, inside, still (s since moved), down}
+//   k.push       cursor push trail for foliage (meadow plants; plates opt in with part:{r, amp}): the live pusher rides
+//                the cursor, the ones it left spring back through zero with a slight overshoot. k.push.u = vec4[8] uPush
 //   k.breath     {fade, level, phase, k, still} — lw.js breath clock; LW.breathDiegetic set if def.breathe
 //   k.music      {level, beat}
 //   k.ripples    shared wave-equation heightfield (water/waves): k.ripples.drop(x, y, r, strength)
@@ -600,7 +602,7 @@ function scene(def) {
   const FIELD_VS = `#version 300 es
   layout(location=0) in vec2 aCorner; layout(location=1) in vec4 aXYWH; layout(location=2) in vec4 aUV;
   layout(location=3) in vec4 aTint; layout(location=4) in vec4 aP; layout(location=5) in vec4 aQ;
-  uniform vec2 uView; uniform float uTime; uniform vec4 uWind; uniform vec2 uSunDir; uniform vec4 uCursor; uniform float uBloom, uShadow, uDof;
+  uniform vec2 uView; uniform float uTime; uniform vec4 uWind; uniform vec2 uSunDir; uniform vec4 uPush[8]; uniform vec2 uPushK; uniform float uBloom, uShadow, uDof;
   out vec2 vUV; out vec4 vTint; out vec2 vWorld; out float vBias;
   float kitWind(vec2 p){ float s = dot(p, uWind.zw);
     return uWind.x*(0.7+0.3*sin(s*0.0045 - uTime*1.1 + 1.7*sin(p.y*0.0021 + uTime*0.37))) + uWind.y*(0.6+0.4*sin(s*0.003 - uTime*2.0)); }
@@ -613,8 +615,12 @@ function scene(def) {
     float lever = pivot > 0.7 ? clamp((pivot - aCorner.y) / pivot, 0.0, 1.0) : 1.0;
     float w = kitWind(aXYWH.xy);
     vec2 disp = uWind.zw * (w * (0.75 + 0.25*sin(uTime*1.7 + phase)) + 0.18*w*sin(uTime*3.1 + phase*2.3)) * sway * lever;
-    vec2 d = aXYWH.xy - uCursor.xy; float dl = length(d);
-    if (dl < uCursor.z && dl > 0.0) disp += d / dl * pow(1.0 - dl / uCursor.z, 2.0) * uCursor.w * sway * lever;
+    // cursor push: a trail of soft pushers (k.push), each x·(1−x²)² across radius uPushK.x — zero right under the
+    // pointer (no flip as it passes over a plant), peak at ~0.45 R; soft-capped to a fraction of the sprite's size
+    vec2 pv = vec2(0.0);
+    for (int i = 0; i < 8; i++) { vec2 d = (aXYWH.xy - uPush[i].xy) / uPushK.x; float q = dot(d, d); if (q < 1.0) pv += d * (1.0 - q) * (1.0 - q) * 3.5 * uPush[i].z; }
+    float pl = length(pv) * uPushK.y * min(sway, 12.0), cap = 0.7 * max(size.x, size.y);
+    if (pl > 1e-3) disp += pv / length(pv) * cap * tanh(pl / cap) * lever;
     p += disp;
     if (uShadow > 0.0) p += uSunDir * height * (0.6 + 0.4*lever);
     vUV = vec2(mix(aUV.x, aUV.z, aCorner.x), mix(aUV.y, aUV.w, aCorner.y));
@@ -657,8 +663,9 @@ function scene(def) {
       draw(o = {}) {
         batch.flush();
         gl.useProgram(fieldP.p); common(fieldP, k.sceneRT); k.tex(fieldP, 'uAtlas', sheet.tex, 0);
-        const c = k.cursor, push = o.push ?? 0;
-        setU(fieldP, 'uCursor', [c.inside ? c.x : -1e5, c.inside ? c.y : -1e5, o.pushR ?? 90, push]);
+        // owner 2026-10-04: plants parted "a little too far" — 0.45× the old amplitude, 0.7× the old 90 px radius
+        const u = Math.min(k.W, k.H) / 1000;
+        setU(fieldP, 'uPush', k.push.u); setU(fieldP, 'uPushK', [(o.pushR ?? 64) * u, (o.push ?? 0) * 0.45]);
         setU(fieldP, 'uBloom', o.bloom ?? 0); setU(fieldP, 'uDof', o.dof ?? 0); setU(fieldP, 'uTint', o.tint || k.L.tint);
         gl.bindVertexArray(vao2); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         if (o.shadow) { setU(fieldP, 'uShadow', 1); setU(fieldP, 'uShadowA', o.shadow); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, list.length); }
@@ -684,6 +691,32 @@ function scene(def) {
     puff(s = 1) { this.puffs = Math.min(2.5, this.puffs + s); },
   };
   k.cursor = { x: -1e4, y: -1e4, vx: 0, vy: 0, speed: 0, inside: false, still: 99, down: false, lastT: 0 };
+  // Cursor push trail. Each pusher's amplitude is a damped spring (ω 15 rad/s, ζ 0.45 → ~20% rebound): the live one
+  // follows the cursor with target 1; when the cursor has moved on, it is released (target 0) where it was and a new
+  // live one starts at 0. Identical linear springs sum to a constant across the hand-over, so the field moves
+  // smoothly; the released ones swing back through zero (plants spring back with a slight overshoot). 8 slots:
+  // when full, the most-settled released pusher is recycled (≤ a few % left), so nothing pops.
+  k.push = { list: [], u: new Float32Array(32), lastSpawn: -1 };
+  function stepPush(dt) {
+    const P = k.push, c = k.cursor, u = Math.min(k.W, k.H) / 1000, W2 = 15 * 15, Z2 = 2 * 0.45 * 15;
+    let live = P.list.find((p) => p.live);
+    if (live && !c.inside) live.live = false, live = null;
+    if (c.inside) {
+      if (live && Math.hypot(c.x - live.x, c.y - live.y) > 22 * u && k.t - P.lastSpawn > 0.04) { live.live = false; live = null; }
+      if (!live) {
+        let slot = P.list.length < 8 ? null : P.list.filter((p) => !p.live).sort((a, b) => (Math.abs(a.a) + Math.abs(a.v) / 15) - (Math.abs(b.a) + Math.abs(b.v) / 15))[0];
+        if (!slot) P.list.push(slot = {}); else P.list.splice(P.list.indexOf(slot), 1), P.list.push(slot);
+        Object.assign(slot, { x: c.x, y: c.y, a: 0, v: 0, live: true }); live = slot; P.lastSpawn = k.t;
+      } else { live.x = c.x; live.y = c.y; }
+    }
+    const n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;   // semi-implicit substeps: stable at 10 fps too
+    for (let i = P.list.length - 1; i >= 0; i--) {
+      const p = P.list[i], tgt = p.live ? 1 : 0;
+      for (let j = 0; j < n; j++) { p.v += ((tgt - p.a) * W2 - p.v * Z2) * h; p.a += p.v * h; }
+      if (!p.live && Math.abs(p.a) < 0.002 && Math.abs(p.v) < 0.03) P.list.splice(i, 1);
+    }
+    P.u.fill(0); P.list.forEach((p, i) => P.u.set([p.x, p.y, p.a, 0], i * 4));
+  }
   k.breath = { on: false, fade: 0, level: 0, phase: 'rest', k: 0, still: 0, st: null, t0: realNow() / 1000, lead(sec) { return LW.breathState(breathClock() + sec); } };
   k.music = { level: 0, beat: 0 };
   k.lastInput = 0;
@@ -833,6 +866,7 @@ function scene(def) {
     else if (!def.music && M.beat > 0.2) W.puffs = Math.min(2.5, W.puffs + M.beat * dt * 0.6);
     // cursor
     const C = k.cursor; C.still += dt; if (C.still > 0.12) { C.vx *= Math.exp(-dt * 8); C.vy *= Math.exp(-dt * 8); C.speed = Math.hypot(C.vx, C.vy); }
+    stepPush(dt);
     // storms
     if (LW.env.weather === 'storm') { nextFlash -= dt; if (nextFlash <= 0) { L.flash = rand(0.6, 1.2); nextFlash = rand(8, 24); k.sound.thunder(); } }
     // update
@@ -1570,6 +1604,7 @@ function slice(img, f) { const c = canvas(f[2], f[3]); c.getContext('2d').drawIm
 
 // ─── Layer: plate (photo / painted backdrops, e.g. Codex-generated) ────────────────────────────────
 // Kit.plate({ plates: {day, dusk, night, overcast}, masks: {sky, water, exposed, emissive}, occluders: [{mask, base}],
+//             part: {r, amp} (px @1000: photographed foliage leans away from the cursor trail, springs back)
 //             fit: 'cover', focus: [fx, fy], mirror: true, emissive: 1, shimmer: 1 })
 //   Values are k.assets names (declare them in def.assets) or images. Only `day` is required: missing plates are
 //   graded from it. Plates crossfade by lighting (night ← k.L.night, dusk ← golden, overcast ← cloud cover).
@@ -1589,6 +1624,7 @@ function plate(o = {}) {
   const FS = `
   uniform sampler2D uPDay, uPDusk, uPNight, uPOver, uSkyM, uWaterM, uExpM, uEmM, uSim, uOccM;
   uniform vec4 uW, uFit, uHas, uHasM; uniform vec2 uSimTx; uniform float uMirror, uEmK, uShimmer, uSparkle, uOcc, uMoonExposure;
+  uniform vec4 uPush[8]; uniform vec3 uPart;
   vec2 toPlate(vec2 px){ if (uMirror > 0.5) px.x = uView.x - px.x; return (px - uFit.xy) / uFit.zw; }
   void main(){
     vec2 px = kitPx(), uv = toPlate(px);
@@ -1596,6 +1632,13 @@ function plate(o = {}) {
     float waterM = uHasM.y > 0.5 ? texture(uWaterM, uv).r : 0.0;
     float expM = uHasM.z > 0.5 ? texture(uExpM, uv).r : 1.0;
     vec2 duv = uv, slope = vec2(0.0);
+    // part (opt-in foliage plates): the photographed leaves lean a few px away from the k.push trail and spring back.
+    // Same x·(1−x²)² profile as the meadow; amp < R/3.5 keeps the warp monotonic (no folds/smears).
+    if (uPart.z > 0.5) {
+      vec2 pv = vec2(0.0);
+      for (int i = 0; i < 8; i++) { vec2 d = (px - uPush[i].xy) / uPart.x; float q = dot(d, d); if (q < 1.0) pv += d * (1.0 - q) * (1.0 - q) * 3.5 * uPush[i].z; }
+      duv = toPlate(px - pv * uPart.y * (1.0 - skyM) * (1.0 - waterM));
+    }
     if (waterM > 0.01) {
       vec2 g = px / uView.y * 70.0;
       slope = vec2(noise(g + uTime * vec2(0.8, 0.3)) - 0.5, noise(g * 1.3 - uTime * vec2(0.4, 0.9)) - 0.5) * (0.6 + uWind.x * 0.6);
@@ -1703,6 +1746,7 @@ function plate(o = {}) {
       uExpM: T.m_exposed || T.day, uEmM: T.m_emissive || T.day, uSim: { tex: R && R.tex ? R.tex : T.day.tex }, uOccM: occ ? occ.tex : T.day,
       uW: w, uFit: fit, uMirror: mirror ? 1 : 0, uHas: [T.dusk ? 1 : 0, T.night ? 1 : 0, T.overcast ? 1 : 0, T.m_emissive ? 1 : 0],
       uHasM: [T.m_sky ? 1 : 0, T.m_water ? 1 : 0, T.m_exposed ? 1 : 0, R && R.tex ? 1 : 0], uSimTx: R ? [1 / R.w, 1 / R.h] : [0, 0],
+      uPush: k.push.u, uPart: opt.part ? [opt.part.r * Math.min(k.W, k.H) / 1000, Math.min(opt.part.amp, opt.part.r / 3.6) * Math.min(k.W, k.H) / 1000, 1] : [1, 0, 0],
       uMoonExposure: 0.82 + 0.18 * Lt.moonFrac, uEmK: opt.emissive * (T.m_emissive ? lightsOn : Math.max(0, lightsOn - w[2]) + 0.15 * w[2]), uShimmer: opt.shimmer, uSparkle: opt.sparkle, uOcc: occ ? 1 : 0 };
   }
   L.draw = () => { k.pass(prog, uniforms(null), k.sceneRT, true); };

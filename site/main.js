@@ -1562,12 +1562,12 @@ const Zoom = {
     this.mac.style.transformOrigin = `${this.off[0]}px ${this.off[1]}px`;
     this.mac.style.transform = e ? `translate(${(tx - sx) * e}px,${(ty - sy) * e}px) scale(${1 + (S - 1) * e})` : '';
     // Hand over once the journey underneath is pinned AND its own scene is live: the screen is never a still.
-    const reveal = scrollY >= run - 1 && Journey.host.isLive() || scrollY >= run + this.fade();
+    const reveal = scrollY >= run - 1 && !!Journey.host?.isLive() || scrollY >= run + this.fade();
     this.e = e;
     root.style.setProperty('--zoom', e.toFixed(4));
     root.classList.toggle('zoomed', e > .35);
     root.classList.toggle('zoom-reveal', !!reveal);
-    if (reveal && !this.revealed) Journey.welcome();
+    if (reveal && !this.revealed && Journey.host) Journey.welcome();
     this.revealed = !!reveal;
     if (e > .02 && Tour.running) Tour.stop();
   },
@@ -1578,8 +1578,9 @@ Desktop.init();
 PG.init();
 Tour.init();
 Try.init();
-Zoom.init();
 Journey.init();
+Zoom.init();
+Journey.update();
 Live.update();
 // The live scene starts after the page has loaded and the browser is idle; the poster carries the
 // first paint. (Any touch in the hero, Fullscreen or a "Try it" starts it sooner.)

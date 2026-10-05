@@ -1750,12 +1750,12 @@ const Zoom = {
 // later opens it instantly. Desktop on a good connection only (never on phones or data saver).
 const Ahead = {
   done: new Set(), busy: false,
-  start() {
-    const c = navigator.connection || {};
-    if (this.started || saveData || phoneMQ.matches || c.saveData || /(^|-)2g|3g/.test(c.effectiveType || '')) return;
+  ok() { const c = navigator.connection || {}; return !(saveData || phoneMQ.matches || c.saveData || /(^|-)2g|3g/.test(c.effectiveType || '')); },
+  start(delay = 2500) {
+    if (this.started || !this.ok()) return;
     this.started = true;
     this.queue = ['cats', 'grass', 'cafe', 'records', 'train', 'cabin', 'ramen', 'rooftop', 'speakeasy', 'bowls', 'cymatics', 'koi'];
-    setTimeout(() => this.next(), 2500);
+    setTimeout(() => this.next(), delay);
   },
   next() {
     if (document.hidden) { setTimeout(() => this.next(), 4000); return; }
@@ -1767,7 +1767,7 @@ const Ahead = {
     f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1440px;height:900px;opacity:0;pointer-events:none';
     f.src = `scenes/${id}.html?${new URLSearchParams({ hour: s.hour.toFixed(2), weather: s.weather, fps: '1', muted: '1' })}`;
     let gone = false;
-    const finish = () => { if (gone) return; gone = true; f.remove(); this.done.add(id); setTimeout(() => this.next(), 600); };
+    const finish = () => { if (gone) return; gone = true; f.remove(); this.done.add(id); if (this.onDone) this.onDone(id); setTimeout(() => this.next(), 600); };
     f.addEventListener('load', () => {
       try { f.contentWindow.__lw('focus', false); } catch (e) {}
       setTimeout(finish, 2500);   // sprite sheets that load just after the page
@@ -1788,6 +1788,43 @@ Journey.update();
 Live.update();
 // The live scene starts after the page has loaded and the browser is idle; the poster carries the
 // first paint. (Any touch in the hero, Fullscreen or a "Try it" starts it sooner.)
-const goLiveSoon = () => idle(() => PG.goLive(), 1500);
+// First visit: a short loader until the koi pond is live in the hero and Santorini Cats (the first
+// world the walkthrough opens) has downloaded; the other worlds keep loading behind the page.
+// The bar creeps toward each milestone so it never sits still; never longer than 15 s; Skip after 4 s.
+const Boot = {
+  init() {
+    this.el = $('#boot');
+    if (!this.el) return;
+    if (getComputedStyle(this.el).display === 'none' || !Ahead.ok() || Journey.still()) { this.el.remove(); this.el = null; return; }
+    this.koi = false; this.cats = false; this.p = 0; this.t0 = performance.now();
+    document.documentElement.style.overflow = 'hidden';
+    PG.goLive(true);
+    PG.host.on((t) => { if (t === 'live' && PG.host.sceneId === 'koi') { this.koi = true; this.step(); } });
+    Ahead.onDone = (id) => { if (id === 'cats') { this.cats = true; this.step(); } };
+    Ahead.start(0);
+    $('#bootSkip').addEventListener('click', () => this.finish());
+    this.skipT = setTimeout(() => { $('#bootSkip').hidden = false; }, 4000);
+    this.capT = setTimeout(() => this.finish(), 15000);
+    this.tick = setInterval(() => {
+      const target = (this.koi ? 0.45 : 0) + (this.cats ? 0.55 : 0);
+      const cap = Math.min(1, target + (this.koi ? 0.5 : 0.4));   // creep toward the next milestone
+      this.p = Math.max(this.p, target, this.p + (cap * 0.95 - this.p) * 0.03);
+      $('#bootBar').style.width = `${(this.p * 100).toFixed(1)}%`;
+    }, 100);
+    this.step();
+  },
+  step() {
+    if (!this.el) return;
+    $('#bootStep').textContent = !this.koi ? 'Filling the koi pond…' : !this.cats ? 'Waking the cats in Santorini…' : 'Ready';
+    if (this.koi && this.cats) { $('#bootBar').style.width = '100%'; setTimeout(() => this.finish(), 350); }
+  },
+  finish() {
+    if (!this.el) return;
+    clearInterval(this.tick); clearTimeout(this.capT); clearTimeout(this.skipT);
+    this.el.classList.add('done'); document.documentElement.style.overflow = '';
+    const el = this.el; this.el = null; setTimeout(() => el.remove(), 700);
+  },
+};
+const goLiveSoon = () => { Boot.init(); idle(() => PG.goLive(), 1500); };
 HOSTS.forEach((h) => h.on((t) => { if (t === 'live') idle(() => Ahead.start(), 4000); }));
 if (document.readyState === 'complete') goLiveSoon(); else addEventListener('load', goLiveSoon, { once: true });

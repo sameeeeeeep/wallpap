@@ -27,6 +27,14 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- First visit: a short loader while the koi pond and Santorini Cats get ready (main.js · Boot). -->
+<div class="boot" id="boot" role="status" aria-live="polite">
+  <svg class="boot-mark" viewBox="0 0 22 10" aria-hidden="true"><path d="M1 4c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1"/><path d="M1 8.5c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1" opacity=".45"/></svg>
+  <p class="boot-t">Getting your worlds ready</p>
+  <div class="boot-bar"><i id="bootBar"></i></div>
+  <p class="boot-s" id="bootStep">Filling the koi pond…</p>
+  <button class="boot-skip" id="bootSkip" type="button" hidden>Skip</button>
+</div>
 <a class="skip" href="#main">Skip to content</a>
 
 <header class="nav" id="top">

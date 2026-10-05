@@ -8,7 +8,10 @@ const cache=new Map(),clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const views=['side','near','toward','near','side','far','away','far'];
 function direction(vx,vy,slope=.55,last={view:'side',face:1,octant:0}){
  if(Math.hypot(vx,vy)<1e-7)return {...last};
- const octant=(Math.round(Math.atan2(vy/slope,vx)/(Math.PI/4))+8)%8;
+ const angle=Math.atan2(vy/slope,vx);
+ // Hysteresis: keep the current facing until the heading is clearly (>30°) into a neighbour's sector.
+ if(last&&Number.isInteger(last.octant)){const d=Math.abs(((angle-last.octant*Math.PI/4)+3*Math.PI)%(2*Math.PI)-Math.PI);if(d<Math.PI/6)return {...last};}
+ const octant=(Math.round(angle/(Math.PI/4))+8)%8;
  return {view:views[octant],face:octant>2&&octant<6?-1:1,octant};
 }
 // Size match: sheets were drawn at different scales per view and action. These factors keep the

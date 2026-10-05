@@ -101,7 +101,7 @@ test('dogs play-bow and bounce through drawn hunt and pounce frames',()=>{
 test('pointer leave waits, return resumes, pause and reset clear picks',()=>{
  const r=rig(['orange']),p=r.pets.items[0];point(r,1100,600);tap(r,p);r.tick(120);point(r,1100,600,false);r.tick(40);const x=p.x;
  assert.equal(p.state,'followWait');r.tick(100);assert.equal(p.x,x);assert.ok(p.picked);
- point(r,1300,600);r.tick(120);assert.ok(p.x>x);r.emit('focus',false);assert.equal(p.picked,false);assert.equal(p.state,'sit');
+ point(r,1300,600);r.tick(120);assert.ok(p.x>x);while(p.j)r.tick(1);r.emit('focus',false);assert.equal(p.picked,false);assert.equal(p.state,'sit');
  tap(r,p);r.pets.reset();assert.equal(p.picked,false);
 });
 test('cursor projects to floor and excludes full prop and widget footprints',()=>{

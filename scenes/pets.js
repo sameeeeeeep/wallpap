@@ -360,8 +360,31 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(best)for(const step of [10,3,1]){const c=best.slice();for(let dy=directions(p)?-3:0;dy<=(directions(p)?3:0);dy++)for(let dx=-3;dx<=3;dx++)test(c[0]+dx*step,c[1]+dy*step);}
   return best;
  }
+ // Route around props for a chasing cat: A* over a grid of walkable floor points (the floor polygons,
+ // panels and keep-clear areas this cat may use), then pulled tight so it walks the fewest straight legs.
+ function routeAround(p,tx,ty){
+  const b=S.bounds||[0,0,1600,1000],step=Math.max(24,p.spec.height*p.k*.45),nodes=[],at=new Map();
+  for(let y=b[1]+step*.5,r=0;y<b[3];y+=step*.55,r++)for(let x=b[0]+step*.5,c=0;x<b[2];x+=step,c++)if(allowed(p,x,y,'floor')&&clearRest(p,x,y)){at.set(r+','+c,nodes.length);nodes.push({x,y,r,c});}
+  if(!nodes.length)return null;
+  const ok=(a,c)=>validPath(p,[a,c],false,false);
+  const near=(x,y)=>nodes.map((n,i)=>[Math.hypot(n.x-x,n.y-y),i]).sort((u,v)=>u[0]-v[0]).slice(0,8).filter(([,i])=>ok([x,y],[nodes[i].x,nodes[i].y])).map(([,i])=>i);
+  const starts=near(p.x,p.y),goals=new Set(near(tx,ty));if(!starts.length||!goals.size)return null;
+  const g=new Map(),from=new Map(),open=new Set();for(const i of starts){g.set(i,Math.hypot(nodes[i].x-p.x,nodes[i].y-p.y));open.add(i);}
+  const h=i=>Math.hypot(nodes[i].x-tx,nodes[i].y-ty);let end=null,guard=0;
+  while(open.size&&guard++<4000){
+   let cur=null,best=Infinity;for(const i of open){const f=g.get(i)+h(i);if(f<best){best=f;cur=i;}}
+   if(goals.has(cur)){end=cur;break;}open.delete(cur);const n=nodes[cur];
+   for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const j=at.get((n.r+dr)+','+(n.c+dc));if(j==null)continue;const m=nodes[j];
+    const cost=g.get(cur)+Math.hypot(m.x-n.x,m.y-n.y);if(cost<(g.get(j)??Infinity)&&ok([n.x,n.y],[m.x,m.y])){g.set(j,cost);from.set(j,cur);open.add(j);}}
+  }
+  if(end==null)return null;
+  const chain=[];for(let i=end;i!=null;i=from.get(i))chain.unshift([nodes[i].x,nodes[i].y]);
+  const raw=[[p.x,p.y],...chain,[tx,ty]],pts=[raw[0]];
+  for(let i=0;i<raw.length-1;){let j=raw.length-1;while(j>i+1&&!ok(raw[i],raw[j]))j--;pts.push(raw[j]);i=j;}
+  return {pts,i:1};
+ }
  function halt(p,name='followWait',seconds=1e9){
-  p.path=null;p.goal=null;p.next=null;p.turn=null;p.sequence=null;p.prev=null;state(p,name,seconds);
+  p.chase=false;p.path=null;p.goal=null;p.next=null;p.turn=null;p.sequence=null;p.prev=null;state(p,name,seconds);
  }
  function turnTo(p,view,face,next){
   if(p.asset.atlas){const v={f:'near',b:'far'}[view]||view,octant=v==='toward'?2:v==='away'?6:v==='near'?(face<0?3:1):v==='far'?(face<0?5:7):face<0?4:0;return LW.cats.startTurn(p,{view:v,face,octant},next);}
@@ -454,20 +477,41 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(p.asset.seq.pounce&&!busy&&f.cooldown===0&&cursor.still>1.2&&cursor.speed<20&&distance>body*.35&&distance<body*2.5&&free(p,...q,'floor')){
    if(beginHunt(p,q))return;
   }
+  if(!p.asset.atlas){
   if(f.repath>0)return;f.repath=.2;
-  const dest=fanTarget(p,q);if(!dest){halt(p);return;}
-  f.slot=dest;
-  if(Math.hypot(dest[0]-p.x,dest[1]-p.y)<12*p.k){if(p.state==='move')halt(p);return;}
-  const gait=distance>body*1.2||cursor.speed>80*p.k?'run':'walk';
-  f.leap=(f.leap||0)-.2;
-  if(gait==='run'&&distance>body*1.6&&f.leap<=0&&Math.random()<.5){
-   const reach=Math.min(distance-body*.6,body*1.3),ux=(dest[0]-p.x)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y)),uy=(dest[1]-p.y)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y));
-   const tx=p.x+ux*reach,ty=p.y+uy*reach;
-   if(allowed(p,tx,ty)&&clearRest(p,tx,ty)&&jump(p,tx,ty,'floor',r=>{if(r.follow){r.follow.repath=0;halt(r,'followWait',1e9);}})){f.leap=1.4;return;}
+   const dest=fanTarget(p,q);if(!dest){halt(p);return;}
+   f.slot=dest;
+   if(Math.hypot(dest[0]-p.x,dest[1]-p.y)<12*p.k){if(p.state==='move')halt(p);return;}
+   const gait=distance>body*1.2||cursor.speed>80*p.k?'run':'walk';
+   // Keep a committed leg until the destination moves enough to require another route.
+   if(p.state==='move'&&p.goal&&Math.hypot(dest[0]-p.goal.x,dest[1]-p.goal.y)<18){p.gait=gait;return;}
+   f.phase='follow';walk(p,...dest,{gait,next:r=>halt(r)});
+  return;}
+  // Direct chase, like the classic desktop cats: head straight for the cursor every frame at a steady
+  // pace, facing the way it goes. No route planner, no turn animations, no slots — nothing to stall on.
+  const stopR=body*.45,startR=body*.7;
+  if(distance<(p.state==='move'?stopR:startR)){if(p.state==='move'){p.path=null;p.goal=null;p.chase=false;state(p,'followWait',1e9);}return;}
+  const ux=(q[0]-p.x)/distance,uy=(q[1]-p.y)/distance;let tx=q[0]-ux*stopR*.8,ty=q[1]-uy*stopR*.8;
+  const group=items.filter(o=>o.picked&&!o.away);
+  if(group.length>1){const slot=fanTarget(p,q);if(slot){tx=slot[0];ty=slot[1];}}
+  // Gait with hysteresis: start running past 1.3 bodies, keep running down to 0.9 — no walk/run flicker.
+  const gait=(p.gait==='run'&&p.state==='move'?distance>body*.9:distance>body*1.3)||cursor.speed>120*p.k?'run':'walk';
+  f.leap=(f.leap||0)-dt;
+  if(gait==='run'&&distance>body*2&&f.leap<=0&&Math.random()<dt*1.2){
+   const reach=Math.min(distance-body*.6,body*1.3),lx=p.x+ux*reach,ly=p.y+uy*reach;
+   if(allowed(p,lx,ly)&&jump(p,lx,ly,'floor',r=>{r.chase=false;halt(r,'followWait',1e9);})){f.leap=1.2;return;}
   }
-  // Keep a committed leg until the destination moves enough to require another route.
-  if(p.state==='move'&&p.goal&&Math.hypot(dest[0]-p.goal.x,dest[1]-p.goal.y)<18){p.gait=gait;return;}
-  f.phase='follow';walk(p,...dest,{gait,next:r=>halt(r)});
+  f.phase='follow';p.gait=gait;p.chase=true;p.goal={x:tx,y:ty,surf:'floor'};p.next=r=>{r.chase=false;halt(r,'followWait',1e9);};
+  if(p.state!=='move'){state(p,'move',1e9);p.waited=0;p.blocked=0;f.detour=null;}
+  // Clear line of sight: straight at the cursor. Something in the way (bench, plant, wall): route
+  // around it with the planner, keeping that route until the cursor moves on or it is used up.
+  f.nav=(f.nav||0)-dt;
+  if(validPath(p,[[p.x,p.y],[tx,ty]],false,false)){p.path={pts:[[p.x,p.y],[tx,ty]],i:1};f.detour=null;}
+  else if(!f.detour||!p.path||p.path.i>=p.path.pts.length||(f.nav<=0&&Math.hypot(f.detour[0]-tx,f.detour[1]-ty)>body*.6)){
+   f.nav=.4;const route=routeAround(p,tx,ty)||plan(p,tx,ty,false,true);
+   if(route){p.path=route;f.detour=[tx,ty];}
+   else{const near=project(p,tx,ty);if(near&&validPath(p,[[p.x,p.y],near],false,false)){p.path={pts:[[p.x,p.y],near],i:1};f.detour=near;}}
+  }
  }
  function pose(p,dt){
   const s=p.asset;if(!prep(s))return;
@@ -522,13 +566,13 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const path=p.path,to=path.pts[path.i];
    if(!to){const next=p.next;p.path=null;p.goal=null;state(p,'stand',.4);if(next)next(p);else think(p);pose(p,dt);return;}
    const dx=to[0]-p.x,dy=to[1]-p.y,dist=Math.hypot(dx,dy);
-   if(p.asset.atlas&&dist>.01){const dir=LW.cats.direction(dx,dy,S.slope||.55,p._catDir);if(LW.cats.startTurn(p,dir)){pose(p,dt);return;}}
+   if(p.asset.atlas&&dist>.01){const dir=LW.cats.direction(dx,dy,S.slope||.55,p._catDir);if(p.chase){p._catDir=dir;p.dir=dir.face;}else if(LW.cats.startTurn(p,dir)){pose(p,dt);return;}}
    if(!p.asset.atlas&&p.picked&&dist>.01){const view=Math.abs(dy)<.01?'side':dy>0?'f':'b',face=Math.sign(dx)||p.dir;
     if(turnTo(p,view,face)){pose(p,dt);return;}}
    const speed=(p.gait==='stalk'?32:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
    const floorDistance=p.asset.atlas?Math.hypot(dx,dy/(S.slope||.55)):dist;
    const d=Math.min(dist,speed*dt*(floorDistance?dist/floorDistance:1)),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
-   if(free(p,x,y,p.surf,false)){
+   if(p.chase?allowed(p,x,y):free(p,x,y,p.surf,false)){
     p.groundVX=(x-p.x)/dt;p.groundVY=(y-p.y)/dt;p.gd+=(p.asset.atlas?Math.hypot(x-p.x,(y-p.y)/(S.slope||.55)):d)/Math.max(.1,p.k);p.x=x;p.y=y;p.blocked=0;
     if(dist<=d+.01){path.i++;LW.petJumpLand(p);}
    }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;state(p,'sit',1);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}

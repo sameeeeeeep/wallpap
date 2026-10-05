@@ -127,3 +127,9 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [x] Add website actions to the hero, all picker cards, current preview, fullscreen menu bar/panel and featured gallery; add Mac-only download/retry sheet and remembered-open hint.
 - [x] Add Swift parsing and browser-launcher regression tests, off-screen WebKit UI checks, light/dark/mobile screenshots and scheme/security documentation (`docs/add-to-desktop.md`). Final validation: 110 Node tests pass, `./build.sh` succeeds, 9 WebKit views pass with no JS/image errors; screenshots in `shots/add-to-desktop/`.
 - [ ] Release smoke test on a separate test Mac/profile: actual Launch Services cold/warm delivery, free/Pro upsell and native confirmation/download; the owner's installed app and settings were intentionally left untouched. Publish only with owner authorization.
+## Landing hero — owner feedback, 2026-10-05
+- [x] Impactful five-word headline; five copy options saved in `shots/hero/copy-options.md`.
+- [x] Immediate full-viewport journey through all twelve playground scenes; one live iframe, still prepaint, adjacent still preload, subtle persistent navigation/download/skip.
+- [x] One delayed contextual hint per scene, interaction/timeout dismissal; ghost tour opt-in only.
+- [x] Mobile/data-saving/reduced-motion still fallback; iframe wheel and arrow-key navigation; end CTA; existing fullscreen/menu, Pets, Play, pricing, FAQ and metadata retained.
+- [x] Thirty desktop/mobile light/dark WebKit screenshots, interaction/unload checks across twelve scenes, reduced-motion capture, stepped MP4, 96 Node tests. Evidence and reproduction: `docs/landing-hero.md`, `shots/hero/`.

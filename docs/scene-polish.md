@@ -1339,3 +1339,16 @@ profile. Final visual refinement: the traveller keeps walking through departure 
 instead of holding a mid-stride pose; the full capture matrix was refreshed afterward.
 
 Local commits only. No push, release, app rebuild/install/reload, screen interaction or other-worktree edits.
+## 2026-10-05 — Landing hero and immersive journey
+
+Landing-only presentation changes in `site/index.html`, `site/main.js`, `site/styles.css`.
+Headline: “A world behind your work.” Pinned full-viewport stage reuses all twelve
+playground scenes; one live iframe, immediate stills, contextual nonblocking hints,
+keyboard/iframe-wheel navigation and mobile/reduced-motion stills. The old ghost
+walkthrough is opt-in in the retained fullscreen playground. No scene source/art
+changes and no image prompts. Existing stills remain the mobile fallback.
+
+Visual critique, full screenshot matrix, interaction/unload assertions, recording,
+limitations and reproduction are documented in `docs/landing-hero.md`.
+96 Node tests pass. Own server 5224; owner's server and running Mac app untouched.
+Local commit only; no push, release or deployment.

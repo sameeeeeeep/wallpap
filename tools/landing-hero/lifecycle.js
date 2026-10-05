@@ -1,0 +1,28 @@
+window.__shotPending=true;
+window.__lifecycle={checks:[]};
+(async()=>{
+ const R=window.__lifecycle,nap=ms=>new Promise(r=>setTimeout(r,ms));
+ const check=(v,s)=>{if(!v)throw Error(s);R.checks.push(s)};
+ const until=async fn=>{for(let i=0;i<100;i++){if(fn())return;await nap(100)}throw Error('Load timeout')};
+ await until(()=>PG.host.isLive());
+ window.__qaHidden=true;document.dispatchEvent(new Event('visibilitychange'));await nap(100);
+ check(document.querySelectorAll('iframe.scene').length===0,'Hidden tab removes every scene');
+ window.__qaHidden=false;document.dispatchEvent(new Event('visibilitychange'));await until(()=>PG.host.isLive());
+ check(PG.host.isLive(),'Visible tab restores hero');
+ Object.defineProperty(motionMQ,'matches',{value:true,configurable:true});
+ motionMQ.dispatchEvent(new MediaQueryListEvent('change',{matches:true,media:motionMQ.media}));
+ await nap(100);
+ check(document.querySelectorAll('iframe.scene').length===0 && reduceMotion,'Enabling reduced motion unloads live preview');
+ scrollTo(0,Journey.el.offsetTop);Journey.update();await nap(100);
+ check(Journey.still()&&document.querySelectorAll('iframe.scene').length===0,'Reduced-motion journey stays still');
+ Object.defineProperty(motionMQ,'matches',{value:false,configurable:true});
+ motionMQ.dispatchEvent(new MediaQueryListEvent('change',{matches:false,media:motionMQ.media}));
+ await until(()=>Journey.host.isLive());
+ check(!reduceMotion && Journey.host.isLive(),'Disabling reduced motion restores live journey');
+ Object.defineProperty(phoneMQ,'matches',{value:true,configurable:true});
+ phoneMQ.dispatchEvent(new MediaQueryListEvent('change',{matches:true,media:phoneMQ.media}));await nap(100);
+ check(document.querySelectorAll('iframe.scene').length===0,'Crossing the phone breakpoint unloads live scene');
+ PG.goLive(true);
+ check(!PG.host.wantLive,'Phone cannot opt into a heavy scene iframe');
+ R.passed=true;
+})().catch(e=>window.__lifecycle.failure=String(e)).finally(()=>{window.__shotReport=()=>window.__lifecycle;window.__shotPending=false});

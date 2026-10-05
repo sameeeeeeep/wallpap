@@ -115,6 +115,22 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .tg svg.i{width:20px;height:20px}
 .swrow{display:flex;align-items:center;justify-content:space-between;width:100%;height:34px;padding:0 10px;border-radius:10px;background:var(--tile);font-size:12px;font-weight:500}
 .swrow:hover{background:var(--tile-2)}
+/* the scene's own sounds: three tiles, level right under each one that's on */
+.ch .sw{margin-left:auto}
+.lvs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.lvs.muted{opacity:.45}
+.lv{display:flex;flex-direction:column;border-radius:12px;background:var(--tile);overflow:hidden}
+.lv[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.lv-m{display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px 6px;color:inherit}
+.lv-m svg.i{width:20px;height:20px;margin-bottom:2px}
+.lv-m b{font-size:11.5px;font-weight:600}
+.lv-m small{font-size:9.5px;opacity:.65;white-space:nowrap}
+.lv:hover{filter:brightness(1.04)}
+.lvl{display:flex;align-items:flex-end;justify-content:center;gap:4px;height:24px;padding:0 0 8px}
+.lvl button{width:12px;height:var(--h);border-radius:2px;background:currentColor;opacity:.28;padding:0}
+.lvl button[aria-pressed=true]{opacity:1}
+.lvl button:hover{opacity:.7}
+.lv-off{display:block;text-align:center;font-size:10px;color:var(--ink-3);height:24px;line-height:16px}
 .look{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:var(--ink-2)}
 .look>span{width:72px;flex:none}
 .look .seg{flex:1}
@@ -257,7 +273,7 @@ const WEATHER = [['', 'Live', 'pin'], ['clear', 'Clear', 'clear'], ['cloudy', 'C
 const SCAPES = [['white', 'White noise'], ['pink', 'Pink noise'], ['brown', 'Brown noise'], ['rain', 'Rain'], ['ocean', 'Ocean'], ['fire', 'Fireplace'], ['stream', 'Stream']];
 const SCAPE_SHORT = { white: 'White', pink: 'Pink', brown: 'Brown', rain: 'Rain', ocean: 'Ocean', fire: 'Fire', stream: 'Stream' };
 // What each scene-sound channel actually is, in plain words.
-const LEVELS = [['fx', 'Interactions', 'Your clicks — splashes, purrs, notes', 'fx'], ['ambience', 'Ambience', 'The world — birds, water, the room', 'ambience'], ['weather', 'Weather', 'Rain, wind and thunder', 'wxsnd']];
+const LEVELS = [['fx', 'Interactions', 'Your clicks', 'fx'], ['ambience', 'World', 'Birds, water, rooms', 'ambience'], ['weather', 'Weather', 'Rain, thunder', 'wxsnd']];
 const BREATHS = [['box', 'Box', 'box', 'In 4 · hold 4 · out 4 · hold 4'], ['calm', 'Calm', 'calm', 'In 4 · out 6'], ['478', '4-7-8', 'b478', 'In 4 · hold 7 · out 8']];
 const EVERY = (list) => list.map((m) => [m, m ? (m >= 60 ? `${m / 60}h` : `${m}m`) : 'Off']);
 const WATER_EVERY = EVERY([0, 15, 30, 45, 60, 90]);
@@ -283,10 +299,14 @@ function placeSvg(mode, side) {
 }
 // A card: header (icon, title, one-line state, ⌄), its quick controls (always shown), and — when
 // open — the rest of its options underneath. Nothing appears twice.
-function card(id, title, icon, state, quick, more, half) {
-  const o = !!open[id];
-  return `<section class="c${o ? ' open' : ''}${half && !open.breathe && !open.water ? ' half' : ''}">
-    <button class="ch" data-card="${id}" aria-expanded="${o}"><span class="ib">${ic(icon)}</span><span class="tt"><b>${esc(title)}</b>${state ? `<small>${state}</small>` : ''}</span><span class="cv"><svg viewBox="0 0 10 10"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg></span></button>
+// `pair`: the card it sits beside at half width (both go full width when either opens).
+// `side`: a control in the header instead of the ⌄, for cards with nothing more to show.
+function card(id, title, icon, state, quick, more, pair, side) {
+  const o = !!open[id] && !!more;
+  const half = pair && !open[id] && !open[pair];
+  const head = `<span class="ib">${ic(icon)}</span><span class="tt"><b>${esc(title)}</b>${state ? `<small>${state}</small>` : ''}</span>`;
+  return `<section class="c${o ? ' open' : ''}${half ? ' half' : ''}">
+    ${more ? `<button class="ch" data-card="${id}" aria-expanded="${o}">${head}<span class="cv"><svg viewBox="0 0 10 10"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg></span></button>` : `<div class="ch">${head}${side || ''}</div>`}
     ${quick ? `<div class="q">${quick()}</div>` : ''}
     ${o ? `<div class="det">${more()}</div>` : ''}
   </section>`;
@@ -332,24 +352,29 @@ function render(state) {
     () => `<div class="row"><span class="lab">Day cycle<small>A whole day passes on screen</small></span><span style="width:132px">${seg([['auto', 'Off'], ['slow', 'Slow'], ['fast', 'Fast']], cycling ? S.timeView : 'auto', 'pickTimeView')}</span></div>
       <div class="row"><span class="lab">Use my precise location<small>Sharper local weather and sun</small></span>${sw(S.precise, 'togglePreciseLocation')}</div>`);
 
-  // Sound: three toggles that say what they're doing; open adds the scene's channels, the
-  // background-sound picker and Beat Sync.
-  const scName = scapeOn ? SCAPE_SHORT[S.soundscape] : 'Off';
-  const sound = card('sound', 'Sound', S.muted ? 'mute' : 'sound', '',
-    () => `<div class="tgs">
-        ${tog(!S.muted, 'toggleMute', undefined, S.muted ? 'mute' : 'sound', 'Sound', S.muted ? 'Muted' : 'On', 'Mute or unmute everything')}
-        ${scapeOn ? tog(true, locked ? 'openPro' : 'pickSoundscape', 'off', S.soundscape, 'Background', scName, 'Tap to stop the background sound')
-          : `<button class="tg" aria-pressed="false" data-card-open="sound" title="Pick a background sound — rain, ocean, fire…">${ic('scape')}<span><b>Background</b><small>Off</small></span></button>`}
-        ${tog(S.music, locked ? 'openPro' : 'toggleMusicMode', undefined, 'music', 'Music', S.music ? 'In the scene' : 'Off', 'Your Music or Spotify, playing inside the scene')}</div>`,
-    () => `<div class="cap">Background sound${locked ? ' · Pro' : ''}<small>${scapeOn ? 'tap it again to stop' : 'plays under everything'}</small></div>
+  // Sound: the three sounds the scene itself makes. Tap one to switch it; while it's on, its level
+  // sits right under it. The header switch mutes everything.
+  const lvl = (c, vol) => `<div class="lvl" role="radiogroup" aria-label="Level">${[[0.4, 'Low'], [0.7, 'Medium'], [1, 'Full']].map(([v, l], i) =>
+    `<button aria-pressed="${vol >= v - 0.01}" data-a="pickAudioVol" data-v='${J(JSON.stringify([c, v]))}' title="${l}" style="--h:${5 + i * 4}px"></button>`).join('')}</div>`;
+  const sound = card('sound', 'Sound', S.muted ? 'mute' : 'sound', S.muted ? 'Everything is muted' : 'Tap a sound to switch it off', () => `<div class="lvs${S.muted ? ' muted' : ''}">${LEVELS.map(([c, l, d, k]) => {
+      const p = S.audio.find((x) => x.c === c) || { on: true, vol: 1 };
+      return `<div class="lv" aria-pressed="${!!p.on}"><button class="lv-m" data-a="toggleAudioCat" data-v='${J(c)}' title="${esc(l)}: ${p.on ? 'tap to switch off' : 'tap to switch on'}">${ic(k)}<b>${esc(l)}</b><small>${esc(d)}</small></button>${p.on ? lvl(c, p.vol) : '<span class="lv-off">Off</span>'}</div>`;
+    }).join('')}</div>`, null, null, sw(!S.muted, 'toggleMute'));
+
+  // Background sound and Music: their own pair of small cards.
+  const scapeVol = [[0.18, 'Quiet'], [0.35, 'Medium'], [0.6, 'Loud']];
+  const background = card('background', 'Background', 'scape', scapeOn ? `${SCAPE_SHORT[S.soundscape]} · ${(scapeVol.find((x) => x[0] === S.ssVol) || [, 'on'])[1].toLowerCase()}` : 'Off',
+    () => scapeOn ? `<button class="big" data-a="${locked ? 'openPro' : 'pickSoundscape'}" data-v='"off"'>${ic(S.soundscape)}Stop ${esc(SCAPE_SHORT[S.soundscape].toLowerCase())}</button>`
+      : `<button class="big off" data-card-open="background">${ic('plus')}Choose a sound</button>`,
+    () => `<div class="cap">Plays under everything${locked ? ' · Pro' : ''}<small>${scapeOn ? 'tap it again to stop' : ''}</small></div>
       <div class="ico tiny">${SCAPES.map(([v, l]) => { const on = S.soundscape === v; return `<button aria-pressed="${on}" data-a="${locked ? 'openPro' : 'pickSoundscape'}" data-v='${J(on ? 'off' : v)}' title="${esc(l)}">${ic(v)}<span>${esc(SCAPE_SHORT[v])}</span></button>`; }).join('')}</div>
-      ${scapeOn ? `<div style="margin-top:5px">${seg([[0.18, 'Quiet'], [0.35, 'Medium'], [0.6, 'Loud']], S.ssVol, 'pickSoundscapeVolume')}</div>` : ''}
-      <div class="cap">The scene’s own sounds<small>switch any off</small></div>
-      ${LEVELS.map(([c, l, d, k]) => { const p = S.audio.find((x) => x.c === c) || { on: true, vol: 1 };
-        return `<div class="srow">${ic(k)}<span class="lab">${l}<small>${d}</small></span>${p.on ? vbar([0.4, 0.7, 1], p.vol, 'pickAudioVol', (v) => JSON.stringify([c, v])) : ''}${sw(p.on, 'toggleAudioCat', c)}</div>`; }).join('')}
-      ${S.music ? `<div class="cap">Music</div><div class="row"><span class="lab">Beat Sync<small>The scene moves to the beat</small></span>${sw(S.beat, 'toggleBeatSync')}</div>` : ''}
+      ${scapeOn ? `<div class="cap">Volume</div>${seg(scapeVol, S.ssVol, 'pickSoundscapeVolume')}` : ''}`, 'music');
+  const music = card('music', 'Music', 'music', S.music ? 'In the scene' : 'Off',
+    () => `<button class="swrow" data-a="${locked ? 'openPro' : 'toggleMusicMode'}"><span>Music Mode</span><span class="sw" role="switch" aria-checked="${!!S.music}"></span></button>`,
+    () => `<p class="note" style="margin-top:0">What’s playing in Music or Spotify shows up in the scene — its album art, and a beat it can move to.</p>
+      <div class="row"><span class="lab">Beat Sync<small>The scene moves to the beat</small></span>${sw(S.beat, 'toggleBeatSync')}</div>
       ${S.music && !cur.music ? `<p class="note">${esc(cur.title)} has no music player — try ${esc(S.scenes.filter((x) => x.music).map((x) => x.title).slice(0, 3).join(', '))}.</p>` : ''}
-      ${S.music && S.musicDenied ? '<button class="link" data-a="openAutomationSettings">Allow wallpap to control Music / Spotify…</button>' : ''}`);
+      ${S.music && S.musicDenied ? '<button class="link" data-a="openAutomationSettings">Allow wallpap to control Music / Spotify…</button>' : ''}`, 'background');
 
   // Breathe and Water: their own small cards. Quick = the thing you do; open = how and how often.
   const bp = BREATHS.find((b) => b[0] === S.breath) || BREATHS[0];
@@ -357,13 +382,13 @@ function render(state) {
     () => `<button class="big${S.calm ? '' : ' off'}" data-a="toggleCalm">${ic(S.calm ? 'pause' : 'play')}${S.calm ? 'Stop' : 'Breathe now'}</button>`,
     () => `<div class="cap">Pattern<small>${esc(bp[3])}</small></div>
       <div class="ico lg">${BREATHS.map(([v, l, k]) => `<button aria-pressed="${S.breath === v}" data-a="pickBreath" data-v='${J(v)}'>${ic(k)}<span>${esc(l)}</span></button>`).join('')}</div>
-      <div class="cap">Remind me to breathe${locked ? ' · Pro' : ''}</div>${seg(BREATH_EVERY, S.breathEvery || 0, locked ? 'openPro' : 'pickBreathReminder', true)}`, true);
+      <div class="cap">Remind me to breathe${locked ? ' · Pro' : ''}</div>${seg(BREATH_EVERY, S.breathEvery || 0, locked ? 'openPro' : 'pickBreathReminder', true)}`, 'water');
 
   const water = card('water', 'Water', 'water', S.water ? `Every ${mins(S.water)}` : 'No reminder',
     () => `<button class="swrow" data-a="${locked ? 'openPro' : 'pickReminder'}" data-v='${J(S.water ? 0 : 45)}' data-tag><span>Remind me</span><span class="sw" role="switch" aria-checked="${S.water > 0}"></span></button>`,
     () => `<div class="cap">Remind me to drink${locked ? ' · Pro' : ''}</div>${seg(WATER_EVERY, S.water || 0, locked ? 'openPro' : 'pickReminder', true)}
       <div class="row" style="margin-top:4px"><span class="lab">Show over my apps<small>A small card under the menu bar</small></span>${sw(S.overApps, locked ? 'openPro' : 'toggleRemindersOverApps')}</div>
-      <div class="row"><button class="link" data-a="remindNow">Remind me now</button>${S.overApps ? '<button class="link" data-a="previewReminderCard">Preview the card</button>' : ''}</div>`, true);
+      <div class="row"><button class="link" data-a="remindNow">Remind me now</button>${S.overApps ? '<button class="link" data-a="previewReminderCard">Preview the card</button>' : ''}</div>`, 'breathe');
 
   // The world's own settings (pets, kites, skins…): one card, closed by default, summary in its header.
   const lookNow = (c) => (c.options.find((o) => o.on) || c.options[0] || {}).label;
@@ -394,7 +419,7 @@ function render(state) {
     ${acts.length ? `<div class="acts">${acts.map((c) => { const k = actIcon(String(c.v), c.title); return `<button class="glass" data-a="runAction" data-v='${J(c.v)}' title="${esc(c.title)}">${ic(k)}<span>${esc(ACT_WORD[k] || c.title.split(' ')[0])}</span></button>`; }).join('')}</div>` : ''}
   </div>
   ${S.clickTip ? `<div class="tip"><p>Clicking a scene also slides your windows away (macOS <b>Click wallpaper to reveal desktop</b>). Set it to <b>Only in Stage Manager</b>.<span><button data-a="openDesktopSettings">Open setting</button><button data-a="dismissClickTip">Keep</button></span></p></div>` : ''}
-  <div class="cards">${world}${worlds}${mood}${sound}${breathe}${water}${settings}</div>
+  <div class="cards">${world}${worlds}${mood}${sound}${background}${music}${breathe}${water}${settings}</div>
   <nav class="foot">
     <button data-a="togglePlay" ${S.playAvailable === false ? 'disabled' : ''} title="${esc(S.playReason || 'Daily puzzles')}">${ic('puzzle')}<span>${S.playOpen ? 'Close puzzles' : 'Puzzles'}</span></button>
     <span class="sp"></span>

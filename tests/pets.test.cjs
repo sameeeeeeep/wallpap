@@ -231,7 +231,22 @@ test('all coats keep diagonal heading and distance-driven phase at varied depth 
     assert.ok(Math.abs(((p._catMotion.phase-phase+1)%1)-distance/clip.stride)<1e-8);
     poses.add(p.spP);
    }
-   assert.equal(poses.size,8,coat+' '+gait+' '+dir.octant);
+   assert.equal(poses.size,gait==='walk'?6:8,coat+' '+gait+' '+dir.octant);
   }
  }
+});
+
+test('six-drawing walks hold frames and turn without requesting missing seventh/eighth poses',()=>{
+ const r=rig(['orange'],{},'cats',true),p=r.pets.items[0];
+ p.state='move';p._catRest='stand';p._catTransition=null;p.gait='walk';p.gd=0;
+ for(let octant=0;octant<8;octant++)for(const phase of [.01,.24,.49,.74,.99]){
+  const angle=octant*Math.PI/4,next=(octant+3)%8;
+  p.turn=null;p._catDir=r.LW.cats.direction(Math.cos(angle),Math.sin(angle)*.55,.55);
+  p._catMotion={distance:0,phase,gait:'walk'};
+  r.LW.cats.pose(p,0);const held=p.spP;r.LW.cats.pose(p,.05);assert.equal(p.spP,held,'stationary distance holds the drawing');
+  assert.ok(p.asset.img[p.spP]);
+  r.LW.cats.startTurn(p,r.LW.cats.direction(Math.cos(next*Math.PI/4),Math.sin(next*Math.PI/4)*.55,.55));
+  for(const step of p.turn.steps)assert.ok(p.asset.img[step.name],step.name);
+ }
+ assert.equal(p.asset.unit,.52,'replacement walks preserve approved action scale');
 });

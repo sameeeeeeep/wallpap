@@ -1065,3 +1065,44 @@ The final coat review also corrected diagonal-only calico patch/leg color drift
 with root-registered body masks and a stable exposed-limb palette, and Siamese
 folded-paw tips with pose-chart sock tracking. A crossing-limb calico mask attempt
 was rejected. Calico and Siamese comparisons were freshly re-rendered afterward.
+
+## 2026-10-05 — cats-gpt walk v5, supplied six-frame sheets
+
+Owner rejected all previous walks; approved runs, jumps, rests and transitions
+remain untouched. Integrated the 25 supplied Magnific/Muybridge Plate 716 sheets
+from `art-src/walk-v5/`. **No new art generation or image prompts.** Deterministic
+builder, provenance and calibration: `tools/cats-qa/walk_v5.py` and
+`tools/cats-qa/walk-v5-data/`.
+
+Border-connected background removal, six subject components, ground-line and
+enclosed-paper cleanup preserve white chest/paws. Shared cross-coat alpha,
+selective matte cleanup, torso registration, fixed view scales and shared
+per-channel fur grading replace only the walk atlases. The global unit stays
+0.52. Production playback/contact/turn code reads the actual six-frame walk
+length; the approved eight-frame actions retain their metadata and art.
+
+Calico toward reuses source drawing 3's head/torso markings in every frame,
+matching the approved dark-eye side and keeping legs/paws white. Near-view
+intermittent lower-leg patches are consistently white. Other calico views and
+Siamese points were checked; fine source texture changes remain. Front dark-mask
+overlap improves from a minimum 0.067 to 0.879, with its centroid staying x131–133.
+
+Final evidence: [all ten 20-second, 30-fps reels and contact sheets](../shots/cats-gpt/README.md),
+[review and limitations](../shots/cats-gpt/walk-v5-review.md), JSON engine states,
+alpha composites and verification. Decoded all 6,000 frames; visually reviewed
+distinct poses/directions/transitions per coat, continuous orange/calico cycles
+and normal-zoom overviews. Corrected registration bounce and matte-edge issues
+found in draft review, then regenerated final reels. 108/108 Node tests pass.
+All 70 non-walk WebPs are byte-identical and their manifest/runtime entries match.
+
+Same isolated WebKit performance method: 5.4% CPU / 208 MiB total versus prior
+5.9% / 216 MiB; WebContent 1.9% / 162 MiB versus 1.9% / 165 MiB. This is one
+short sample, with no measured regression. Rendering stayed above 5 GiB free
+(33 GiB at completion). No install, push, release, owner app/settings changes,
+stash or other-worktree operations.
+
+**Strict no-sliding visual gate remains open.** Uneven painted stance travel,
+some repeated foreleg phases and ambiguous rear contacts prevent perfect foot
+locking with held supplied frames. Rear cadence explicitly shares the toward
+fit. Small action/view changes in painted proportions and marking boundaries
+also remain; this integration is not new owner signoff.

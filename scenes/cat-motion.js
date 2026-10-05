@@ -33,8 +33,8 @@ function startTurn(p,dir,next){
  if(old.octant===dir.octant){if(next)next();return false;}
  let delta=(dir.octant-old.octant+8)%8;if(delta>4)delta-=8;
  const steps=[];
- const phase=p._catMotion?.phase||0,index=Math.floor(phase*8);
- if(p.state==='move'&&index%4!==0){const end=index<4?4:8;for(let i=index+1;i<=end;i++)steps.push({name:'walk-'+old.view+'-'+(i%8+1),dir:old.face});}
+ const phase=p._catMotion?.phase||0,n=p.asset.clips['walk-'+old.view].frames.length,half=n/2,index=Math.floor(phase*n);
+ if(p.state==='move'&&index%half!==0){const end=index<half?half:n;for(let i=index+1;i<=end;i++)steps.push({name:'walk-'+old.view+'-'+(i%n+1),dir:old.face});}
  for(let i=1;i<=Math.abs(delta);i++){
   const octant=(old.octant+Math.sign(delta)*i+8)%8;
   steps.push({name:'walk-'+views[octant]+'-1',dir:octant>2&&octant<6?-1:1});
@@ -49,12 +49,14 @@ function pose(p,dt){
  const motion=p._catMotion||(p._catMotion={distance:p.gd,phase:0,gait:'walk'});
  if(st==='move'||st==='stand'){
   const requested=st==='stand'?'walk':p.gait==='run'?'run':'walk';
-  const contact=Math.floor(motion.phase*8)%4===0;if(requested!==motion.gait&&contact)motion.gait=requested;
+  const count=s.clips[motion.gait+'-'+dir.view].frames.length;
+  const contact=Math.floor(motion.phase*count)%(count/2)===0;if(requested!==motion.gait&&contact)motion.gait=requested;
   const gait=st==='stand'?'walk':motion.gait;key=gait+'-'+dir.view;
   const dd=Math.max(0,p.gd-motion.distance);motion.distance=p.gd;
   if(dd>0&&dd<40)motion.phase=(motion.phase+dd/(s.clips[key].stride||60))%1;
   if(st==='stand')motion.phase=0;
-  idx=Math.floor(motion.phase*8)%8;motion.gait=gait;
+  const n=s.clips[key].frames.length;
+  idx=Math.floor(motion.phase*n)%n;motion.gait=gait;
  }else if(p.j){
   dir=p.j.catDir||dir;key='jump-'+dir.view;
   idx=st==='jumpPrep'?Math.min(2,Math.floor(p.t/p.dur*3)):st==='land'?Math.min(7,5+Math.floor(p.t/p.dur*3)):3+Math.min(1,Math.floor(p.t/p.j.dur*2));

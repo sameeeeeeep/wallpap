@@ -7,7 +7,10 @@ data={}
 for coat in ['orange','black','grey','calico','siamese']:
  p=ROOT/f'scenes/art/sprites/cats/{coat}/atlas/manifest.json'
  if not p.exists():continue
- clips=json.loads(p.read_text());unit=78/sorted(r[3] for r in clips['walk-side']['frames'])[4]
+ clips=json.loads(p.read_text())
+ # Approved run/jump/rest scale, frozen from the original 150px walk reference.
+ # Replacing a walk must never resize every other approved animation.
+ unit=78/150
  # Measured planted paw sweep, in scene units per full cycle (see registration notes).
  for key,c in clips.items():
   if key.startswith(('walk-','run-')):c['stride']=c.get('stride') or ({'side':36,'near':42,'toward':35,'far':36,'away':37}[key.split('-')[1]] if key.startswith('walk') else 110)

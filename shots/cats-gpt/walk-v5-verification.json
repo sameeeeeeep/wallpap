@@ -1,0 +1,304 @@
+{
+  "memoryEstimate": {
+    "before": {
+      "decodedAtlasMiB": 69.69,
+      "croppedFramesMiB": 55.56,
+      "payloadMiB": 5.33
+    },
+    "after": {
+      "decodedAtlasMiB": 68.01,
+      "croppedFramesMiB": 53.86,
+      "payloadMiB": 6.67
+    }
+  },
+  "baseline": "708bedd27536e96b79f0b1d802871d186539aef0",
+  "unchangedApprovedAtlases": 70,
+  "unchangedApprovedMetadata": 70,
+  "preservedUnit": 0.52,
+  "walks": [
+    {
+      "coat": "orange",
+      "clip": "walk-away",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "4516c300b35ea5867289f8e970bdbaf854fcd295e00e2ea9e58ed7f603174dd8"
+    },
+    {
+      "coat": "orange",
+      "clip": "walk-far",
+      "frames": 6,
+      "stride": 39.99,
+      "sha256": "351b3859efbd0855a849b4de71bf843566457e53ddc5533bb57372ee5b7e0770"
+    },
+    {
+      "coat": "orange",
+      "clip": "walk-near",
+      "frames": 6,
+      "stride": 51.42,
+      "sha256": "f1a8aee75ec6e01b8afa09a4bc5ff4103fd83c656aa36b52bd63c4e97b528f60"
+    },
+    {
+      "coat": "orange",
+      "clip": "walk-side",
+      "frames": 6,
+      "stride": 28.82,
+      "sha256": "e1b41e1418916ccee2b3c8115618f1c62c19f37c6ee4681e45aab8d879d491ae"
+    },
+    {
+      "coat": "orange",
+      "clip": "walk-toward",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "27df9c731f58d22c5c7a78e57e2f47d83e0ee1297ea6f020930afb34267d1866"
+    },
+    {
+      "coat": "black",
+      "clip": "walk-away",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "47844922c62ecba17dd506438af53660abbcac5637011d320cff8ef9a8683816"
+    },
+    {
+      "coat": "black",
+      "clip": "walk-far",
+      "frames": 6,
+      "stride": 39.99,
+      "sha256": "46e7428b4263eef574b49b1037fb02a477c8eee46feb469a26a51af583b379d0"
+    },
+    {
+      "coat": "black",
+      "clip": "walk-near",
+      "frames": 6,
+      "stride": 51.42,
+      "sha256": "e1c2f6feaad690391c67eee75ba6ebeedb0637818cd26e9900475572f1800443"
+    },
+    {
+      "coat": "black",
+      "clip": "walk-side",
+      "frames": 6,
+      "stride": 28.82,
+      "sha256": "2d9f43f383685ab3cd255f7518ad6798c41575b5ed301a901c42025ae68d5888"
+    },
+    {
+      "coat": "black",
+      "clip": "walk-toward",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "29845c33e83b5b8fb340f1e14b453a41aacb1eca5d90ac8c8d843baa0daa7aed"
+    },
+    {
+      "coat": "grey",
+      "clip": "walk-away",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "e270cb2367e86809f27a30ac4f42db237e8fab9ed58c802ab84da3ceaf86ba03"
+    },
+    {
+      "coat": "grey",
+      "clip": "walk-far",
+      "frames": 6,
+      "stride": 39.99,
+      "sha256": "34fd83dd1eebf02f8149e4a77b364ce2161abbda065b6467d9e768b76c7cf489"
+    },
+    {
+      "coat": "grey",
+      "clip": "walk-near",
+      "frames": 6,
+      "stride": 51.42,
+      "sha256": "4da08dd8634e144cc998f0ede6e69bf08da5c5aaa428c28cef78fe1163634cb0"
+    },
+    {
+      "coat": "grey",
+      "clip": "walk-side",
+      "frames": 6,
+      "stride": 28.82,
+      "sha256": "44d7934af95e2dbd54bc1b1fb027c4c418064fda29be6196f9f4a62c22a7ac2c"
+    },
+    {
+      "coat": "grey",
+      "clip": "walk-toward",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "c3c5389e94a134f78706fbac02466a48854cddab11e5fcf4da52ab6b3a744743"
+    },
+    {
+      "coat": "calico",
+      "clip": "walk-away",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "fe39689af7faff6f6b374205f55fca8603bf34af77832cfc45efeee2e06c5fcd"
+    },
+    {
+      "coat": "calico",
+      "clip": "walk-far",
+      "frames": 6,
+      "stride": 39.99,
+      "sha256": "01b2783738fa0577b4ab3d4c04bd6103dfe14781a3a60cf9a44f647bbf628c96"
+    },
+    {
+      "coat": "calico",
+      "clip": "walk-near",
+      "frames": 6,
+      "stride": 51.42,
+      "sha256": "279fd22d86adf704b7d79997fe28b622dd712dc1ea076f6603a9aaa622ecaad3"
+    },
+    {
+      "coat": "calico",
+      "clip": "walk-side",
+      "frames": 6,
+      "stride": 28.82,
+      "sha256": "ff49f53330e93d64c04e529b603d6b4aca146a49f2cd2abe6889974e46348496"
+    },
+    {
+      "coat": "calico",
+      "clip": "walk-toward",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "5ea99f4dcf94e921e33839b8f2e1a89086ea9945803d4d2fc31e0464b904ab2c"
+    },
+    {
+      "coat": "siamese",
+      "clip": "walk-away",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "61c5ba6d65cd6f716c8e004442d0d226d4c0eaadde034281ee439fe045601fb4"
+    },
+    {
+      "coat": "siamese",
+      "clip": "walk-far",
+      "frames": 6,
+      "stride": 39.99,
+      "sha256": "db6a457355988505e7ba084662afc2f1bba074aaaf3acd0fc9267f504dc76395"
+    },
+    {
+      "coat": "siamese",
+      "clip": "walk-near",
+      "frames": 6,
+      "stride": 51.42,
+      "sha256": "5dba01707e9e978e48c7dc96bf252114ce5924b64c6ad0d9100a0c7df32dba66"
+    },
+    {
+      "coat": "siamese",
+      "clip": "walk-side",
+      "frames": 6,
+      "stride": 28.82,
+      "sha256": "26e6ce237093d8dcb183651873cc11afd64e257c46b8e860cb106bdc1ffaf14a"
+    },
+    {
+      "coat": "siamese",
+      "clip": "walk-toward",
+      "frames": 6,
+      "stride": 48.27,
+      "sha256": "13419579b83acf92af83e7c1dbab2d2b8a3cbdea38c70e9cb507aef2ee951ca8"
+    }
+  ],
+  "videos": [
+    {
+      "file": "walk-v5-orange.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-orange-full.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-black.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-black-full.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-grey.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-grey-full.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-calico.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-calico-full.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-siamese.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    },
+    {
+      "file": "walk-v5-siamese-full.mp4",
+      "frames": 600,
+      "fps": 30,
+      "seconds": 20,
+      "eightDirections": true,
+      "errors": 0
+    }
+  ],
+  "sources": {
+    "art-src/walk-v5/black-away.png": "5dce5142309697bd2a6a614341e035a4b48240acc4640f48d8a3c2e372224078",
+    "art-src/walk-v5/black-far.png": "673a459bd7b7f43120e2ccb9ce2d705f89e68d0b62e936171f22a9b8ed2ec501",
+    "art-src/walk-v5/black-near.png": "7d3c76ba1ea3bb4abc3a9ce6e0d8989fe1cc4cb1bca2232617e48215309b17a9",
+    "art-src/walk-v5/black-side.png": "ac192b4b7a48de34f217cfbd1eddfab09aea39889fbc0e0f93fe3dd1f66d25c1",
+    "art-src/walk-v5/black-toward.png": "02b39501c7e55c049c04de896ef0014aa96bd7e067eed55b0ea96d886de18681",
+    "art-src/walk-v5/calico-away.png": "e3d2349b81d854deaba5b9831ad1ad6bb432f6ab4ee88ebf98003a2265a5c536",
+    "art-src/walk-v5/calico-far.png": "e5c38f3c6eb64ea4384b9ca38d1bcf20afb7deb1771f769e0aee5e9fb8617e92",
+    "art-src/walk-v5/calico-near.png": "f8083a8d78f49cd1d0c2b139be46faa1db68b62fe9d01fc21a7656a608d51f4d",
+    "art-src/walk-v5/calico-side.png": "d81a11a583b3af74bbaa25f1d3e85c75e75aec8463d2f4997acb2274766ed28a",
+    "art-src/walk-v5/calico-toward.png": "67e664f3177ea4c285e76bd537ae9318ced197bc889b10ffc935b274ce658cb2",
+    "art-src/walk-v5/grey-away.png": "9630298cc569fa640f0172fb5bf0eda98d9e3bd3208ebd4c0c9713d68ebac0dd",
+    "art-src/walk-v5/grey-far.png": "1355776b07d9a1065a7c15cb459d3eb548a722647fb2ea5c337216de7a8c6b18",
+    "art-src/walk-v5/grey-near.png": "c445d61baf4bff740ce6c0b48869a1d4e4a7eb0c6ff489cdf79cdc89df0352d6",
+    "art-src/walk-v5/grey-side.png": "c28aed6bc9a11dd6527fd10aac4f8b2dcd6511a1c9c6d57918bbb360c00fb134",
+    "art-src/walk-v5/grey-toward.png": "1ffa38290e599efb6f192b81da13c489f3cda14bcb0e16d7e80ff2466f873337",
+    "art-src/walk-v5/orange-away.png": "f1f211f9e9b76d157a7dd33205172a148550d93f2d133aa10011d1ab857f72c4",
+    "art-src/walk-v5/orange-far.png": "4936d18cdeb76e61b6a92adb0f8b794c920618800d31f16545d1223c89509e43",
+    "art-src/walk-v5/orange-near.png": "0d891db8437728f41b69fe95a82648d4619993a17b5bdb571b95aed681a04c55",
+    "art-src/walk-v5/orange-side.png": "8196fcb18b58e51a72dc3acb4bf0de5a2901769822b82201b9c60d74de9703f5",
+    "art-src/walk-v5/orange-toward.png": "2779a23a51da7d583a66be51f3d2dcf379c669ffc4a1ee47a13912343bca8d95",
+    "art-src/walk-v5/siamese-away.png": "df414eb8212f78d7bfadbed43cc7331bb9aa387d1be012577269dec2e1e9e65a",
+    "art-src/walk-v5/siamese-far.png": "db887446abe99959e851428eeaf40b42841ab6591175f769906b22349a27bd43",
+    "art-src/walk-v5/siamese-near.png": "7a47b9b4fed77d7d162d876104d97b58099879205134f6873e18d24eda6b40e3",
+    "art-src/walk-v5/siamese-side.png": "1d6cc0232aaa2fb96eb8d0f69aa24276efcb8fcd64172aad34239419d92a484c",
+    "art-src/walk-v5/siamese-toward.png": "c050a532b35fc3a374a354443a54ca86bd51fba6fe95c5440dd9b1721310209b"
+  }
+}

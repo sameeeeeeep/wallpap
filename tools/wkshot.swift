@@ -78,6 +78,9 @@ if(new URLSearchParams(location.search).has('shotSeed')){let seed=Number(new URL
             DispatchQueue.main.asyncAfter(deadline: .now() + captureDelay) {
                 self.run(cropFrames ? "window.__shotReport?window.__shotReport().rect:null" : "null") { rect in
                 let config = WKSnapshotConfiguration()
+                if let width = Double(ProcessInfo.processInfo.environment["WKSHOT_SNAPSHOT_WIDTH"] ?? ""), width > 0 {
+                    config.snapshotWidth = NSNumber(value: width)
+                }
                 if let r = rect as? [Double], r.count == 4, r.allSatisfy({ $0.isFinite }), r[2] > r[0], r[3] > r[1] {
                     config.rect = NSRect(x: r[0], y: r[1], width: r[2] - r[0], height: r[3] - r[1])
                 }

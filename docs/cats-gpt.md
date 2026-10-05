@@ -1,5 +1,35 @@
 # Painted cat motion replacement — cats-gpt
 
+## Walk v5 — 2026-10-05 (supersedes every earlier walk)
+
+The owner approved runs, jumps, rests and transitions and rejected **all walks**.
+The supplied `art-src/walk-v5/<coat>-<view>.png` sheets now replace only the
+25 walk atlases: six drawings × five views × five coats. No art was generated.
+The five 20-second close-ups and five full-scene reels, exact review coverage,
+performance and limitations are in [the watch list](../shots/cats-gpt/README.md)
+and [v5 review](../shots/cats-gpt/walk-v5-review.md).
+
+The reproducible builder `tools/cats-qa/walk_v5.py` flood-cuts connected cats,
+removes paper/ground strokes, preserves white fur, removes matte, registers the
+torso against a shared paw baseline, matches view scale and per-channel fur
+mean/std, and packs lossless WebP. Calico toward copies a single stable marking
+field from source frame 3, aligned to each head/torso; legs stay white. Its dark
+eye patch matches the side used by approved runs/rests. Near leg patches are
+made consistently white. All coats share exact alpha/registration.
+
+`cat-motion.js` now uses actual clip length for gait exposure and turns, retaining
+six drawn holds without tweening. `manifest.py` freezes the approved global unit
+at 0.52, preventing a new walk from resizing every approved action. Hash/metadata
+checks preserve all 70 non-walk atlases and entries. Stride evidence, source
+hashes and rebuild commands: `tools/cats-qa/walk-v5-data/`.
+
+108 Node tests pass. **Residual foot sliding remains**, especially around uneven
+source contact changes; rear stance order is ambiguous and uses the front-view
+cadence. Selected fitted spans are not proof of all-foot locking. New walks also
+retain source drawing/style differences at action/view transitions. Integration
+and review are complete; strict no-sliding visual acceptance is still open.
+
+
 ## Diagonal v3 — 2026-10-05
 
 Owner rejected the second diagonal pass: “not moving the full limb.” This pass

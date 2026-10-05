@@ -1,3 +1,50 @@
+# Walk v5 — supplied Muybridge/Magnific sheets, 2026-10-05
+
+**Watch these files.** Each is **20 seconds, 30 fps, 960×600**, captured from
+Santorini Cats via `file://` in isolated macOS WebKit. The close-ups follow the
+cat; the full-scene versions show normal scene framing. No installed app was used.
+
+| Coat | Close-up | Normal zoom | Six-pose atlas contact |
+| --- | --- | --- | --- |
+| Orange | [walk-v5-orange.mp4](walk-v5-orange.mp4) | [Full](walk-v5-orange-full.mp4) | [Contact](walk-v5-orange-contact.jpg) |
+| Black | [walk-v5-black.mp4](walk-v5-black.mp4) | [Full](walk-v5-black-full.mp4) | [Contact](walk-v5-black-contact.jpg) |
+| Grey | [walk-v5-grey.mp4](walk-v5-grey.mp4) | [Full](walk-v5-grey-full.mp4) | [Contact](walk-v5-grey-contact.jpg) |
+| Calico | [walk-v5-calico.mp4](walk-v5-calico.mp4) | [Full](walk-v5-calico-full.mp4) | [Contact](walk-v5-calico-contact.jpg) |
+| Siamese | [walk-v5-siamese.mp4](walk-v5-siamese.mp4) | [Full](walk-v5-siamese-full.mp4) | [Contact](walk-v5-siamese-contact.jpg) |
+
+Timeline: right 0–1.8s; toward-right 1.8–3.6; toward 3.6–5.4;
+toward-left 5.4–7.2; left 7.2–9; away-left 9–10.8; away 10.8–12.6;
+away-right 12.6–14.4; then rest → walk → run → walk → sit through 20s.
+Direction passes are labelled cuts; the final transition sequence is continuous.
+Gait changes wait for the production contact boundary, so the final walk before
+sitting is brief. Each matching JSON records all 600 encoded engine states.
+
+Calico's toward view now uses the third source drawing's fixed head/torso
+markings in every frame, with white legs/paws and an orange tail. Its dark eye
+patch is on the same side as approved run/rest. Near-view intermittent leg
+patches were whitened consistently. Ground lines, enclosed paper gaps and edge
+matte were removed; torso registration and view scale were calibrated; fur
+mean/std were matched per coat/view. Only the 25 walk clips were replaced.
+All **70 approved non-walk atlases and their metadata are unchanged**, and the
+global scale remains exactly 0.52. Six-frame playback/turns now use clip length.
+
+**108 tests pass.** See [verification](walk-v5-verification.json),
+[review and honest limitations](walk-v5-review.md),
+[dark/light edge check](walk-v5-edges.jpg), and
+[rebuild/calibration](../../tools/cats-qa/walk-v5-data/README.md).
+The final isolated [performance sample](walk-v5-performance.json) is **5.4% CPU /
+208 MiB**, versus the previous **5.9% / 216 MiB** using the same method.
+The strict zero-sliding gate is **not passed**: the supplied six drawings have
+uneven stance travel, some repeating foreleg poses and ambiguous rear contacts.
+Calibration reduces sliding; it cannot make every foot perfectly planted.
+Discrete action/view changes still show differences in painted proportions and
+marking boundaries. This is not a claim of new owner acceptance.
+
+---
+
+The v3 and earlier material below is historical. The owner subsequently rejected
+**all** walks; v5 replaces all five views, retaining approved non-walk actions.
+
 # Diagonal walk v3 — whole-limb review
 
 The previous diagonal correction was rejected for stiff upper legs. This pass

@@ -10,6 +10,7 @@ coat,hour,script=sys.argv[1],int(sys.argv[2]),sys.argv[3];fps=int(os.environ.get
 if shutil.disk_usage('/').free<5*1024**3:raise SystemExit('Under 5 GiB free; stopped before rendering.')
 frames=[start+i/fps for i in range(round((end-start)*fps))]
 js=f"window.__qaCoat='{coat}';"+('window.__qaNight=true;' if script=='night' else '')+(ROOT/f'tools/cats-qa/{"showcase" if script=="night" else script}.js').read_text()
+if os.environ.get('QA_FULL')=='1':js='window.__qaFull=true;'+js
 url=f"file://{ROOT}/scenes/cats.html?virtual=1&muted=1&hour={hour}&shotSeed=19"+os.environ.get('QUERY','')
 reports=[];out=OUT/f'{script}-{coat}-h{hour}.mp4';enc=None
 with tempfile.TemporaryDirectory(prefix='cats-gpt-') as tmp:

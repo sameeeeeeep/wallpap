@@ -570,7 +570,7 @@ class SceneHost {
     this.poster = $('.poster', screen);
     screen.insertAdjacentHTML('beforeend', chromeHTML(o));
     const q = (c) => $(c, screen);
-    this.el = { clock: q('.clock'), wave: q('.wave-btn'), wgTemp: q('.wg-temp'), wgCond: q('.wg-c'), wgIc: q('.wg-ic'), wgDay: q('.wg-day'), wgDate: q('.wg-date'),
+    this.el = { clock: q('.clock'), wave: q('.wave-btn'), wgCity: q('.wg-city'), wgTemp: q('.wg-temp'), wgCond: q('.wg-c'), wgIc: q('.wg-ic'), wgDay: q('.wg-day'), wgDate: q('.wg-date'),
       win: q('.app-window'), player: q('.mplayer'), art: q('.mp-art'), app: q('.mp-appname'), title: q('.mp-title'), artist: q('.mp-artist'), cur: q('.mp-cur'), len: q('.mp-len'), bar: q('.mp-track i'),
       prev: q('.mp-prev'), pp: q('.mp-pp'), next: q('.mp-next'), snd: q('.mp-snd'), card: q('.rcard'), pop: q('.panel-pop'), note: q('.panel-note'), pill: q('.status-pill'), wl: q('.wl') };
     const d = new Date();
@@ -754,8 +754,9 @@ class SceneHost {
   }
 
   // State ──────────────────────────────────────────
-  setEnv(hour, weather) {
-    if (hour != null) this.env.hour = hour;
+  setEnv(hour, weather, real) {
+    // `real`: the visitor's own clock (the menu-bar clock then shows the real minute)
+    if (hour != null) { this.env.hour = hour; this.realTime = !!real; }
     if (weather) this.env.weather = weather;
     this.post('env', { hour: this.env.hour, weather: this.env.weather });
     this.syncChrome(); this.emit('state'); this.renderPanel();
@@ -787,10 +788,11 @@ class SceneHost {
   syncChrome() {
     const { hour, weather } = this.env;
     const day = new Date().toLocaleDateString('en-US', { weekday: 'short' });
-    this.el.clock.textContent = `${day} ${fmtHour(hour, true)}`;
+    this.el.clock.textContent = `${day} ${this.realTime ? new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : fmtHour(hour, true)}`;
     const [temp, dayName, nightName] = WX_WIDGET[weather] || WX_WIDGET.clear;
-    const night = isNight(hour);
-    this.el.wgTemp.textContent = `${temp + (night ? -4 : 0)}°`;
+    const night = isNight(hour), P = this.place;
+    if (this.el.wgCity && P && P.city) this.el.wgCity.textContent = P.city;
+    this.el.wgTemp.textContent = `${P && P.temp != null && P.weather === weather ? P.temp : temp + (night ? -4 : 0)}°`;
     this.el.wgCond.textContent = night && weather === 'clear' ? nightName : dayName;
     this.el.wgIc.innerHTML = night && weather === 'clear' ? WX_ICON.moon : WX_ICON[weather] || WX_ICON.clear;
   }
@@ -1007,7 +1009,8 @@ const PG = {
   tile(id) { return $(`[data-scene="${id}"]`, this.picker); },
   select(id, o = {}) {
     const s = sceneById(id), h = this.host;
-    h.setScene(s.id);
+    h.setScene(s.id, Here.on ? { env: [localHour(), Here.weather || s.weather] } : {});
+    if (Here.on) h.realTime = true;
     const wantMusic = this.musicPref !== null ? this.musicPref || !!s.music : !!s.music;
     h.setMusic(wantMusic);
     if (h.calm) h.setCalm(false);
@@ -1512,7 +1515,8 @@ const Journey = {
   show(id) {
     const s = sceneById(id), h = this.host;
     if (h.sceneId !== id || (!h.frame && !h.warm)) {
-      ++h.switchTok; h.sceneId = id; h.env = { hour: s.hour, weather: s.weather }; h.timeView = 'auto';
+      ++h.switchTok; h.sceneId = id; h.env = id === 'koi' && Here.on ? { hour: localHour(), weather: Here.weather || s.weather } : { hour: s.hour, weather: s.weather }; h.timeView = 'auto';
+      h.realTime = id === 'koi' && Here.on;
       if (!h.takeWarm(id)) h.drop();
       h.poster.src = `img/${id}.jpg`; h.poster.alt = `${s.name} wallpaper preview`;
       h.music = false; h.syncChrome(); h.renderPlayer();
@@ -1744,6 +1748,34 @@ const Zoom = {
   },
 };
 
+// ─── Here: the hero desktop shows the visitor's own time, city and weather ──────
+// Time is their clock. City + coordinates come from /geo, a tiny Cloudflare Worker on this domain
+// that reads the visitor's IP location (no third-party lookup); without it, only the
+// time alone changes (the widget keeps its demo city). Weather is Open-Meteo's current conditions.
+const WMO = (c) => c <= 1 ? 'clear' : c <= 3 ? 'cloudy' : c === 45 || c === 48 ? 'fog' : (c >= 71 && c <= 77) || c === 85 || c === 86 ? 'snow' : c >= 95 ? 'storm' : (c >= 51 && c <= 67) || (c >= 80 && c <= 82) ? 'rain' : 'cloudy';
+const Here = {
+  on: false, city: '', weather: null, temp: null,
+  async load() {
+    const get = (url, ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return fetch(url, { signal: c.signal, cache: 'no-store' }).finally(() => clearTimeout(t)); };
+    let lat = null, lon = null;
+    try { const r = await get('/geo', 1500); if (r.ok && /json/.test(r.headers.get('content-type') || '')) { const j = await r.json(); if (j.city && j.lat != null && j.lon != null) { this.city = j.city; lat = +j.lat; lon = +j.lon; } } } catch (e) {}
+    if (lat != null) {
+      try { const r = await get(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(2)}&longitude=${lon.toFixed(2)}&current=temperature_2m,weather_code`, 3000); const j = await r.json(); this.temp = Math.round(j.current.temperature_2m); this.weather = WMO(j.current.weather_code); } catch (e) {}
+    }
+    this.on = true;
+    this.apply();
+    setInterval(() => HOSTS.forEach((h) => { if (h.realTime) { h.setEnv(localHour(), null, true); } }), 30000);
+  },
+  apply() {
+    for (const h of HOSTS) {
+      if (h === PG.host || (h === Journey.host && h.sceneId === 'koi')) {
+        if (this.city && this.weather) h.place = { city: this.city, temp: this.temp, weather: this.weather };   // only a real place + its real weather
+        h.setEnv(localHour(), this.weather || null, true);
+      }
+    }
+  },
+};
+
 // ─── Ready ahead: every world downloads quietly, one at a time ──────────────
 // Once the page has settled and a live scene is showing, each world loads in a hidden, paused frame
 // just long enough for its art to land in the browser cache, then the frame goes. Picking any world
@@ -1825,6 +1857,7 @@ const Boot = {
     const el = this.el; this.el = null; setTimeout(() => el.remove(), 700);
   },
 };
+Here.load();
 const goLiveSoon = () => { Boot.init(); idle(() => PG.goLive(), 1500); };
 HOSTS.forEach((h) => h.on((t) => { if (t === 'live') idle(() => Ahead.start(), 4000); }));
 if (document.readyState === 'complete') goLiveSoon(); else addEventListener('load', goLiveSoon, { once: true });

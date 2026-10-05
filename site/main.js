@@ -866,13 +866,21 @@ class SceneHost {
 
 // ─── Live: only the most visible screen runs a scene ─────────────────────────
 const Live = {
-  owner: null,
+  owner: null, keep: null, linger: null, lingerUntil: 0,
   update() {
     const cand = document.hidden ? null : HOSTS.filter((h) => h.wantLive && h.ratio > 0.15).sort((a, b) => b.ratio - a.ratio)[0] || null;
+    // Hand-over: a live scene keeps running until the next one is live too (the hero's zoom into the
+    // journey never shows a still), then it is disposed. Otherwise the old context goes first.
+    if (this.owner && cand && this.owner !== cand && this.owner.isLive() && !cand.isLive()) this.keep = this.owner;
+    if (this.keep && (!cand || this.keep === cand || cand.isLive())) {
+      // The new scene is live: the old one lingers through the 0.7 s cross-fade, then goes.
+      if (cand && cand !== this.keep) { this.linger = this.keep; this.lingerUntil = performance.now() + 900; setTimeout(() => this.update(), 950); }
+      this.keep = null;
+    }
+    const linger = this.linger && performance.now() < this.lingerUntil && this.linger !== cand ? this.linger : (this.linger = null);
     this.owner = cand;
-    // Dispose the old rendering context before starting the next one.
-    HOSTS.filter((h) => h !== cand).forEach((h) => { h.setActive(false); h.drop(); });
-    if (cand) cand.setActive(true);
+    HOSTS.filter((h) => h !== cand && h !== this.keep && h !== linger).forEach((h) => { h.setActive(false); h.drop(); });
+    if (cand) { cand.setActive(true); if (this.keep) cand.whenLive(null, 8000).then(() => this.update()); }
     syncMusic();
   },
 };
@@ -1353,7 +1361,7 @@ const Journey = {
     this.host.onPick = (id) => { const i = this.order.indexOf(id); if (i >= 0) { this.host.closePanel(); this.go(i); } };
     this.host.on((type) => {
       if (type === 'loaded') this.attach();
-      if (type === 'live') { $('#journeyMode').textContent = 'Live & interactive'; this.queueHint(); }
+      if (type === 'live') { $('#journeyMode').textContent = 'Live & interactive'; Zoom.update(); if (!Zoom.on || this.welcomed) this.queueHint(); }
       if (type === 'state') this.stage.classList.toggle('menu-open', !!this.host.panelOpen);
     });
     this.host.onMedia = (cmd) => {
@@ -1444,6 +1452,34 @@ const Journey = {
     this.hint.classList.remove('visible');
   },
   dismissHint() { this.seen.add(this.host.sceneId); this.clearHint(); },
+  // First arrival in full screen: the menu bar introduces itself. A note points at the wave, the real
+  // wallpap menu drops open for a few seconds, then tucks away and the scene's own hint follows.
+  // Any click, key or scroll ends it at once.
+  welcome() {
+    if (this.welcomed || !this.active || this.still()) return;
+    this.welcomed = true;
+    const h = this.host, coach = $('#journeyCoach'), wave = h.el.wave;
+    const place = () => { const r = wave.getBoundingClientRect(), sr = this.stage.getBoundingClientRect(); coach.style.right = `${Math.max(12, sr.right - r.right - 6)}px`; };
+    let done = false;
+    const end = () => {
+      if (done) return; done = true;
+      clearTimeout(this.coachT1); clearTimeout(this.coachT2); clearTimeout(this.coachT3);
+      coach.classList.remove('visible'); this.stage.classList.remove('coaching'); h.closePanel(); stop();
+      setTimeout(() => this.queueHint(), 600);
+    };
+    const stop = () => { removeEventListener('wheel', end); removeEventListener('keydown', end); removeEventListener('pointerdown', onDown, true); };
+    const onDown = (e) => { if (!e.target.closest('.panel-pop')) end(); };
+    this.coachT1 = setTimeout(() => {
+      if (!this.active) return end();
+      place(); coach.textContent = 'This is your menu bar. The wave opens wallpap.'; coach.classList.add('visible'); this.stage.classList.add('coaching');
+      addEventListener('wheel', end, { passive: true }); addEventListener('keydown', end); addEventListener('pointerdown', onDown, true);
+      this.coachT2 = setTimeout(() => {
+        if (done) return;
+        h.openPanel(); coach.textContent = 'Change the scene, time of day, weather and music.';
+        this.coachT3 = setTimeout(end, 5200);
+      }, 1700);
+    }, 700);
+  },
   queueHint() {
     const id = this.host.sceneId;
     if (this.seen.has(id) || !this.active) return;
@@ -1514,23 +1550,25 @@ const Zoom = {
   update() {
     const root = document.documentElement;
     if (!this.on || !this.sw) {
-      this.e = 0; this.mac.style.transform = ''; this.mac.style.opacity = '';
+      this.e = 0; this.mac.style.transform = '';
       root.style.removeProperty('--zoom'); root.classList.remove('zoomed', 'zoom-reveal'); return;
     }
     const run = this.run();
     const p = clamp(scrollY / (run * .9), 0, 1), e = p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
-    const fade = clamp((scrollY - run) / this.fade(), 0, 1);
     // Where the screen sits now (the Mac's parent is never transformed) and where it should end:
     // covering the window, centred.
     const base = this.mac.parentElement.getBoundingClientRect(), sx = base.left + this.off[0], sy = base.top + this.off[1];
     const S = Math.max(innerWidth / this.sw, innerHeight / this.sh), tx = (innerWidth - this.sw * S) / 2, ty = (innerHeight - this.sh * S) / 2;
     this.mac.style.transformOrigin = `${this.off[0]}px ${this.off[1]}px`;
     this.mac.style.transform = e ? `translate(${(tx - sx) * e}px,${(ty - sy) * e}px) scale(${1 + (S - 1) * e})` : '';
-    this.mac.style.opacity = fade ? String(1 - fade) : '';
+    // Hand over once the journey underneath is pinned AND its own scene is live: the screen is never a still.
+    const reveal = scrollY >= run - 1 && Journey.host.isLive() || scrollY >= run + this.fade();
     this.e = e;
     root.style.setProperty('--zoom', e.toFixed(4));
     root.classList.toggle('zoomed', e > .35);
-    root.classList.toggle('zoom-reveal', scrollY >= run - 1);
+    root.classList.toggle('zoom-reveal', !!reveal);
+    if (reveal && !this.revealed) Journey.welcome();
+    this.revealed = !!reveal;
     if (e > .02 && Tour.running) Tour.stop();
   },
 };

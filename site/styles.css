@@ -609,4 +609,12 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .journey-top{top:26px;padding-top:18px}
 .journey-stage .journey-top,.journey-stage .journey-hint,.journey-stage .journey-controls{transition:opacity .25s}
 .journey-stage.menu-open .journey-top,.journey-stage.menu-open .journey-hint,.journey-stage.menu-open .journey-controls{opacity:0;pointer-events:none}
+.journey-stage.coaching .journey-top{opacity:0;pointer-events:none}
 .journey-stage.menu-open .journey-top a,.journey-stage.menu-open .journey-top button{pointer-events:none}
+.zoom-on #mac{transition:opacity .7s ease}
+.zoom-reveal #mac{opacity:0}
+/* First-visit menu tutorial: a note under the wave, the real panel drops open beside it. */
+.journey-coach{position:absolute;z-index:5;top:36px;right:150px;margin:0;padding:9px 14px;max-width:min(360px,calc(100% - 40px));font-size:12.5px;line-height:1.45;color:#fff;background:#0c1913c4;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff2e;border-radius:12px;pointer-events:none;opacity:0;transform:translateY(-4px);transition:opacity .35s,transform .35s}
+.journey-coach::before{content:'';position:absolute;top:-6px;right:16px;width:10px;height:10px;background:inherit;border-left:1px solid #ffffff2e;border-top:1px solid #ffffff2e;transform:rotate(45deg)}
+.journey-coach.visible{opacity:1;transform:none}
+.journey-stage.menu-open .journey-coach{right:500px!important}

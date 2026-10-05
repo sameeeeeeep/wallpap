@@ -617,6 +617,48 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
 .journey-coach{position:absolute;z-index:5;top:calc(var(--jmb,26px) + 10px);right:150px;margin:0;padding:9px 14px;max-width:min(360px,calc(100% - 40px));font-size:12.5px;line-height:1.45;color:#fff;background:#0c1913c4;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff2e;border-radius:12px;pointer-events:none;opacity:0;transform:translateY(-4px);transition:opacity .35s,transform .35s}
 .journey-coach::before{content:'';position:absolute;top:-6px;right:16px;width:10px;height:10px;background:inherit;border-left:1px solid #ffffff2e;border-top:1px solid #ffffff2e;transform:rotate(45deg)}
 .journey-coach.visible{opacity:1;transform:none}
-.journey-stage.menu-open .journey-coach{right:500px!important}
 .screen iframe.scene.warm{opacity:0!important;pointer-events:none;z-index:0}
 .zoom-on .monitor .screen{border-radius:calc(clamp(4px,.45vw,7px)*(1 - var(--zoom,0)))}
+
+/* Guided journey: the small guide card, the coach beside the real panel, more worlds. */
+.journey-coach.side::before{top:16px;right:-6px;border-left:0;border-top:1px solid #ffffff2e;border-right:1px solid #ffffff2e}
+.journey-guide{position:absolute;z-index:4;left:40px;bottom:clamp(150px,22svh,200px);width:min(340px,calc(100% - 40px));padding:14px 16px 12px;color:#fff;background:#0c1913b8;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #ffffff26;border-radius:16px;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .4s,transform .4s}
+.journey-guide.visible{opacity:1;transform:none;pointer-events:auto}
+.g-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#ffffffa8;margin-bottom:10px}
+.g-still{font-size:12px;color:#ffffffc0;margin-bottom:6px}
+.g-steps{list-style:none;display:grid;gap:7px;margin:0;padding:0}
+.g-steps li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4;color:#ffffff99;transition:color .3s}
+.g-steps li i{flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;box-shadow:inset 0 0 0 1.5px #ffffff66;position:relative;transition:background .3s,box-shadow .3s}
+.g-steps li.now{color:#fff;font-weight:500}
+.g-steps li.now i{box-shadow:inset 0 0 0 1.5px #fff;animation:gPulse 1.6s ease-in-out infinite}
+.g-steps li.done{color:#ffffffb0}
+.g-steps li.done span{text-decoration:line-through;text-decoration-color:#ffffff55}
+.g-steps li.done i{background:#8fd0a2;box-shadow:none}
+.g-steps li.done i::after{content:'';position:absolute;left:5px;top:2.5px;width:4px;height:8px;border:solid #10261b;border-width:0 2px 2px 0;transform:rotate(45deg)}
+@keyframes gPulse{0%,100%{box-shadow:inset 0 0 0 1.5px #fff,0 0 0 0 #ffffff55}50%{box-shadow:inset 0 0 0 1.5px #fff,0 0 0 5px #ffffff00}}
+.g-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid #ffffff1f}
+.g-ok{font-size:12px;color:#8fd0a2;font-weight:600}
+.g-foot button{font:inherit;font-size:12px;color:#ffffffc8;background:none;border:0;cursor:pointer;padding:4px 0}
+.g-foot button:hover{color:#fff}
+.journey-guide.complete .g-foot button{color:#fff;font-weight:600}
+.journey-stage.menu-open .journey-guide{opacity:0;pointer-events:none}
+.journey-more{position:absolute;z-index:4;left:40px;right:270px;bottom:30px;opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .4s,transform .4s}
+.journey-more.visible{opacity:1;transform:none;pointer-events:auto}
+.jm-k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#ffffffb8;margin-bottom:9px}
+.jm-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:3px}
+.jm-row::-webkit-scrollbar{display:none}
+.jm-row button{flex:none;width:80px;font:inherit;color:#ffffffc0;background:none;border:0;cursor:pointer;text-align:left;padding:0}
+.jm-row img{display:block;width:80px;height:50px;object-fit:cover;border-radius:8px;box-shadow:0 0 0 1px #ffffff30;transition:transform .2s,box-shadow .2s}
+.jm-row button:hover img{transform:translateY(-2px)}
+.jm-row button[aria-pressed=true] img{box-shadow:0 0 0 2px #fff}
+.jm-row span{display:block;margin-top:5px;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jm-row button[aria-pressed=true] span{color:#fff;font-weight:600}
+.journey-stage[data-chapter=explore] .journey-caption{opacity:0}
+.journey-stage[data-chapter=explore] .journey-guide{bottom:150px}
+.journey-stage .journey-caption{transition:opacity .3s}
+.journey-hint{display:none}
+@media (max-width:640px){
+  .journey-guide{left:20px;bottom:250px}
+  .journey-more{left:20px;right:20px;bottom:250px}
+  .journey-stage:is([data-chapter=explore],[data-chapter=choose]) .journey-guide{bottom:350px}
+}

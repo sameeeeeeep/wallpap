@@ -1359,45 +1359,64 @@ const Try = {
   },
 };
 
-// ─── Journey: one pinned viewport, one disposable live scene ────────────────
+// ─── Journey: a guided walk through the app, full screen ───────────────────
+// One pinned viewport; each chapter is one screen of scroll. Touch the koi (a short tutorial), the
+// real menu asks you to pick another world, play with it (a small guide per scene), the menu shows
+// time of day and weather, then more worlds to choose from — and the page carries on below.
+// Finishing a chapter's guide moves on by itself; scrolling always moves on too (never a trap).
+const CHAPTERS = [
+  { id: 'touch', label: 'Touch', next: 'Pick another world' },
+  { id: 'choose', label: 'Choose', next: 'Play with it' },
+  { id: 'play', label: 'Play', next: 'Set the mood' },
+  { id: 'mood', label: 'Set the mood', next: 'More worlds' },
+  { id: 'explore', label: 'Explore', next: 'Keep scrolling' },
+];
+// [what to do, how we know it happened]. move/down/hold/wait complete the current step only;
+// media, cat, food, water, toy come straight from the scene and tick their own step.
+const GUIDES = {
+  koi: [['Move your cursor through the water', 'move'], ['Click the water to drop food', 'down'], ['Press and hold — the koi nibble your fingertip', 'hold']],
+  cats: [['Click a cat — it follows your cursor', 'cat'], ['Click the terracotta bowl to feed them', 'food'], ['Click the blue bowl for fresh water', 'water']],
+  grass: [['Brush through the meadow', 'move'], ['Click a panda — or the cub', 'down'], ['Look up: kites ride the thermals', 'wait']],
+  cafe: [['Click the record player to play or pause', 'media'], ['Click the cat for a slow blink', 'down']],
+  cabin: [['Click the fire for sparks', 'down'], ['Click the dog — or the cat on the sill', 'down'], ['Click the window for a gust of snow', 'down']],
+  records: [['Click the turntable to drop the needle', 'media'], ['Pet the cat, or the pup', 'down']],
+  speakeasy: [['Click the piano keys to play a note', 'down'], ['Click a cat to make a friend', 'down']],
+  rooftop: [['Click the boombox to play or pause', 'media'], ['Click the projector for the next track', 'media']],
+  ramen: [['Click the vending machine — a can drops', 'down'], ['Brush the noren curtain', 'move'], ['Click the radio to play or pause', 'media']],
+  train: [['Click the window to skip ahead', 'down'], ['Watch the countryside roll by', 'wait']],
+  bowls: [['Click a bowl to strike it', 'down'], ['Rest on a bowl, then circle its rim', 'move']],
+  cymatics: [['Tap the sand', 'down'], ['Each track draws its own figure', 'wait']],
+};
+const ORDERED = ['move', 'down', 'hold', 'wait'];
+const PANEL_COACH_CSS = `@keyframes wpPulse{0%,100%{box-shadow:0 0 0 2px #d9a441}50%{box-shadow:0 0 0 6px rgba(217,164,65,.28)}}
+body[data-coach=scenes] :is(.cats,.grid){border-radius:10px;animation:wpPulse 1.6s ease-in-out infinite}
+body[data-coach=time] :is(.chips,.it):has(>[data-a=pickTimeView]){border-radius:9px;animation:wpPulse 1.6s ease-in-out infinite}
+body[data-coach=weather] :is(.chips,.it):has(>[data-a=pickWeather]){border-radius:9px;animation:wpPulse 1.6s ease-in-out infinite}`;
 const Journey = {
-  order: ['koi', 'cats', 'cafe', 'train', 'grass', 'cabin', 'records', 'ramen', 'rooftop', 'speakeasy', 'bowls', 'cymatics'],
-  hints: {
-    koi: ['Move your cursor through the water', 'move'],
-    cats: ['Click a cat. Make a friend.', 'down'],
-    cafe: ['Tap the record player', 'media'],
-    train: ['Click the window. Watch the world rush by.', 'down'],
-    grass: ['Brush through the meadow', 'move'],
-    cabin: ['Click the fire for a few sparks', 'down'],
-    records: ['Tap the turntable', 'media'],
-    ramen: ['Brush the hanging curtain', 'move'],
-    rooftop: ['Tap the projector for another track', 'media'],
-    speakeasy: ['Try a few piano keys', 'down'],
-    bowls: ['Click a bowl. Let it sing.', 'down'],
-    cymatics: ['Tap the sand. Find its rhythm.', 'media'],
-  },
-  index: -1, seen: new Set(), active: false,
+  order: CHAPTERS,
+  index: -1, entered: -1, active: false, prog: {}, picked: null,
   init() {
-    this.el = $('#journey'); this.stage = $('#journeyStage'); this.hint = $('#journeyHint');
+    this.el = $('#journey'); this.stage = $('#journeyStage'); this.guide = $('#journeyGuide'); this.coach = $('#journeyCoach'); this.more = $('#journeyMore');
     this.motion = motionMQ;
-    this.el.style.setProperty('--scene-count', this.order.length);
-    this.host = new SceneHost($('#journeyScreen'), { name: 'journey', interactive: true, scene: this.order[0] });
+    this.el.style.setProperty('--scene-count', CHAPTERS.length);
+    this.host = new SceneHost($('#journeyScreen'), { name: 'journey', interactive: true, scene: 'koi' });
     // SceneHost supplies the same app bridge as the playground. The journey keeps the Mac's menu bar
     // (its wave opens wallpap's real panel for this scene); the desktop clutter goes.
     $$('.widgets, .desk-icons, .app-window, .status-pill', this.host.screen).forEach((el) => { el.hidden = true; });
     this.host.screen.insertBefore($('.journey-shade', this.stage), this.host.el.wave.closest('.menubar'));
-    this.host.onPick = (id) => { const i = this.order.indexOf(id); if (i >= 0) { this.host.closePanel(); this.go(i); } };
+    this.host.onPick = (id) => this.pick(id);
+    const onPanel = this.host.onPanel.bind(this.host);
+    this.host.onPanel = (m) => { onPanel(m); this.panelMsg(m); };
     this.host.on((type) => {
       if (type === 'loaded') this.attach();
       if (type === 'live') {
-        $('#journeyMode').textContent = 'Live & interactive'; Zoom.update(); if (!Zoom.on || this.welcomed) this.queueHint();
-        clearTimeout(this.warmT);   // then quietly load the next world (the previous one at the end)
-        this.warmT = setTimeout(() => { if (this.active && this.host.isLive()) this.host.prewarm(this.order[this.index + 1] || this.order[this.index - 1]); }, 1200);
+        $('#journeyMode').textContent = 'Live & interactive'; Zoom.update();
+        clearTimeout(this.warmT);   // then quietly load the likeliest next world
+        this.warmT = setTimeout(() => { if (this.active && this.host.isLive() && this.host.sceneId === 'koi' && this.index <= 1) this.host.prewarm('cats'); }, 1200);
       }
-      if (type === 'state') this.stage.classList.toggle('menu-open', !!this.host.panelOpen);
+      if (type === 'state') { this.stage.classList.toggle('menu-open', !!this.host.panelOpen); this.placeCoach(); }
     });
     this.host.onMedia = (cmd) => {
-      this.dismissHint();
       // Sound begins only with a deliberate in-scene media action.
       Sound.set(true);
       const playing = Music.playing;
@@ -1406,42 +1425,46 @@ const Journey = {
         Music.userPaused = playing;
         if (playing) Music.pause(); else Music.play();
       } else Music.next(cmd === 'previous' ? -1 : 1);
+      this.fire('media');
     };
-    $('#journeyProgress').innerHTML = this.order.map(() => '<i></i>').join('');
-    $('#journeyAdd').addEventListener('click', () => Desktop.open(this.order[Math.max(0, this.index)]));
+    $('#journeyProgress').innerHTML = CHAPTERS.map(() => '<i></i>').join('');
+    this.more.innerHTML = `<p class="jm-k">More worlds</p><div class="jm-row">${SCENES.map((s) => `<button type="button" data-world="${s.id}" aria-pressed="false" title="${s.name}"><img src="img/${s.id}-xs.jpg" alt="" width="256" height="160" loading="lazy" decoding="async"><span>${s.name}</span></button>`).join('')}</div>`;
+    this.more.addEventListener('click', (e) => { const b = e.target.closest('[data-world]'); if (b) this.pick(b.dataset.world); });
+    this.guide.addEventListener('click', (e) => { if (e.target.closest('[data-guide-next]')) this.go(this.index + 1); });
+    $('#journeyAdd').addEventListener('click', () => Desktop.open(this.host.sceneId));
     $('#journeyPrev').addEventListener('click', () => this.go(this.index - 1));
     $('#journeyNext').addEventListener('click', () => this.go(this.index + 1));
-    $('.journey-skip').addEventListener('click', (e) => { e.preventDefault(); this.go(this.order.length); });
+    $('.journey-skip').addEventListener('click', (e) => { e.preventDefault(); this.go(CHAPTERS.length); });
     $('.journey-entry').addEventListener('click', (e) => { e.preventDefault(); this.go(0); });
     $('.journey-wordmark').addEventListener('click', (e) => { e.preventDefault(); this.go(-1); });
     this.key = (e) => {
       if (!this.active || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest?.('input,select,textarea,[contenteditable="true"]')) return;
       const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
       if (d && !e.repeat) { e.preventDefault(); this.go(this.index + d); }
-      if (e.key === 'Escape') { e.preventDefault(); this.go(this.order.length); }
+      if (e.key === 'Escape') { e.preventDefault(); this.go(CHAPTERS.length); }
     };
     document.addEventListener('keydown', this.key);
     let pending = false;
     this.schedule = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; this.update(); }); } };
     addEventListener('scroll', this.schedule, { passive: true });
-    addEventListener('resize', this.schedule);
+    addEventListener('resize', () => { this.schedule(); this.placeCoach(); });
     document.addEventListener('visibilitychange', () => this.update());
     const modeChange = () => {
       if (this.still()) { PG.host.wantLive = false; PG.host.drop(); Tour.setMode('off'); }
       else PG.goLive();
       Tour.idleCaption();
-      this.index = -1; this.update();
+      this.index = -1; this.entered = -1; this.update();
     };
     phoneMQ.addEventListener('change', modeChange); this.motion.addEventListener('change', modeChange);
     this.update();
   },
   still() { return phoneMQ.matches || this.motion.matches || saveData; },
+  get chapter() { return (CHAPTERS[this.index] || CHAPTERS[0]).id; },
   go(index) {
     const top = this.el.getBoundingClientRect().top + scrollY;
-    const y = index < 0 ? 0 : index >= this.order.length ? $('#journey-end').offsetTop : top + index * this.stage.offsetHeight + (index === 0 && Zoom.on ? Zoom.fade() : 0);
-    // A single scroll animation never runs through/loading every intermediate scene on Skip.
-    if (index < 0 || index >= this.order.length) {
-      scrollTo({ top: y, behavior: 'instant' });
+    const y = index < 0 ? 0 : index >= CHAPTERS.length ? $('#journey-end').offsetTop : top + index * this.stage.offsetHeight + (index === 0 && Zoom.on ? Zoom.fade() : 0);
+    if (index < 0 || index >= CHAPTERS.length) {
+      scrollTo({ top: y, behavior: index < 0 || this.motion.matches ? 'instant' : 'smooth' });
       (index < 0 ? $('#hero-title') : $('#journey-end')).focus({ preventScroll: true });
     } else scrollTo({ top: y, behavior: this.motion.matches ? 'instant' : 'smooth' });
   },
@@ -1450,85 +1473,168 @@ const Journey = {
     const wasActive = this.active;
     this.active = (Zoom.on ? r.top <= 1 : r.top < innerHeight * .5) && r.bottom > innerHeight * .5;
     document.documentElement.classList.toggle('in-journey', this.active);
-    const index = clamp(Math.floor((-r.top + h * .35) / h), 0, this.order.length - 1);
+    const index = clamp(Math.floor((-r.top + h * .35) / h), 0, CHAPTERS.length - 1);
     this.host.wantLive = this.active && !this.still() && !document.hidden;
     this.host.front = this.active;
     if (index !== this.index) this.select(index);
-    else if (this.active && !wasActive && this.still()) this.queueHint();
-    if (!this.active || document.hidden) this.clearHint();
+    if (this.active && this.entered !== this.index) this.enter();
+    if (!this.active && wasActive) this.leave();
     if (!this.host.wantLive) { this.host.drop(); this.host.dropWarm(); }
     Live.update();
     if (this.host.active) this.host.spawn();
   },
   select(index) {
-    this.clearHint(); this.index = index;
-    const id = this.order[index], s = sceneById(id), h = this.host;
-    // Dispose immediately, even when the user scrolls faster than the network can load.
-    ++h.switchTok; h.sceneId = id; h.env = { hour: s.hour, weather: s.weather };
-    if (!h.takeWarm(id)) h.drop();
-    h.poster.src = `img/${id}.jpg`; h.poster.alt = `${s.name} wallpaper preview`;
-    h.music = false; h.syncChrome();
-    $('#journeyName').textContent = s.name; $('#journeyCategory').textContent = s.cat;
-    $('#journeyMode').textContent = this.still() ? 'Still preview · comes alive on your Mac' : h.isLive() ? 'Live & interactive' : 'Preview · opening this world';
-    const number = String(index + 1).padStart(2, '0');
-    $('#journeyCount').textContent = `${number} / ${this.order.length}`;
-    $('#journeyCount').setAttribute('aria-label', `Scene ${index + 1} of ${this.order.length}`);
+    if (this.entered >= 0) this.leave();
+    this.index = index;
+    const ch = this.chapter;
+    this.stage.dataset.chapter = ch;
+    // The tutorial is the koi's; "Play" needs a world other than the pond (the cats, unless you picked one).
+    if (ch === 'touch') this.show('koi');
+    else if (ch === 'play' && this.host.sceneId === 'koi') this.show(this.picked || 'cats');
+    const n = String(index + 1).padStart(2, '0');
+    $('#journeyCount').textContent = `${n} / ${String(CHAPTERS.length).padStart(2, '0')}`;
+    $('#journeyCount').setAttribute('aria-label', `Step ${index + 1} of ${CHAPTERS.length}: ${CHAPTERS[index].label}`);
     $$('#journeyProgress i').forEach((el, i) => el.classList.toggle('visited', i <= index));
-    $('#journeyPrev').setAttribute('aria-label', index ? 'Previous scene' : 'Back to hero');
-    $('#journeyNext').setAttribute('aria-label', index === this.order.length - 1 ? 'Finish exploring' : 'Next scene');
-    // Only stills are prefetched. Never a second live rendering context.
-    for (const next of [index - 1, index + 1]) if (this.order[next]) { const im = new Image(); im.src = `img/${this.order[next]}.jpg`; }
+    $('#journeyPrev').setAttribute('aria-label', index ? 'Previous step' : 'Back to the top');
+    $('#journeyNext').setAttribute('aria-label', index === CHAPTERS.length - 1 ? 'Finish' : 'Next step');
+  },
+  // Put a world on screen (disposing the old one at once, even mid-load).
+  show(id) {
+    const s = sceneById(id), h = this.host;
+    if (h.sceneId !== id || (!h.frame && !h.warm)) {
+      ++h.switchTok; h.sceneId = id; h.env = { hour: s.hour, weather: s.weather }; h.timeView = 'auto';
+      if (!h.takeWarm(id)) h.drop();
+      h.poster.src = `img/${id}.jpg`; h.poster.alt = `${s.name} wallpaper preview`;
+      h.music = false; h.syncChrome(); h.renderPlayer();
+      if (h.active) h.spawn();
+    }
+    $('#journeyName').textContent = s.name; $('#journeyCategory').textContent = s.cat;
+    $('#journeyMode').textContent = this.still() ? 'Still preview · comes alive on your Mac' : h.isLive() ? 'Live & interactive' : 'Opening this world…';
+    $$('[data-world]', this.more).forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.world === id)));
     this.stage.dataset.scene = id;
-    if (this.still() && this.active) this.queueHint();
+    if (this.entered >= 0 && ['touch', 'play', 'explore'].includes(this.chapter)) this.renderGuide();
   },
-  clearHint() {
-    clearTimeout(this.hintDelay); clearTimeout(this.hintExpiry);
-    this.hint.classList.remove('visible');
+  pick(id) {
+    this.picked = id;
+    this.host.closePanel();
+    if (this.chapter === 'choose' || this.chapter === 'touch') { this.show(id); this.go(CHAPTERS.findIndex((c) => c.id === 'play')); }
+    else this.show(id);
   },
-  dismissHint() { this.seen.add(this.host.sceneId); this.clearHint(); },
-  // First arrival in full screen: the menu bar introduces itself. A note points at the wave, the real
-  // wallpap menu drops open for a few seconds, then tucks away and the scene's own hint follows.
-  // Any click, key or scroll ends it at once.
-  welcome() {
-    if (this.welcomed || !this.active || this.still()) return;
-    this.welcomed = true;
-    const h = this.host, coach = $('#journeyCoach'), wave = h.el.wave;
-    const place = () => { const r = wave.getBoundingClientRect(), sr = this.stage.getBoundingClientRect(); coach.style.right = `${Math.max(12, sr.right - r.right - 6)}px`; };
-    let done = false;
-    const end = () => {
-      if (done) return; done = true;
-      clearTimeout(this.coachT1); clearTimeout(this.coachT2); clearTimeout(this.coachT3);
-      coach.classList.remove('visible'); this.stage.classList.remove('coaching'); h.closePanel(); stop();
-      setTimeout(() => this.queueHint(), 600);
-    };
-    const stop = () => { removeEventListener('wheel', end); removeEventListener('keydown', end); removeEventListener('pointerdown', onDown, true); };
-    const onDown = (e) => { if (!e.target.closest('.panel-pop')) end(); };
-    this.coachT1 = setTimeout(() => {
-      if (!this.active) return end();
-      place(); coach.textContent = 'This is your menu bar. The wave opens wallpap.'; coach.classList.add('visible'); this.stage.classList.add('coaching');
-      addEventListener('wheel', end, { passive: true }); addEventListener('keydown', end); addEventListener('pointerdown', onDown, true);
-      this.coachT2 = setTimeout(() => {
-        if (done) return;
-        h.openPanel(); coach.textContent = 'Change the scene, time of day, weather and music.';
-        this.coachT3 = setTimeout(end, 5200);
-      }, 1700);
-    }, 700);
+  // Chapters ─────────────────────────────────────
+  enter() {
+    this.entered = this.index;
+    const ch = this.chapter, h = this.host;
+    this.renderGuide();
+    this.more.classList.toggle('visible', ch === 'explore' || (ch === 'choose' && this.still()));
+    if (this.still()) return;
+    if (ch === 'choose' || ch === 'mood') {
+      this.coachKey = ch === 'choose' ? 'scenes' : 'time';
+      this.coachT = setTimeout(() => this.openPanelCoach(), 650);
+      this.placeCoach();
+    }
   },
-  queueHint() {
-    const id = this.host.sceneId;
-    if (this.seen.has(id) || !this.active) return;
-    this.clearHint();
-    this.hint.textContent = this.still() ? 'Scroll to discover the next world' : this.hints[id][0];
-    this.hintDelay = setTimeout(() => {
-      if (!this.active || this.host.sceneId !== id || this.seen.has(id)) return;
-      this.hint.classList.add('visible');
-      this.seen.add(id);
-      this.hintExpiry = setTimeout(() => this.clearHint(), 5200);
-    }, 1400);
+  leave() {
+    this.entered = -1;
+    clearTimeout(this.coachT); clearTimeout(this.advanceT); clearTimeout(this.waitT);
+    this.coachKey = null; this.setPanelCoach(null);
+    if (this.host.panelOpen) this.host.closePanel();
+    this.coach.classList.remove('visible');
+    this.more.classList.remove('visible');
+  },
+  async openPanelCoach() {
+    if (!this.coachKey || this.entered !== this.index) return;
+    await this.host.openPanel();
+    this.setPanelCoach(this.coachKey);
+    this.placeCoach();
+  },
+  // Highlight part of the real panel (scenes/menu.html): open its section, ring the controls.
+  setPanelCoach(k, tries = 0) {
+    const f = this.host.panelFrame;
+    let w, d;
+    try { w = f && f.contentWindow; d = w && w.document; } catch (e) { return; }
+    if (!d || !d.body || typeof w.render !== 'function') { if (k && tries < 30) setTimeout(() => this.setPanelCoach(k, tries + 1), 100); return; }
+    if (!d.getElementById('wpCoach')) { const st = d.createElement('style'); st.id = 'wpCoach'; st.textContent = PANEL_COACH_CSS; d.head.appendChild(st); }
+    if (!k) { delete d.body.dataset.coach; return; }
+    d.body.dataset.coach = k;
+    try { w.eval(`if (typeof secOpen === 'object') { secOpen.scenes = ${k === 'scenes'}; secOpen.env = ${k !== 'scenes'}; }`); } catch (e) {}
+    this.host.renderPanel();
+    const sel = k === 'scenes' ? '.cats, .grid' : `[data-a=${k === 'time' ? 'pickTimeView' : 'pickWeather'}]`;
+    requestAnimationFrame(() => { const t = d.querySelector(sel); if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); });
+  },
+  coachText() {
+    const k = this.coachKey;
+    if (!k) return '';
+    if (!this.host.panelOpen) return 'Click the wave in the menu bar — that’s wallpap.';
+    return k === 'scenes' ? 'This is wallpap’s menu, up in your menu bar. Pick another world.'
+      : k === 'time' ? 'Turn the clock. Try Sunset — or Night.'
+      : k === 'weather' ? 'Now the sky. Make it rain, or snow.'
+      : 'Everything lives in this one menu.';
+  },
+  placeCoach() {
+    const c = this.coach, t = this.coachText();
+    if (!t || !this.active || this.entered !== this.index) { c.classList.remove('visible'); return; }
+    c.textContent = t;
+    const sr = this.stage.getBoundingClientRect(), open = this.host.panelOpen, pop = this.host.el.pop.getBoundingClientRect(), wave = this.host.el.wave.getBoundingClientRect();
+    c.classList.toggle('side', open);
+    if (open) { c.style.right = `${Math.max(12, sr.right - pop.left + 16)}px`; c.style.top = `${pop.top - sr.top + 34}px`; }
+    else { c.style.right = `${Math.max(12, sr.right - wave.right - 6)}px`; c.style.top = ''; }
+    c.classList.add('visible');
+  },
+  panelMsg(m) {
+    if (m.a === 'runAction') this.fire({ feed: 'food', water: 'water', toy: 'toy' }[m.v] || 'down');
+    if (this.chapter !== 'mood' || this.entered !== this.index) return;
+    if (m.a === 'pickTimeView' && this.coachKey === 'time') { this.coachKey = 'weather'; this.setPanelCoach('weather'); this.placeCoach(); }
+    else if (m.a === 'pickWeather' && m.v && this.coachKey === 'weather') {
+      this.coachKey = 'done'; this.setPanelCoach(null); this.placeCoach();
+      const i = this.index;
+      this.advanceT = setTimeout(() => { if (this.index === i && this.active) { this.host.closePanel(); this.go(i + 1); } }, 2400);
+    }
+  },
+  // The small guide ───────────────────────────────
+  steps() { return GUIDES[this.host.sceneId] || []; },
+  done() { const id = this.host.sceneId; return (this.prog[id] = this.prog[id] || this.steps().map(() => false)); },
+  renderGuide() {
+    const ch = this.chapter, g = this.guide;
+    const menuCh = ch === 'choose' || ch === 'mood';
+    const on = (!menuCh || this.still()) && this.entered === this.index;
+    g.classList.toggle('visible', on);
+    if (!on) return;
+    if (menuCh) {   // phones and still previews: the menu chapters as a short note (pick from the strip below)
+      g.classList.remove('complete');
+      g.innerHTML = `<p class="g-k">The menu</p><p class="g-still">${ch === 'choose' ? 'wallpap lives in your Mac’s menu bar. Pick another world from it — try one below.' : 'From the same menu, turn the clock to sunset or night and bring in rain or snow.'}</p>
+        <div class="g-foot"><span></span><button type="button" data-guide-next>${CHAPTERS[this.index].next} <span aria-hidden="true">↓</span></button></div>`;
+      return;
+    }
+    const steps = this.steps(), done = this.done(), cur = done.indexOf(false), all = cur < 0, s = this.host.scene;
+    const still = this.still(), nextLabel = CHAPTERS[this.index].next;
+    g.innerHTML = `<p class="g-k">${ch === 'touch' ? 'Your first world' : ch === 'play' ? 'Play' : 'Try'} · ${s.name}</p>
+      ${still ? '<p class="g-still">On your Mac you can:</p>' : ''}
+      <ol class="g-steps">${steps.map(([t], i) => `<li class="${done[i] ? 'done' : i === cur && !still ? 'now' : ''}"><i aria-hidden="true"></i><span>${t}</span></li>`).join('')}</ol>
+      <div class="g-foot">${all && !still ? '<span class="g-ok">Nicely done.</span>' : '<span></span>'}<button type="button" data-guide-next>${nextLabel} <span aria-hidden="true">↓</span></button></div>`;
+    g.classList.toggle('complete', all);
+    clearTimeout(this.waitT);
+    if (!all && steps[cur][1] === 'wait' && !still) { const id = s.id; this.waitT = setTimeout(() => { if (this.host.sceneId === id) this.fire('wait'); }, 3800); }
+  },
+  fire(kind) {
+    if (this.entered !== this.index || !['touch', 'play', 'explore'].includes(this.chapter)) return;
+    const steps = this.steps(), done = this.done(), cur = done.indexOf(false);
+    if (cur < 0) return;
+    let i = -1;
+    if (ORDERED.includes(kind)) { if (steps[cur][1] === kind) i = cur; }
+    else i = steps.findIndex(([, k], j) => k === kind && !done[j]);
+    if (i < 0) return;
+    done[i] = true;
+    this.renderGuide();
+    if (done.every(Boolean) && this.chapter !== 'explore') {
+      const at = this.index;
+      clearTimeout(this.advanceT);
+      this.advanceT = setTimeout(() => { if (this.index === at && this.active && !this.host.panelOpen) this.go(at + 1); }, 1900);
+    }
   },
   attach() {
     const win = this.host.frame?.contentWindow;
-    if (!win) return;
+    if (!win || win.__jHooked) return;
+    win.__jHooked = true;
     win.addEventListener('keydown', this.key);
     // Canvas scenes have no scrollable content. Forward their wheel to the document so
     // the journey is never a scroll trap, including when the pointer is over an iframe.
@@ -1542,13 +1648,25 @@ const Journey = {
     if (['bowls', 'speakeasy'].includes(this.host.sceneId)) {
       win.addEventListener('pointerdown', () => { if (!Sound.on) Sound.set(true); }, { capture: true, once: true });
     }
-    const kind = this.hints[this.host.sceneId][1];
-    let last = null;
+    // What the guide listens for: a sweep of the cursor, a click, a press held.
+    let last = null, dist = 0, holdT = 0;
     win.addEventListener('pointermove', (e) => {
-      if (kind === 'move' && last && Math.hypot(e.clientX - last[0], e.clientY - last[1]) > 3) this.dismissHint();
+      if (last) { dist += Math.hypot(e.clientX - last[0], e.clientY - last[1]); if (dist > 280) { dist = 0; this.fire('move'); } }
       last = [e.clientX, e.clientY];
     }, { passive: true });
-    win.addEventListener('pointerdown', () => { if (kind === 'down') this.dismissHint(); }, { passive: true });
+    win.addEventListener('pointerdown', () => { this.fire('down'); clearTimeout(holdT); holdT = setTimeout(() => this.fire('hold'), 800); }, { passive: true });
+    win.addEventListener('pointerup', () => clearTimeout(holdT), { passive: true });
+    win.addEventListener('pointercancel', () => clearTimeout(holdT), { passive: true });
+    // Santorini Cats tells us exactly what happened: a cat clicked, a bowl filled, a toy tossed.
+    const hookCats = (tries = 0) => {
+      const c = win.__cats;
+      if (!c || !c.pets) { if (tries < 40) setTimeout(() => hookCats(tries + 1), 150); return; }
+      const p = c.pets, click = p.click, toy = p.toy;
+      p.click = (...a) => { const r = click.apply(p, a); if (r) this.fire('cat'); return r; };
+      p.toy = (...a) => { const r = toy.apply(p, a); this.fire('toy'); return r; };
+      if (win.LW) win.LW.on('bowl', (k) => this.fire(k));
+    };
+    if (this.host.sceneId === 'cats') hookCats();
   },
 };
 
@@ -1611,7 +1729,7 @@ const Zoom = {
     root.style.setProperty('--zoom', e.toFixed(4));
     root.classList.toggle('zoomed', e > .35);
     root.classList.toggle('zoom-reveal', !!reveal);
-    if (reveal && !this.revealed && Journey.host) Journey.welcome();
+    if (reveal && !this.revealed && Journey.host) Journey.placeCoach();
     this.revealed = !!reveal;
     if (e > .02 && Tour.running) Tour.stop();
   },

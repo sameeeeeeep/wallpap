@@ -836,7 +836,10 @@ function fillBowl(kind){setLevel(kind,1,true);cats.forEach(p=>{if(kind==='water'
 LW.on('env',()=>{computeEnv();updateHud();});
 LW.on('calm',on=>{setCalm(!!on);updateHud();});
 LW.on('reminder',r=>{if(r.kind==='breathe')setCalm(true,60);});
-LW.on('down',(x,y)=>{const px=toWX(x),py=y/cssH*1000;if(!petSystem.click(px,py))petSystem.toy(px,py);});
+// Clicking a bowl fills it (food or water) — the cats come over; otherwise pick a cat, or toss a toy.
+LW.on('down',(x,y)=>{const px=toWX(x),py=y/cssH*1000;
+  for(const bw of [L.food,L.water])if(Math.abs(px-bw.x)<44&&py>bw.y-42&&py<bw.y+14){fillBowl(bw.kind);LW.emit&&LW.emit('bowl',bw.kind);return;}
+  if(!petSystem.click(px,py))petSystem.toy(px,py);});
 LW.on('action',a=>{if(a==='feed')fillBowl('food');else if(a==='water')fillBowl('water');});
 const bowls = { food: 0.5, water: 0.8 }, savedLvl = { food: -1, water: -1 }, shownLvl = { food: 0.5, water: 0.8 };
 const pours = [];

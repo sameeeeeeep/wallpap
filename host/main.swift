@@ -157,7 +157,10 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     // Pro ($5 one-time): every scene, reminders, Calm, live weather, soundscapes,
     // Music Mode, AI companions, future scenes. Unlocked by a Dodo Payments license key (License.swift);
     // the `pro` default / WALLPAP_PRO stay as developer overrides.
-    var isPro: Bool { licensed || defaults.bool(forKey: "pro") || ProcessInfo.processInfo.environment["WALLPAP_PRO"] == "1" }
+    /// Owner 2026-10-05: "make pro free for all for now". Flip back to false to restore the paywall;
+    /// existing license keys keep working either way.
+    static let proFreeForAll = true
+    var isPro: Bool { App.proFreeForAll || licensed || defaults.bool(forKey: "pro") || ProcessInfo.processInfo.environment["WALLPAP_PRO"] == "1" }
     @objc func openPro() { NSWorkspace.shared.open(URL(string: "https://wallpap.live/#pro")!) }
     func lock(_ item: NSMenuItem) {
         guard !isPro else { return }

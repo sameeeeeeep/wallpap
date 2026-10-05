@@ -8,6 +8,15 @@ meaningful on battery). A 'paused' baseline is taken first and last; the battery
 wallpaper's real battery cost, GPU and compositor included. Run it while the Mac is otherwise idle.
 
     python3 tools/measure/run-scenes.py [--settle 15] [--seconds 30] [scene ...]  → docs/perf/<date>.json
+
+Checking the pause/memory targets on a fresh build (quit the installed wallpap first; one instance only):
+    ./build.sh && LIVEWALL_DEV=1 ./wallpap.app/Contents/MacOS/wallpap &
+    rm -f .build/wpmeter .build/devpost                         # rebuild the meters from this checkout
+    python3 tools/measure/run-scenes.py --seconds 20 --extras --soak 60 koi cats      # ~6 min
+  - 'paused-start' / 'paused-end' rows (the real Pause path): total cpu < 0.5 % (app + WebKit helpers).
+  - 'cats->koi memory every 2 s': falls to about koi's own row (~300-400 MB) within the first 2-3 samples,
+    with no second large com.apple.WebKit.WebContent left in the row's procs.
+Then quit it and reopen the installed wallpap.
 """
 import argparse, json, os, re, subprocess, threading, time, datetime, platform
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -82,8 +91,9 @@ def restore_mode():
 prev_scene = subprocess.run(['defaults', 'read', DOM, 'scene'], capture_output=True, text=True).stdout.strip() or 'koi'
 import atexit; atexit.register(restore_mode); atexit.register(lambda: dev(f'scene:{prev_scene}'))
 def paused(label):
-    devjs("__lw('pauseReason','user'); __lw('focus',false)"); time.sleep(a.settle)
-    rows.append(measure(label)); devjs("__lw('pauseReason',''); __lw('focus',true)")
+    # The real Pause path (host stops its polling too); the JS line keeps older builds paused as well.
+    dev('pause'); devjs("__lw('pauseReason','user'); __lw('focus',false)"); time.sleep(a.settle)
+    rows.append(measure(label)); dev('resume'); devjs("__lw('pauseReason',''); __lw('focus',true)")
 paused('paused-start')
 for s in a.scenes:
     dev(f'scene:{s}'); time.sleep(a.settle)
@@ -96,6 +106,15 @@ if a.extras:
         dev(f'scene:{s}'); r = subprocess.run(['.build/wpmeter', '10'], capture_output=True, text=True)
         m = json.loads(r.stdout); rows.append({'label': f'switch->{s}', **m['total'], 'systemW': None, 'procs': m['procs']})
         print(f"switch->{s:7s} cpu {m['total']['cpu']:5.1f}%  mem {m['total']['mb']:5.0f} MB (first 10 s)", flush=True); time.sleep(a.settle)
+    # Memory after leaving a heavy scene: cats (~1 GB of decoded sprites) → koi. Should fall to koi's own
+    # baseline within a few seconds (the old page is closed, its WebContent process exits).
+    dev('scene:cats'); time.sleep(a.settle); dev('scene:koi'); series = []; pages = []
+    for i in range(10):
+        m = json.loads(subprocess.run(['.build/wpmeter', '2'], capture_output=True, text=True).stdout)
+        series.append(m['total']['mb'])
+        pages.append([p['mb'] for p in m['procs'] if p['name'] == 'com.apple.WebKit.WebContent'])   # a lingering old page shows here
+    rows.append({'label': 'cats->koi-memory', 'mbSeries': series, 'mbEnd': series[-1], 'webContentMB': pages})
+    print(f"cats->koi memory every 2 s: {series} MB; WebContent processes: {pages}", flush=True)
     # Play open over the live scene.
     dev('scene:cats'); time.sleep(a.settle); dev('play-toggle'); time.sleep(4)
     rows.append(measure('play-open')); dev('play-toggle'); time.sleep(3)

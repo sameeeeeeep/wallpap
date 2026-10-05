@@ -61,8 +61,9 @@ function pose(p,dt){
   if(dd>0&&dd<40)motion.phase=(motion.phase+dd/(s.clips[key].stride||60))%1;
   if(st==='stand')motion.phase=0;
   // Blocked or waiting for a route: stand on the first walk drawing, never freeze mid-stride.
-  motion.still=dd>0?0:(motion.still||0)+dt;
-  if(st==='move'&&motion.still>.2){key='walk-'+dir.view;motion.phase=0;}
+  // Moved this step? (ground velocity is set by the stepper only when the cat actually advanced)
+  if(dt>0)motion.still=Math.hypot(p.groundVX||0,p.groundVY||0)>1?0:(motion.still||0)+dt;
+  if(st==='move'&&motion.still>.25){key='walk-'+dir.view;motion.phase=0;}
   const n=s.clips[key].frames.length;
   idx=Math.floor(motion.phase*n)%n;motion.gait=gait;
  }else if(p.j){

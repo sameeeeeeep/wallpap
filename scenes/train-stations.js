@@ -56,6 +56,7 @@ for (const spec of Object.values(specs)) spec.geometry={
   walkable:[[.02,spec.feet+.008],[.98,spec.feet+.008],[.98,spec.front],[.02,spec.front]]
 };
 specs.swiss.geometry.fixtures.push(...[[.10,.12],[.356,.372],[.649,.663],[.882,.895]].map(([x0,x1])=>({name:'chalet post',rect:[x0,.43,x1,.822]})));
+const STATIONS_ON=false;
 function create(api) {
  const calls=new Calls(), art={skin:null,images:null,lit:null,key:'',loading:false,generation:0,bytes:0,loads:0,releases:0,error:null};
  let clock=0;
@@ -74,6 +75,9 @@ function create(api) {
  function safe(d,brake){return clearRoute(d,brake,margin(),api.segments,api.routeLength());}
  function update(dt,target){
   clock+=dt;
+  // Station calls are switched off for now (owner, 2026-10-05): no scheduled stops, no art loaded.
+  // A forced stop (__train.forceStation for QA) still runs. Flip STATIONS_ON to bring them back.
+  if(!STATIONS_ON&&calls.phase==='cruise'&&calls.wait>0)return false;
   if(calls.phase==='queued'||(calls.phase==='cruise'&&calls.wait<8))load();
   const handled=calls.tick(dt,api.train,target,!!art.images,safe);
   if(calls.phase==='depart'&&art.images){const b=box();if(b.x+b.w<api.view().x0-30)release();}

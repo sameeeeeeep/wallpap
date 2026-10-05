@@ -227,6 +227,9 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   if(p.away||p.j)return false;
   if(!directions(p)||p.surf!=='floor')y=p.y;
   p.goal={x,y,surf:p.surf};p.path=plan(p,x,y,exit);p.exitPath=exit;p.next=next;p.gait=gait||(p.asset.atlas&&Math.hypot(x-p.x,(y-p.y)/(S.slope||.55))>p.spec.height*p.k*3?'run':'walk');p.waited=0;
+  // No route right now (another cat or a prop in the way): an idle cat just stays where it is,
+  // instead of getting up and standing frozen for seconds. Exits, entries and following still wait.
+  if(!p.path&&!exit&&!p.picked&&!['leave','enter','qa'].includes(p.mission)){p.goal=null;p.next=null;return false;}
   state(p,'move',1e9);pose(p,0);p.blocked=0;return !!p.path;
  }
  // A landing declared just outside a floor edge is clamped to that physical edge.
@@ -318,10 +321,12 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    const sp=spots.find(s=>s.kind===kind&&(!S.supplies||S.supplies[kind]>.01));if(sp&&trip(p,sp,kind==='food'?'eat':'drink'))return;
   }
   const sl=clamp(p.lazy*.2+p.awake/500+(S.night||0)*.2),r=Math.random();
-  if(r<.45){const b=S.bounds,pt=nearest(p,rand(b[0]+20,b[2]-20),rand(b[1],b[3]));if(pt&&walk(p,...pt,{gait:r<.035||p.asset.atlas&&Math.hypot(pt[0]-p.x,(pt[1]-p.y)/(S.slope||.55))>p.spec.height*p.k*3?'run':'walk'}))return;}
-  if(r<.72&&spots.length){const sp=pick(spots);if(trip(p,sp,sp.kind==='bed'||sp.kind==='sun'?'sleep':'loaf'))return;}
-  if(r>.96){const o=items.find(o=>o!==p&&!o.away);if(o&&p.surf===o.surf){const x=o.x+(p.x<o.x?-1:1)*(p.spec.height*p.k+o.spec.height*o.k)*1.1;if(walk(p,x,o.y,{next:q=>state(q,'sniff',3)}))return;}}
-  state(p,pick(['sit','sit','loaf','groom',...(sl>.35?['sleep','sleep']:['stand'])]),rand(5,sl>.35?30:12));
+  // Idle cats don't wander: they rest where they are and only get up to eat, drink, or move to a
+  // proper napping spot (bed, sun patch, shelter) once in a while.
+  const naps=spots.filter(s=>['bed','sun','shelter'].includes(s.kind));
+  const onSpot=naps.some(s=>Math.hypot(s.x-p.x,(s.y??p.y)-p.y)<p.spec.height*p.k*.8);
+  if(!onSpot&&naps.length&&r<.18+sl*.3){const sp=pick(naps);if(trip(p,sp,sp.kind==='shelter'?'shelter':'sleep'))return;}
+  state(p,pick(['sit','loaf','loaf','groom',...(sl>.3?['sleep','sleep','sleep']:['sit'])]),rand(20,sl>.3?90:45));
  }
  // FOLLOW owns intent; the existing path/jump engine still owns every position.
  function samplePointer(dt){
@@ -413,7 +418,9 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   for(const a of candidates){
    const route=plan(p,...a);if(!route)continue;
    f.phase='stalk';f.prey=q.slice();
-   walk(p,...a,{gait:p.kind==='cat'?'stalk':'walk',next:()=>finishHunt(p)});return true;
+   // Close in at a run or trot; only the last body length is the low creep.
+   const d=Math.hypot(a[0]-p.x,a[1]-p.y),b=bodyLength(p);
+   walk(p,...a,{gait:p.kind!=='cat'?'walk':d>b*.9?'run':d>b*.5?'walk':'stalk',next:()=>finishHunt(p)});return true;
   }return false;
  }
  function followStep(p,dt){
@@ -451,7 +458,13 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
   const dest=fanTarget(p,q);if(!dest){halt(p);return;}
   f.slot=dest;
   if(Math.hypot(dest[0]-p.x,dest[1]-p.y)<12*p.k){if(p.state==='move')halt(p);return;}
-  const gait=distance>body*2.5||cursor.speed>145*p.k?'run':'walk';
+  const gait=distance>body*1.2||cursor.speed>80*p.k?'run':'walk';
+  f.leap=(f.leap||0)-.35;
+  if(gait==='run'&&distance>body*1.6&&f.leap<=0&&Math.random()<.5){
+   const reach=Math.min(distance-body*.6,body*1.3),ux=(dest[0]-p.x)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y)),uy=(dest[1]-p.y)/Math.max(1,Math.hypot(dest[0]-p.x,dest[1]-p.y));
+   const tx=p.x+ux*reach,ty=p.y+uy*reach;
+   if(allowed(p,tx,ty)&&clearRest(p,tx,ty)&&jump(p,tx,ty,'floor',r=>{if(r.follow){r.follow.repath=0;halt(r,'followWait',1e9);}})){f.leap=1.4;return;}
+  }
   // Keep a committed leg until the destination moves enough to require another route.
   if(p.state==='move'&&p.goal&&Math.hypot(dest[0]-p.goal.x,dest[1]-p.goal.y)<18){p.gait=gait;return;}
   f.phase='follow';walk(p,...dest,{gait,next:r=>halt(r)});
@@ -512,7 +525,7 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
    if(p.asset.atlas&&dist>.01){const dir=LW.cats.direction(dx,dy,S.slope||.55,p._catDir);if(LW.cats.startTurn(p,dir)){pose(p,dt);return;}}
    if(!p.asset.atlas&&p.picked&&dist>.01){const view=Math.abs(dy)<.01?'side':dy>0?'f':'b',face=Math.sign(dx)||p.dir;
     if(turnTo(p,view,face)){pose(p,dt);return;}}
-   const speed=(p.gait==='stalk'?19:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
+   const speed=(p.gait==='stalk'?32:p.gait==='run'?175:['leave','enter'].includes(p.mission)?70:48)*p.k*(LW.calm?.6:1);
    const floorDistance=p.asset.atlas?Math.hypot(dx,dy/(S.slope||.55)):dist;
    const d=Math.min(dist,speed*dt*(floorDistance?dist/floorDistance:1)),x=p.x+(dist?dx/dist*d:0),y=p.y+(dist?dy/dist*d:0);
    if(free(p,x,y,p.surf,false)){
@@ -520,8 +533,8 @@ function create({scene,roster,stage,pointer=()=>LW.pointer}){
     if(dist<=d+.01){path.i++;LW.petJumpLand(p);}
    }else{p.waited+=dt;if(yieldExit(p)){pose(p,dt);return;}if(p.waited>5&&!['enter','leave','qa'].includes(p.mission)){p.goal=null;state(p,'sit',1);pose(p,dt);return;}p.blocked+=dt;if(p.blocked>.6){p.path=plan(p,p.goal.x,p.goal.y,p.exitPath);p.blocked=0}}
   }else{
-   if(p.state==='eat'){p.hunger=Math.max(0,p.hunger-dt*.04);if(S.supplies)S.supplies.food=Math.max(0,S.supplies.food-dt*.005);}else p.hunger=Math.min(1,p.hunger+dt/18000);
-   if(p.state==='drink'){p.thirst=Math.max(0,p.thirst-dt*.06);if(S.supplies)S.supplies.water=Math.max(0,S.supplies.water-dt*.003);}else p.thirst=Math.min(1,p.thirst+dt/10800);
+   if(p.state==='eat'){p.hunger=Math.max(0,p.hunger-dt*.04);if(S.supplies)S.supplies.food=Math.max(0,S.supplies.food-dt*.005);}else p.hunger=Math.min(1,p.hunger+dt/2400);
+   if(p.state==='drink'){p.thirst=Math.max(0,p.thirst-dt*.06);if(S.supplies)S.supplies.water=Math.max(0,S.supplies.water-dt*.003);}else p.thirst=Math.min(1,p.thirst+dt/1500);
    if(p.state==='sleep')p.awake=Math.max(0,p.awake-dt*4);
    if(p.t>=p.dur)think(p);
   }

@@ -662,3 +662,11 @@ main>.journey-end{max-width:none;min-height:76svh;display:flex;flex-direction:co
   .journey-more{left:20px;right:20px;bottom:250px}
   .journey-stage:is([data-chapter=explore],[data-chapter=choose]) .journey-guide{bottom:350px}
 }
+
+/* A world opening: its picture shows with a small ring and its name. */
+.wl{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:10px;padding:9px 16px 9px 12px;border-radius:99px;color:#fff;font-size:12px;background:#0c1913a8;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid #ffffff25;pointer-events:none;animation:wlIn .3s ease}
+.wl[hidden]{display:none}
+.wl i{width:14px;height:14px;border-radius:50%;border:2px solid #ffffff40;border-top-color:#fff;animation:wlSpin .8s linear infinite}
+@keyframes wlSpin{to{transform:rotate(360deg)}}
+@keyframes wlIn{from{opacity:0;transform:translate(-50%,6px)}}
+#pgScreen .wl{font-size:clamp(9px,.9vw,12px)}

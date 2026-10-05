@@ -535,6 +535,7 @@ function chromeHTML(o) {
   <div class="rc-acts"><button type="button" class="main" data-rc>Done</button><button type="button" data-rc>Snooze 10 min</button></div>
 </div>
 <div class="panel-pop away" role="dialog" aria-label="wallpap menu-bar panel (preview)"></div>
+<div class="wl" hidden role="status"><i aria-hidden="true"></i><span></span></div>
 <div class="panel-note" hidden></div>
 ${o.interactive ? '<div class="status-pill"><i></i><span>Preview</span></div>' : ''}`;
 }
@@ -571,7 +572,7 @@ class SceneHost {
     const q = (c) => $(c, screen);
     this.el = { clock: q('.clock'), wave: q('.wave-btn'), wgTemp: q('.wg-temp'), wgCond: q('.wg-c'), wgIc: q('.wg-ic'), wgDay: q('.wg-day'), wgDate: q('.wg-date'),
       win: q('.app-window'), player: q('.mplayer'), art: q('.mp-art'), app: q('.mp-appname'), title: q('.mp-title'), artist: q('.mp-artist'), cur: q('.mp-cur'), len: q('.mp-len'), bar: q('.mp-track i'),
-      prev: q('.mp-prev'), pp: q('.mp-pp'), next: q('.mp-next'), snd: q('.mp-snd'), card: q('.rcard'), pop: q('.panel-pop'), note: q('.panel-note'), pill: q('.status-pill') };
+      prev: q('.mp-prev'), pp: q('.mp-pp'), next: q('.mp-next'), snd: q('.mp-snd'), card: q('.rcard'), pop: q('.panel-pop'), note: q('.panel-note'), pill: q('.status-pill'), wl: q('.wl') };
     const d = new Date();
     this.el.wgDay.textContent = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
     this.el.wgDate.textContent = d.getDate();
@@ -631,10 +632,19 @@ class SceneHost {
     this.poster.after(f);
     this.frame = f; this.ready = false;
     this.setPill('Loading…', false);
+    this.loader(true);
+  }
+  // While a world opens, its picture shows with a small "Opening …" ring (after a beat, so fast
+  // loads never flash it).
+  loader(on) {
+    clearTimeout(this.wlT); const w = this.el.wl; if (!w) return;
+    if (!on) { w.hidden = true; return; }
+    this.wlT = setTimeout(() => { if (this.frame && !this.isLive()) { w.querySelector('span').textContent = `Opening ${this.scene.name}…`; w.hidden = false; } }, 350);
   }
   drop() {
     if (!this.frame) return;
     this.frame.remove(); this.frame = null; this.ready = false; this.focusSent = null;
+    this.loader(false);
   }
   // The next scene loads ahead in a hidden frame and is paused as soon as it has loaded (no frames
   // drawn), so switching to it is instant instead of poster → loading → live.
@@ -659,7 +669,7 @@ class SceneHost {
     f.title = `${s.name} — live wallpap scene. Click and move inside it to interact.`;
     this.frame = f; this.ready = false; this.focusSent = null;
     this.onLoad(f);                     // host bridge, listeners, env/sound/focus pushed (focus resumes it)
-    f.classList.add('ready'); this.flushWaiters(); this.applyFocus(); this.emit('live');
+    f.classList.add('ready'); this.loader(false); this.flushWaiters(); this.applyFocus(); this.emit('live');
     return true;
   }
   onLoad(f) {
@@ -682,7 +692,7 @@ class SceneHost {
     this.flushAttach();
     this.emit('loaded');
   }
-  fadeIn(f) { setTimeout(() => { if (f === this.frame) { f.classList.add('ready'); this.flushWaiters(); this.applyFocus(); this.emit('live'); } }, 380); }
+  fadeIn(f) { setTimeout(() => { if (f === this.frame) { f.classList.add('ready'); this.loader(false); this.flushWaiters(); this.applyFocus(); this.emit('live'); } }, 380); }
   flushAttach() { const w = this.attachWaiters || []; this.attachWaiters = []; w.forEach((fn) => fn()); }
   whenAttached(run, ms = 5000) {
     if (this.ready) return Promise.resolve();
@@ -1734,6 +1744,39 @@ const Zoom = {
   },
 };
 
+// ─── Ready ahead: every world downloads quietly, one at a time ──────────────
+// Once the page has settled and a live scene is showing, each world loads in a hidden, paused frame
+// just long enough for its art to land in the browser cache, then the frame goes. Picking any world
+// later opens it instantly. Desktop on a good connection only (never on phones or data saver).
+const Ahead = {
+  done: new Set(), busy: false,
+  start() {
+    const c = navigator.connection || {};
+    if (this.started || saveData || phoneMQ.matches || c.saveData || /(^|-)2g|3g/.test(c.effectiveType || '')) return;
+    this.started = true;
+    this.queue = ['cats', 'grass', 'cafe', 'records', 'train', 'cabin', 'ramen', 'rooftop', 'speakeasy', 'bowls', 'cymatics', 'koi'];
+    setTimeout(() => this.next(), 2500);
+  },
+  next() {
+    if (document.hidden) { setTimeout(() => this.next(), 4000); return; }
+    const live = HOSTS.filter((h) => h.frame).map((h) => h.sceneId);
+    const id = this.queue.find((x) => !this.done.has(x) && !live.includes(x));
+    if (!id) return;
+    const f = document.createElement('iframe'), s = sceneById(id);
+    f.className = 'ahead'; f.tabIndex = -1; f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1440px;height:900px;opacity:0;pointer-events:none';
+    f.src = `scenes/${id}.html?${new URLSearchParams({ hour: s.hour.toFixed(2), weather: s.weather, fps: '1', muted: '1' })}`;
+    let gone = false;
+    const finish = () => { if (gone) return; gone = true; f.remove(); this.done.add(id); setTimeout(() => this.next(), 600); };
+    f.addEventListener('load', () => {
+      try { f.contentWindow.__lw('focus', false); } catch (e) {}
+      setTimeout(finish, 2500);   // sprite sheets that load just after the page
+    }, { once: true });
+    setTimeout(finish, 30000);
+    document.body.appendChild(f);
+  },
+};
+
 // ─── Boot ────────────────────────────────────────────────────────────────────
 Desktop.init();
 PG.init();
@@ -1746,4 +1789,5 @@ Live.update();
 // The live scene starts after the page has loaded and the browser is idle; the poster carries the
 // first paint. (Any touch in the hero, Fullscreen or a "Try it" starts it sooner.)
 const goLiveSoon = () => idle(() => PG.goLive(), 1500);
+HOSTS.forEach((h) => h.on((t) => { if (t === 'live') idle(() => Ahead.start(), 4000); }));
 if (document.readyState === 'complete') goLiveSoon(); else addEventListener('load', goLiveSoon, { once: true });

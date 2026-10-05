@@ -7,7 +7,11 @@ enum PlayConfig {
 }
 struct PlayAnalyticsBatch: Codable { let day: String; let appVersion: String; let counts: [String: Int] }
 final class PlayAnalytics {
-    static let allowed: Set<String> = ["play_open", "card_open:word-of-the-day", "card_open:crossword-of-the-day", "card_open:news", "puzzle_complete:word-of-the-day", "puzzle_complete:crossword-of-the-day", "news_click"]
+    static let allowed: Set<String> = ["play_open", "card_open:word-of-the-day", "card_open:crossword-of-the-day", "card_open:news", "puzzle_complete:word-of-the-day", "puzzle_complete:crossword-of-the-day", "news_click",
+        // App usage (2026-10-06): one "active" per Mac per day, the panel, features turned on.
+        "active", "panel_open", "breathe_start", "music_on", "soundscape_on", "water_reminder_on", "breathe_reminder_on", "scene_action"]
+    /// World picks are counted per world id ("scene:koi"); ids are short slugs, never free text.
+    static func isAllowed(_ e: String) -> Bool { allowed.contains(e) || e.range(of: "^scene:[a-z0-9-]{1,32}$", options: .regularExpression) != nil }
     private(set) var counts: [String: Int] = [:]
     private(set) var day: String
     var enabled = true { didSet { if !enabled { counts.removeAll() } } }
@@ -25,6 +29,7 @@ final class PlayAnalytics {
     }()
     init(version: String, endpoint: String = PlayConfig.analyticsEndpoint, now: Date = Date()) {
         self.version = version; self.endpoint = endpoint; day = Self.localDay(now)
+        counts["active"] = 1
     }
     static func localDay(_ date: Date) -> String {
         let f = DateFormatter(); f.calendar = Calendar(identifier: .gregorian); f.locale = Locale(identifier: "en_US_POSIX"); f.timeZone = .current; f.dateFormat = "yyyy-MM-dd"; return f.string(from: date)
@@ -35,7 +40,7 @@ final class PlayAnalytics {
     }
     func record(_ event: String, now: Date = Date()) {
         tick(now: now)
-        guard enabled, Self.allowed.contains(event) else { return }
+        guard enabled, Self.isAllowed(event), counts.count < 48 || counts[event] != nil else { return }
         counts[event] = min(9999, (counts[event] ?? 0) + 1)
     }
     // Called only at a local-day boundary; at most one attempt for that day's batch.
@@ -43,7 +48,8 @@ final class PlayAnalytics {
         let next = Self.localDay(now); guard next != day else { return nil }
         let batch = enabled && !counts.isEmpty && !batchedDays.contains(day) ? PlayAnalyticsBatch(day: day, appVersion: version, counts: counts) : nil
         if batch != nil { batchedDays.insert(day) }
-        day = next; counts.removeAll(); return batch
+        day = next; counts.removeAll(); if enabled { counts["active"] = 1 }   // still running on the new day
+        return batch
     }
     func tick(now: Date = Date()) {
         guard let batch = rotate(now: now), enabled, !endpoint.isEmpty,

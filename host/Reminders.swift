@@ -120,7 +120,7 @@ extension App {
         reminderCard.show(kind: kind, text: text)
     }
 
-    @objc func pickBreathReminder(_ item: NSMenuItem) { breathMinutes = item.tag; rebuildMenu() }
+    @objc func pickBreathReminder(_ item: NSMenuItem) { breathMinutes = item.tag; if item.tag > 0 { playAnalytics.record("breathe_reminder_on") }; rebuildMenu() }
     @objc func toggleRemindersOverApps() { remindersOverApps.toggle(); rebuildMenu() }
     @objc func previewReminderCard() { reminderCard.show(kind: "water", text: "A sip of water?") }
 }

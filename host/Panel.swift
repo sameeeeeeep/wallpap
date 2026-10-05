@@ -36,6 +36,7 @@ final class PanelHost: NSObject, WKScriptMessageHandler {
         if web.url == nil { ready = false; web.loadFileURL(pageURL, allowingReadAccessTo: app.scenesDir) }
         else { push() }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        app.playAnalytics.record("panel_open")
         app.setEngaged(true); app.checkEngagement()   // the scene keeps running under the panel
         NSApp.activate(ignoringOtherApps: true)   // so the transient popover closes on an outside click
         // .transient alone misses clicks on the desktop and other apps when wallpap isn't key, so any

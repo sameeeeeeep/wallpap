@@ -1601,13 +1601,14 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         setSetting(key, kv[1])
     }
     @objc func runAction(_ item: NSMenuItem) {
-        if let name = item.representedObject as? String { sendAction(name) }
+        if let name = item.representedObject as? String { sendAction(name); playAnalytics.record("scene_action") }
     }
 
     @objc func pickScene(_ item: NSMenuItem) {
         guard let id = item.representedObject as? String, let scene = scenes.first(where: { $0.id == id }) else { return }
         guard !scene.pro || isPro else { openPro(); return }
         sceneID = id
+        playAnalytics.record("scene:\(id)")
         if userPaused { userPaused = false; windows.forEach { $0.unfreeze() } }
         loadScene()
     }
@@ -1645,6 +1646,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
     @objc func pickSoundscape(_ item: NSMenuItem) {
         soundscape = item.representedObject as? String ?? "off"
+        if soundscape != "off" { playAnalytics.record("soundscape_on") }
         pushSoundscape(); rebuildMenu()
     }
     @objc func pickSoundscapeVolume(_ item: NSMenuItem) {
@@ -1655,7 +1657,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         companionStyle = item.representedObject as? String ?? "native"
         startCompanions(); rebuildMenu()
     }
-    @objc func toggleMusicMode() { musicMode.toggle(); startMusicMode(); updateBeatSync(); rebuildMenu() }
+    @objc func toggleMusicMode() { musicMode.toggle(); if musicMode { playAnalytics.record("music_on") }; startMusicMode(); updateBeatSync(); rebuildMenu() }
     @objc func toggleBeatSync() { beatSyncOn.toggle(); updateBeatSync(); rebuildMenu() }
 
     @objc func pickFps(_ item: NSMenuItem) {
@@ -1667,6 +1669,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     @objc func toggleCalm() {
         guard isPro else { openPro(); return }
         calm.toggle()
+        if calm { playAnalytics.record("breathe_start") }
         windows.forEach { $0.js("__lw('calm',\(calm))") }
         rebuildMenu()
     }
@@ -1688,7 +1691,7 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         rebuildMenu()
     }
 
-    @objc func pickReminder(_ item: NSMenuItem) { waterMinutes = item.tag; rebuildMenu() }
+    @objc func pickReminder(_ item: NSMenuItem) { waterMinutes = item.tag; if item.tag > 0 { playAnalytics.record("water_reminder_on") }; rebuildMenu() }
     @objc func remindNow() { fireReminder("water") }
 
     @objc func toggleLogin() {

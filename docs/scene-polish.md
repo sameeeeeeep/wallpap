@@ -1038,3 +1038,30 @@ app/settings, install, push, release, stash or other worktree operation.
 Limitations remain explicit: eight-frame cadence/held-frame slip, small painted
 paw deviations, occluded far limbs, slightly more side-on replacement near view,
 and previously approved calico/Siamese approximations. This is not owner signoff.
+
+
+## 2026-10-05 — cats-gpt diagonal v3, whole-limb motion
+
+Owner: diagonal upper limbs remained stiff after the previous correction; all
+other actions approved. Repainted only near/far walk sheets for all five coats,
+using per-frame shoulder/elbow and hip/knee/hock pose charts with LH–LF–RH–RF
+phase order from the approved side. Rejected repeated-reach art; shortened and
+regenerated a guided pair to better match side cadence. Selected built-in
+imagegen prompts and lossless sources: `tools/cats-qa/diagonal-v3-src/prompts.json`
+and its README. Native generated alpha preserved, one .5 scale for all poses,
+translation registration, existing coat palettes/markings. Strides measured from
+painted stance paws: 37.47 near / 34.03 far.
+
+Evidence: `shots/cats-gpt/diagonals-v3-<coat>.mp4` (15 s / 30 fps, side + near +
+far together, mirrors in second half), `-strip.jpg`, consecutive-cycle `-frames/`,
+per-exposure JSON and scope report. 107 tests pass; 760 valid atlas frames and
+identical cross-coat geometry/alpha. Other 85 atlases, other metadata and runtime
+unchanged. Articulation improves, but held-frame contact slip and far-leg
+occlusion remain; no perfect foot-lock claim. Full observations:
+`shots/cats-gpt/diagonal-v3-review.md`. No install, push, release, owner app/settings
+or other worktree operation. Raw PNGs deleted during encoding; disk guard 5 GiB.
+
+The final coat review also corrected diagonal-only calico patch/leg color drift
+with root-registered body masks and a stable exposed-limb palette, and Siamese
+folded-paw tips with pose-chart sock tracking. A crossing-limb calico mask attempt
+was rejected. Calico and Siamese comparisons were freshly re-rendered afterward.

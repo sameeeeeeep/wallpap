@@ -57,3 +57,16 @@ runtime behavior stays approved and unchanged. The new silhouette area CV is
 2.68% near / 2.43% far; the higher near area is exposed limbs, not per-frame scale.
 The numerical check allows 3% for these two clips, retaining 2.5% for other walks.
 Actual review evidence is in `shots/cats-gpt/diagonal-review.md`.
+
+
+## Current diagonal override — v3, 2026-10-05
+
+The owner rejected the previous diagonals for stiff upper limbs. After any full
+historical rebuild, run **`diagonal_v3_atlas.py`**, then `manifest.py` and
+`quality.py`. This supersedes the previous `diagonal_atlas.py` override.
+`diagonal-v3-src/README.md` holds the exact full-limb blocking/repaint procedure,
+selected lossless sources and prompts. Measured strides: 37.47 near / 34.03 far.
+Other clips and runtime stay unchanged. Diagonal silhouette-area bound is 4%
+(actual 2.82% / 3.77%); other walks retain 2.5%. Contact residuals are reported
+honestly, not treated as proof of foot locking. Final review:
+`shots/cats-gpt/diagonal-v3-review.md`.

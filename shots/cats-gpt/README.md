@@ -1,4 +1,32 @@
-# Painted cats — diagonal fix review
+# Diagonal walk v3 — whole-limb review
+
+The previous diagonal correction was rejected for stiff upper legs. This pass
+repaints only the two diagonal walks for all five coats with explicit shoulder /
+elbow and hip / knee / hock poses. All other approved art and runtime are unchanged.
+
+| Coat | Side-by-side video | Full near/far cycle strip |
+| --- | --- | --- |
+| Orange | [Watch](diagonals-v3-orange.mp4) | [Strip](diagonals-v3-orange-strip.jpg) |
+| Black | [Watch](diagonals-v3-black.mp4) | [Strip](diagonals-v3-black-strip.jpg) |
+| Grey | [Watch](diagonals-v3-grey.mp4) | [Strip](diagonals-v3-grey-strip.jpg) |
+| Calico | [Watch](diagonals-v3-calico.mp4) | [Strip](diagonals-v3-calico-strip.jpg) |
+| Siamese | [Watch](diagonals-v3-siamese.mp4) | [Strip](diagonals-v3-siamese-strip.jpg) |
+
+Each is **15 seconds, 30 fps, 1260×600**: approved side / new toward / new away,
+playing together. The second half mirrors all views. This isolated WebKit harness
+uses production sprite loading and pose selection, with equal one-second cycles
+and a floor grid moving at each measured stride. Every near/far cycle exposure is
+saved in the matching `diagonals-v3-<coat>-frames/` directory for inspection.
+
+**107 tests pass.** Whole-limb articulation is stronger; small contact slip,
+eight-frame stepping and far-leg occlusion remain. The strict zero-sliding gate
+is not claimed passed. See [v3 review and limitations](diagonal-v3-review.md),
+[scope verification](diagonals-v3-scope.json), and
+[prompts / reproducible sources](../../tools/cats-qa/diagonal-v3-src/README.md).
+
+---
+
+# Previous diagonal correction — historical
 
 Owner approved the original reels except the diagonal walks. Only those walks
 were replaced; the other 85 atlases and runtime remain unchanged.

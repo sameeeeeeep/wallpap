@@ -1,0 +1,35 @@
+{
+  "baselineCommit": "b14b487c3c2acbaf7bf696acce02c8227fcc07ce",
+  "changedAtlases": [
+    "scenes/art/sprites/cats/siamese/atlas/walk-far.webp",
+    "scenes/art/sprites/cats/siamese/atlas/walk-near.webp",
+    "scenes/art/sprites/cats/grey/atlas/walk-far.webp",
+    "scenes/art/sprites/cats/grey/atlas/walk-near.webp",
+    "scenes/art/sprites/cats/calico/atlas/walk-far.webp",
+    "scenes/art/sprites/cats/calico/atlas/walk-near.webp",
+    "scenes/art/sprites/cats/black/atlas/walk-far.webp",
+    "scenes/art/sprites/cats/black/atlas/walk-near.webp",
+    "scenes/art/sprites/cats/orange/atlas/walk-far.webp",
+    "scenes/art/sprites/cats/orange/atlas/walk-near.webp"
+  ],
+  "unchangedApprovedAtlases": 85,
+  "unchangedOtherClipMetadata": true,
+  "unchangedRuntime": true,
+  "finalAtlasSHA256": {
+    "scenes/art/sprites/cats/siamese/atlas/walk-far.webp": "fc9be72cf098fb5a760eb0e37240291c70055499723b83e72cbd5c33c28625cb",
+    "scenes/art/sprites/cats/siamese/atlas/walk-near.webp": "fbb1e3e28f4c4e971384c5bc086f452be0657b0955b564b6f8ab3558b141d1d3",
+    "scenes/art/sprites/cats/grey/atlas/walk-far.webp": "8948c94a8b88bc6f3c8af6dca603d290407a934b8d087ede9220b2326a249c1a",
+    "scenes/art/sprites/cats/grey/atlas/walk-near.webp": "15f2b3125589375827054a4bcd65e534c88b053ac037c5753c39af2e85b31e45",
+    "scenes/art/sprites/cats/calico/atlas/walk-far.webp": "3edd391f86ef75d2f04991722f116f78fd627fac4f612e141b1b95f51a66f44b",
+    "scenes/art/sprites/cats/calico/atlas/walk-near.webp": "6f6db74e41b371a8fb628f03d298681b534a48fab6aea8a3d58980d2544a6760",
+    "scenes/art/sprites/cats/black/atlas/walk-far.webp": "20c43a25399b189e6d381aff8dcaaf8f7987f87a74eb0d69cf4ea3947e5547d2",
+    "scenes/art/sprites/cats/black/atlas/walk-near.webp": "7e93cfc25e1cfcb6a7f6ede2d575699f4f6632b7b213afa2604cd31717047d70",
+    "scenes/art/sprites/cats/orange/atlas/walk-far.webp": "72965f52244d29bc28ea9087b20fadcf6accb8616c9d47823fab797b83a6ec76",
+    "scenes/art/sprites/cats/orange/atlas/walk-near.webp": "a26bc446b6915cadb32b26caf70433d520742dcb45c52be70dab9f3f9d9c3ad2"
+  },
+  "nodeTests": {
+    "passed": 107,
+    "failed": 0,
+    "skipped": 0
+  }
+}

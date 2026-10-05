@@ -1,5 +1,20 @@
 # Painted cat motion replacement — cats-gpt
 
+## Diagonal v3 — 2026-10-05
+
+Owner rejected the second diagonal pass: “not moving the full limb.” This pass
+replaces only the ten near/far walk atlases with new whole-sheet painted poses,
+using explicit shoulder/elbow and hip/knee/hock blocking at the approved side
+walk's eight phases. One fixed scale, upper-body registration and existing coat
+transforms preserve proportions and identities. Measured strides are 37.47 near /
+34.03 far; no runtime code or approved non-diagonal art changed.
+
+Five new 15-second 30 fps side-by-side WebKit comparisons and full-cycle strips:
+[review files](../shots/cats-gpt/README.md). [Detailed v3 review](../shots/cats-gpt/diagonal-v3-review.md)
+records actual improvement and remaining contact slip/occlusion; zero sliding is
+not claimed. 107 tests pass. Sources and exact built-in imagegen prompts:
+`tools/cats-qa/diagonal-v3-src/`. Earlier runs below are historical.
+
 ## Owner diagonal follow-up — 2026-10-05
 
 Owner verdict: “Diagonal walk is glitchy, rest is okay.” The approved non-diagonal

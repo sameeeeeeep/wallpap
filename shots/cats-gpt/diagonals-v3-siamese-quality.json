@@ -1,0 +1,44 @@
+{
+  "encodedFrames": 450,
+  "fps": 30,
+  "durationSeconds": 15.0,
+  "decodedAllFrames": true,
+  "cycleReviewedFrames": [
+    0,
+    29
+  ],
+  "mirrorCycleReviewFrames": [
+    225,
+    254
+  ],
+  "views": [
+    "side",
+    "near",
+    "far"
+  ],
+  "phaseComparison": "Equal one-second cycles; each panel travels at its own calibrated stride.",
+  "errors": [],
+  "visualReview": {
+    "method": "Viewed consecutive contact pages; every held exposure included",
+    "rightFacingFrames": [
+      0,
+      29
+    ],
+    "mirroredFrames": [
+      225,
+      254
+    ],
+    "views": [
+      "near",
+      "far"
+    ],
+    "fullLimbArticulation": "Improved; fore elbow and hind knee/hock flexion visible",
+    "registration": "No sheet-row jump or per-frame size normalization",
+    "footLock": "Not fully passed: small held-frame contact slip remains"
+  },
+  "atlasSHA256": {
+    "side": "8506f3b73811e0b9c7a5a8caa2e25f1750dbd7580a0c9762410cc4ce48eb6012",
+    "near": "fbb1e3e28f4c4e971384c5bc086f452be0657b0955b564b6f8ab3558b141d1d3",
+    "far": "fc9be72cf098fb5a760eb0e37240291c70055499723b83e72cbd5c33c28625cb"
+  }
+}

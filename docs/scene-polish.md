@@ -1106,3 +1106,50 @@ some repeated foreleg phases and ambiguous rear contacts prevent perfect foot
 locking with held supplied frames. Rear cadence explicitly shares the toward
 fit. Small action/view changes in painted proportions and marking boundaries
 also remain; this integration is not new owner signoff.
+## 2026-10-04 — Koi Pond small shoals (koi-shoals worktree)
+
+Added 3–5 independent shoals: 24 minnows on small screens, 44 at 1600×1000,
+60 on ultrawide. Each has cohesion/alignment/separation and a wandering target,
+occasional shared banking turns and restrained flank highlights. Silver-olive
+bodies have pale belly edges and faint lateral lines; at most one group is gold.
+Body length is about one seventh of a typical adult koi. Seven deforming spine
+segments and a forked, beating tail use the owner's explicit procedural-koi
+exception for this request; no still-image motion or generated art/prompts.
+
+Swept cursor segments startle nearby schools even when event endpoints miss;
+schools scatter and regroup. Only the nearest school considers a resting cursor,
+with a personal-space ring. Four capsules along each adult's real spine make
+minnows part around koi, including companions. They nibble 1.8% pellet portions,
+leaving at least 65% for koi; pellets shrink accordingly. Night slows the shoals,
+rain deepens them, calm eases their pace, and layout/avoid areas reject targets
+and slow passes. Existing koi input, atlas, music glints and companion glow stay
+intact. Minnows draw first in the existing underwater batch, using the same depth
+grade and refracted composite, below koi and lily pads. No new render passes or
+per-frame allocations in the added update/mesh paths; scratch storage is reused.
+
+LOOKED at 128 sequence frames across day/night/rain, left + interior widget avoid,
+3440×1440 left, 800×600, calm, and active AI companions/music. Each run uses
+`WKSHOT_FRAMES`, `?virtual=1`, a 2,200 px/s scripted sweep, a still cursor, and a
+real down/up food drop. All report zero JS/image errors. The day school spread
+grows from 39 to 87 px after the sweep, then returns to 55 px; a pellet goes from
+1.000 to 0.946 to 0.766 before adults consume the food. Rain mean depth is about
+0.91 versus 0.69 in day. Inspected crops show under-pad occlusion, curved bodies,
+quiet flanks, and adults displacing the feeding group. Final day sequence rerun
+after the algebra-only performance optimization. Raw PNGs deleted; JPEG contact
+sheets/detail crops and logs: `shots/koi-shoals/README.md`.
+
+Performance on Apple M1 / macOS 26.5.2, 1600×1000: 60 warmup + 300 timed frames
+per run using the native WebKit clock, bypassing virtual time. Median of three
+baseline/final run means: **1.053 → 1.187 ms/frame** for JS + driver submission.
+Draw calls remain **5 → 5**; vertex capacity stays 60,000 (2,112 minnow vertices).
+Final in-frame shoal subtotal is **0.240 ms**; separate warmed CPU-only batches
+measure **0.183 ms/frame**, block p95 **0.350 ms**. Background-load outliers are
+retained: a final whole-frame run reached 3.760 ms / 0.703 ms shoal wall time.
+The CPU-only blocks avoid driver calls and amortize WebKit's ~1 ms clock quantum;
+these are not GPU completion/display-latency measurements. Initial 0.563 ms
+subtotal prompted hoisting easing calculations and rejecting distant capsules
+before square roots. Full raw numbers/method: `tools/koi-shoals/README.md`.
+
+`node --test tests/*.cjs`: **104 tests, 104 pass, 0 fail**, including eight new
+behavior/geometry tests. No host changes, pushes, release, app rebuild/install,
+running-app interaction, stashes, or sibling-worktree edits. All commits local.

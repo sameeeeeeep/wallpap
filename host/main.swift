@@ -144,6 +144,9 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         client.enabled = sharePlayCounts; client.start(); return client
     }()
     lazy var playHost = PlayHost(app: self)
+    var pendingSceneLinks: [URL] = []
+    var sceneLinksReady = false
+    var handlingSceneLink = false
     var windows: [WallWindow] = []
     var status: NSStatusItem!
     var monitors: [Any] = []
@@ -624,6 +627,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
         DistributedNotificationCenter.default().addObserver(self, selector: #selector(unlocked),
             name: Notification.Name("com.apple.screenIsUnlocked"), object: nil)
         if ProcessInfo.processInfo.environment["LIVEWALL_DEV"] == "1" { installDevHook() }
+        sceneLinksReady = true
+        drainSceneLinks()
     }
 
     /// Dev only: `livewall/dev.sh js "<code>"` / `dev.sh snap out.png` talk to the
@@ -1591,7 +1596,8 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
     }
 
     @objc func pickScene(_ item: NSMenuItem) {
-        guard let id = item.representedObject as? String else { return }
+        guard let id = item.representedObject as? String, let scene = scenes.first(where: { $0.id == id }) else { return }
+        guard !scene.pro || isPro else { openPro(); return }
         sceneID = id
         if userPaused { userPaused = false; windows.forEach { $0.unfreeze() } }
         loadScene()

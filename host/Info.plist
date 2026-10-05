@@ -11,6 +11,12 @@
   <key>CFBundleShortVersionString</key><string>0.12.1</string>
   <key>CFBundleVersion</key><string>13</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>CFBundleURLTypes</key>
+  <array><dict>
+    <key>CFBundleURLName</key><string>live.wallpap.scene</string>
+    <key>CFBundleURLSchemes</key><array><string>wallpap</string></array>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+  </dict></array>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppleEventsUsageDescription</key><string>Music Mode reads what's playing in Music or Spotify (title, artist, artwork) so your wallpaper can show it, and lets you play/pause from the scene.</string>

@@ -19,7 +19,8 @@ struct CatalogEntry {
 
 private var catalogEntries: [CatalogEntry] = []
 private var installing: Set<String> = []
-let catalogURL = URL(string: ProcessInfo.processInfo.environment["WALLPAP_CATALOG"] ?? "https://wallpap.live/catalog.json")!
+private var installCompletions: [String: [(Bool) -> Void]] = [:]
+let catalogURL = URL(string: "https://wallpap.live/catalog.json")!
 let sharedRuntime = ["lw.js", "pet-motion.js", "astronomy.js", "moon.js", "music.js", "kit.js", "art/shared/moon.png"]
 
 /// Bundled + installed add-on scenes, bundled first, in menu order.
@@ -35,7 +36,7 @@ var addonDir: URL {
 struct Addon { let scene: Scene; let dir: URL; let version: Int }
 
 func validSceneID(_ id: String) -> Bool {
-    !id.isEmpty && id.count <= 40 && id.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "-" } && !allBuiltinScenes.contains { $0.id == id }
+    SceneLink.validID(id) && !allBuiltinScenes.contains { $0.id == id }
 }
 
 func readManifest(_ dir: URL) -> Addon? {
@@ -96,15 +97,18 @@ extension App {
         return catalogEntries.filter { (have[$0.id] ?? 0) < $0.version }
     }
 
-    func fetchCatalog() {
+    func fetchCatalog(completion: ((Result<[CatalogEntry], Error>) -> Void)? = nil) {
         var req = URLRequest(url: catalogURL); req.cachePolicy = .reloadRevalidatingCacheData; req.timeoutInterval = 20
         URLSession.shared.dataTask(with: req) { data, resp, _ in
-            guard (resp as? HTTPURLResponse)?.statusCode == 200, let data,
+            guard (resp as? HTTPURLResponse)?.statusCode == 200, resp?.url == catalogURL, let data,
                   let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let list = j["scenes"] as? [[String: Any]] else { return }
+                  let list = j["scenes"] as? [[String: Any]] else {
+                DispatchQueue.main.async { completion?(.failure(URLError(.cannotLoadFromNetwork))) }
+                return
+            }
             let entries: [CatalogEntry] = list.compactMap { m in
                 guard let id = m["id"] as? String, validSceneID(id), let z = m["zip"] as? String,
-                      let zip = URL(string: z, relativeTo: catalogURL)?.absoluteURL, zip.scheme == "https" else { return nil }
+                      let zip = URL(string: z, relativeTo: catalogURL)?.absoluteURL, zip.scheme == "https", zip.host == catalogURL.host, zip.user == nil, zip.password == nil, zip.port == nil else { return nil }
                 var e = CatalogEntry(id: id, title: m["title"] as? String ?? id, category: m["category"] as? String ?? "More",
                                      pro: m["pro"] as? Bool ?? true, version: m["version"] as? Int ?? 1, zip: zip,
                                      thumb: (m["thumb"] as? String).flatMap { URL(string: $0, relativeTo: catalogURL)?.absoluteURL })
@@ -118,6 +122,7 @@ extension App {
                 let have = Dictionary(uniqueKeysWithValues: addonScenes().map { ($0.scene.id, $0.version) })
                 for e in entries where (have[e.id] ?? Int.max) < e.version { self.installCatalogScene(e.id, pick: false) }
                 self.rebuildMenu()
+                completion?(.success(entries))
             }
         }.resume()
     }
@@ -129,18 +134,35 @@ extension App {
         installCatalogScene(id, pick: true)
     }
 
-    func installCatalogScene(_ id: String, pick: Bool) {
-        guard let e = catalogEntries.first(where: { $0.id == id }), !installing.contains(id) else { return }
+    func installCatalogScene(_ id: String, pick: Bool, completion: ((Bool) -> Void)? = nil) {
+        guard let e = catalogEntries.first(where: { $0.id == id }) else {
+            let alert = NSAlert(); alert.messageText = "Scene no longer available"
+            alert.informativeText = "Refresh Discover and try adding the scene again."
+            NSApp.activate(ignoringOtherApps: true); alert.runModal()
+            completion?(false); return
+        }
+        if let completion { installCompletions[id, default: []].append(completion) }
+        if installing.contains(id) {
+            if pick { installCompletions[id, default: []].append { ok in
+                if ok { let item = NSMenuItem(); item.representedObject = id; self.pickScene(item) }
+            } }
+            return
+        }
         installing.insert(id); rebuildMenu()
         URLSession.shared.downloadTask(with: e.zip) { tmp, resp, _ in
             var ok = false
-            if let tmp, (resp as? HTTPURLResponse)?.statusCode == 200 {
+            if let tmp, (resp as? HTTPURLResponse)?.statusCode == 200,
+               resp?.url?.scheme == "https", resp?.url?.host == catalogURL.host {
                 let fm = FileManager.default
                 let stage = fm.temporaryDirectory.appendingPathComponent("wallpap-\(UUID().uuidString)")
                 let p = Process()
                 p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
                 p.arguments = ["-x", "-k", tmp.path, stage.path]
-                try? p.run(); p.waitUntilExit()
+                do { try p.run(); p.waitUntilExit() } catch {
+                    DispatchQueue.main.async { self.finishCatalogInstall(id, entry: e, ok: false, pick: pick) }
+                    try? fm.removeItem(at: stage)
+                    return
+                }
                 // The zip holds either the scene files or one folder containing them.
                 var root = stage
                 if !fm.fileExists(atPath: stage.appendingPathComponent("scene.json").path),
@@ -154,18 +176,25 @@ extension App {
                 }
                 try? fm.removeItem(at: stage)
             }
-            DispatchQueue.main.async {
-                installing.remove(id)
-                if ok {
-                    self.installRuntime(into: addonDir.appendingPathComponent(id))
-                    if pick || self.sceneID == id { self.sceneID = id; self.loadScene() } else { self.rebuildMenu() }
-                } else {
-                    self.rebuildMenu()
-                    let a = NSAlert(); a.messageText = "Couldn't download “\(e.title)”"
-                    a.informativeText = "Check your connection and try again."; a.runModal()
-                }
-            }
+            DispatchQueue.main.async { self.finishCatalogInstall(id, entry: e, ok: ok, pick: pick) }
         }.resume()
+    }
+
+    private func finishCatalogInstall(_ id: String, entry: CatalogEntry, ok: Bool, pick: Bool) {
+        installing.remove(id)
+        if ok {
+            installRuntime(into: addonDir.appendingPathComponent(id))
+            if pick {
+                let item = NSMenuItem(); item.representedObject = id; pickScene(item)
+            } else if sceneID == id { loadScene() }
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert(); alert.messageText = "Couldn't download “\(entry.title)”"
+            alert.informativeText = "Check your connection and try again."; alert.runModal()
+        }
+        rebuildMenu()
+        let callbacks = installCompletions.removeValue(forKey: id) ?? []
+        callbacks.forEach { $0(ok) }
     }
 
     var installingScenes: Set<String> { installing }

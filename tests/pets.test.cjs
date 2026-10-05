@@ -1,4 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+function bodyOf(r,p){const b=r.pets.box(p);return (b[2]-b[0])*.9;}
 function rig(roster=['orange','golden'],extra={},scene='cats',atlas=false){
  const listeners={},LW={settings:{pets:true},virtual:true,pointer:{x:0,y:0,inside:false},focused:true,on:(k,f)=>(listeners[k]??=[]).push(f)};
  class Image{set src(v){this.srcName=v}}
@@ -182,13 +183,21 @@ test('atlas loader shares image frames between scene instances without sharing p
  r.pets.forceWalk(0,600,600);r.tick(60);assert.notEqual(a._catMotion,b._catMotion);
 });
 
-test('atlas follow keeps picked perk, stalk, wiggle and precise directional pounce for every coat',()=>{
+test('atlas follow walks up to a resting cursor and sits, with no stalk or pounce, for every coat',()=>{
  for(const coat of ['orange','black','grey','calico','siamese']){
-  const r=rig([coat],{},'cats',true),p=r.pets.items[0];assert.ok(p.asset.atlas,coat+' must use atlas');point(r,455,600);tap(r,p);
-  const seen=new Set();for(let i=0;i<1000&&!p.lastPounce;i++){r.tick();seen.add(p.follow?.phase);}
-  assert.ok(p.lastPounce,coat+': '+JSON.stringify({state:p.state,follow:p.follow,x:p.x}));assert.ok(seen.has('stalk')&&seen.has('wiggle')&&seen.has('pounce'));assert.ok(Math.hypot(p.x-455,p.y-600)<.01);
-  point(r,455,600,false);r.emit('leave');const x=p.x;r.tick(40);assert.equal(p.x,x);r.emit('pause');assert.equal(p.picked,false);
+  const r=rig([coat],{},'cats',true),p=r.pets.items[0];assert.ok(p.asset.atlas,coat+' must use atlas');point(r,700,600);tap(r,p);
+  const seen=new Set();for(let i=0;i<300;i++){r.tick();seen.add(p.follow?.phase);seen.add(p.state);}
+  assert.ok(!seen.has('stalk')&&!seen.has('wiggle')&&!seen.has('pounce'),coat+': '+[...seen]);
+  assert.equal(p.state,'followWait');assert.ok(Math.hypot(p.x-700,p.y-600)<bodyOf(r,p)*.8);assert.ok(p.spP.startsWith('sit-'),p.spP);
+  point(r,700,600,false);r.emit('leave');const x=p.x;r.tick(40);assert.equal(p.x,x);r.emit('pause');assert.equal(p.picked,false);
  }
+});
+test('followed cat on a ledge hops down beside a cat blocking the usual landing, never sit/stand looping',()=>{
+ const S={ledges:[{id:'0',x0:900,x1:1100,y:500,depth:500}],links:[[{surf:'floor',x:1000,y:620},{surf:'0',x:1000},'cat']],homes:[{x:1000,y:500,surf:'0'},{x:1000,y:625}]};
+ const r=rig(['grey','siamese'],S,'cats',true),[p,o]=r.pets.items;r.pets.state(o,'sit',1e9);o.dur=1e9;o.t=0;
+ point(r,700,800);tap(r,p);let flips=0,last=p.state;
+ for(let i=0;i<240&&p.surf!=='floor';i++){r.tick();if(p.state!==last&&['sit','move'].includes(p.state))flips++;last=p.state;}
+ assert.equal(p.surf,'floor',JSON.stringify({state:p.state,x:p.x,y:p.y}));assert.ok(flips<2,'flips '+flips);
 });
 test('atlas cats leave/return, take shelter and eat through the public API',()=>{
  const r=rig(['orange'],{spots:[{id:'shelter',x:500,y:600,kind:'shelter'},{id:'food',x:800,y:600,kind:'food'}],supplies:{food:1,water:1}},'cats',true),p=r.pets.items[0];

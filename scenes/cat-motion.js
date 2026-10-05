@@ -52,8 +52,8 @@ function startTurn(p,dir,next){
 function pose(p,dt){
  const s=p.asset;if(!s.ready)return;
  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];p.spP=f.name;p.dir=f.dir;p.prev=null;p.poseT=1;return;}
- // A followed cat waits on its feet, ready to go, and only sits after a real pause (~2.5 s).
- const st=p.picked&&['followWait','followLook'].includes(p.state)&&p.t<2.5?'stand':p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
+ // A followed cat that arrives stands a beat, then sits facing you.
+ const st=p.picked&&['followWait','followLook'].includes(p.state)&&p.t<.6?'stand':p.state;let dir=p._catDir||(p._catDir={view:'toward',face:1,octant:2});
  let key='walk-'+dir.view,idx=0;
  const motion=p._catMotion||(p._catMotion={distance:p.gd,phase:0,gait:'walk'});
  if(st==='move'||st==='stand'){
@@ -94,13 +94,13 @@ function pose(p,dt){
  }
  if((st==='move'||st==='stand')&&p._catRest&&p._catRest!=='stand'){
   const asleep=p._catRest==='sleep'||p._catRest==='loaf';
-  p._catTransition={key:asleep?'rest':'sit',indices:p._catRest==='loaf'?[4,3,2,1,0]:[7,6,5,4,3,2,1,0],t:0,standAfter:asleep};p._catRest='stand';
+  p._catTransition={key:asleep?'rest':'sit',indices:p._catRest==='loaf'?[4,3,2,1,0]:[7,6,5,4,3,2,1,0],t:0,standAfter:asleep,fast:!!p.picked};p._catRest='stand';
  }
  if(p._catTransition){
-  const tr=p._catTransition;tr.t+=dt;const i=Math.floor(tr.t/.085);
+  const tr=p._catTransition;tr.t+=dt;const i=Math.floor(tr.t/(tr.fast?.045:.085));  // a followed cat gets up quickly
   if(i<tr.indices.length){key=tr.key;idx=tr.indices[i];p.dir=1;p.sequence={cat:true};}
   else if(tr.restAfter){p._catTransition={key:'rest',indices:tr.loaf?[0,1,2,3,4]:[0,1,2,3,4,5,6,7],t:0};}
-  else if(tr.standAfter){p._catTransition={key:'sit',indices:[7,6,5,4,3,2,1,0],t:0};}
+  else if(tr.standAfter){p._catTransition={key:'sit',indices:[7,6,5,4,3,2,1,0],t:0,fast:tr.fast};}
   else{p._catTransition=null;p.sequence=null;}
  }
  if(p.turn){const f=p.turn.steps[Math.min(p.turn.steps.length-1,Math.floor(p.turn.t/.065))];p.spP=f.name;p.dir=f.dir;}

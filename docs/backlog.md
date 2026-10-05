@@ -102,3 +102,10 @@ _2026-10-03 ~12:45: user low on session limit — stopped after sprite walk. Nex
 - [~] Clouds: shared scene-id seed, bounded perspective, broader formations and horizon haze implemented; template/generator wired and sky-kites migrated off repeated still clouds. Seven full before/after day/night/rain + mirrored/ultrawide sequences inspected. Three-scene acceptance remains blocked by missing art.
 
 - [ ] Audit acceptance: recover the missing beach/garden/sky-kites assets with owner authorization, capture their full before/after sequences, and finish ten-scene signoff. Seven available scenes pass G1 (.187–.245 night luma), zero render errors; 64 Node tests pass. Evidence: `shots/audit-fix/`.
+
+## Landing hero — owner feedback, 2026-10-05
+- [x] Impactful five-word headline; five copy options saved in `shots/hero/copy-options.md`.
+- [x] Immediate full-viewport journey through all twelve playground scenes; one live iframe, still prepaint, adjacent still preload, subtle persistent navigation/download/skip.
+- [x] One delayed contextual hint per scene, interaction/timeout dismissal; ghost tour opt-in only.
+- [x] Mobile/data-saving/reduced-motion still fallback; iframe wheel and arrow-key navigation; end CTA; existing fullscreen/menu, Pets, Play, pricing, FAQ and metadata retained.
+- [x] Thirty desktop/mobile light/dark WebKit screenshots, interaction/unload checks across twelve scenes, reduced-motion capture, stepped MP4, 96 Node tests. Evidence and reproduction: `docs/landing-hero.md`, `shots/hero/`.

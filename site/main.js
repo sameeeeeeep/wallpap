@@ -4,7 +4,7 @@
    time) · Music (original demo tracks synthesised with WebAudio + beat analysis, fed to the scene
    exactly like the Mac app feeds it) · the real menu-bar panel (scenes/menu.html) · Playground (the
    hero: headline, live scene, picker, controls; fullscreen with the controls dropping from the menu
-   bar's wave) · Tour (a ghost cursor that explores until you take over) · Try (the feature tiles
+   bar's wave) · Tour (an opt-in ghost cursor walkthrough) · Try (the feature tiles
    under the hero run their demo in the hero scene). */
 
 // ─── Links ───────────────────────────────────────────────────────────────────
@@ -22,8 +22,13 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const phoneMQ = matchMedia('(max-width: 760px)');
+const motionMQ = matchMedia('(prefers-reduced-motion: reduce)');
+let reduceMotion = motionMQ.matches;
+motionMQ.addEventListener('change', (e) => { reduceMotion = e.matches; });
+const phoneMQ = matchMedia('(max-width: 760px), (hover: none) and (pointer: coarse)');
+const phoneClass = () => document.documentElement.classList.toggle('phone-preview', phoneMQ.matches);
+phoneMQ.addEventListener('change', phoneClass);
+phoneClass();
 const saveData = !!(navigator.connection && navigator.connection.saveData);
 const smooth = () => (reduceMotion ? 'auto' : 'smooth');
 const idle = (fn, t) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: t }) : setTimeout(fn, 300));
@@ -69,7 +74,7 @@ const SCENES = [
     tips: ['Click the turntable to drop the needle', 'Your album art fills the big frame', 'Pet the cat, or the pup'], actions: [['pet', 'Pet the cat']] },
   { id: 'speakeasy', name: 'Speakeasy', cat: 'City Nights', hour: 22, weather: 'clear', music: true, glow: '150 60 50',
     title: 'Your playlist, in a 1920s jazz bar.', pitch: 'Your album art goes up in lights, and a ghost plays the piano on the beat.',
-    tips: ['Click the jukebox to play or pause', 'Click the marquee for the next track', 'A ghost plays the piano on the beat'], actions: [['pet', 'Pet the cat']] },
+    tips: ['Click the piano keys to play a note', 'Your music gives the piano its rhythm', 'Click a cat to make a friend'], actions: [['pet', 'Pet the cat']] },
   { id: 'rooftop', name: 'Rooftop', cat: 'City Nights', hour: 20.5, weather: 'clear', music: true, glow: '80 80 140',
     title: 'String lights, and your music on the projector.', pitch: 'Album art on the wall, and a far-off firework on the big beats.',
     tips: ['Click the boombox to play or pause', 'Click the projector for the next track', 'On a big beat, a far-off firework'], actions: [['pet', 'Pet the cat']] },
@@ -582,7 +587,7 @@ class SceneHost {
   }
   drop() {
     if (!this.frame) return;
-    this.frame.remove(); this.frame = null; this.ready = false;
+    this.frame.remove(); this.frame = null; this.ready = false; this.focusSent = null;
   }
   onLoad(f) {
     if (f !== this.frame || this.ready) return;
@@ -604,7 +609,7 @@ class SceneHost {
     this.flushAttach();
     this.emit('loaded');
   }
-  fadeIn(f) { setTimeout(() => { if (f === this.frame) { f.classList.add('ready'); this.flushWaiters(); this.applyFocus(); } }, 380); }
+  fadeIn(f) { setTimeout(() => { if (f === this.frame) { f.classList.add('ready'); this.flushWaiters(); this.applyFocus(); this.emit('live'); } }, 380); }
   flushAttach() { const w = this.attachWaiters || []; this.attachWaiters = []; w.forEach((fn) => fn()); }
   whenAttached(run, ms = 5000) {
     if (this.ready) return Promise.resolve();
@@ -815,9 +820,11 @@ class SceneHost {
 const Live = {
   owner: null,
   update() {
-    const cand = HOSTS.filter((h) => h.wantLive && h.ratio > 0.15).sort((a, b) => b.ratio - a.ratio)[0] || null;
+    const cand = document.hidden ? null : HOSTS.filter((h) => h.wantLive && h.ratio > 0.15).sort((a, b) => b.ratio - a.ratio)[0] || null;
     this.owner = cand;
-    HOSTS.forEach((h) => h.setActive(h === cand));
+    // Dispose the old rendering context before starting the next one.
+    HOSTS.filter((h) => h !== cand).forEach((h) => { h.setActive(false); h.drop(); });
+    if (cand) cand.setActive(true);
     syncMusic();
   },
 };
@@ -831,7 +838,7 @@ Music.on((type, f) => {
   if (type === 'frame') { if (h && h.music) { h.post('beat', f); h.renderProgress(); } return; }
   HOSTS.forEach((x) => { if (x.music) x.post('nowplaying', Music.nowPlaying()); x.renderPlayer(); });
 });
-document.addEventListener('visibilitychange', () => { HOSTS.forEach((h) => h.applyFocus()); syncMusic(); });
+document.addEventListener('visibilitychange', () => Live.update());
 
 // ─── Ghost cursor ────────────────────────────────────────────────────────────
 class Ghost {
@@ -878,14 +885,14 @@ const PG = {
     const pick = (e) => { const b = e.target.closest('[data-scene]'); if (b) { this.goLive(); this.select(b.dataset.scene); Tour.userActivity(); } };
     this.picker.addEventListener('click', pick); this.fsPick.addEventListener('click', pick);
     this.bindControls();
-    if (saveData) $('#playLive').hidden = false;
+    if (saveData || reduceMotion) $('#playLive').hidden = false;
     $('#playLive').addEventListener('click', () => this.goLive(true));
     if (!saveData) this.sec.addEventListener('pointerdown', () => this.goLive(), { capture: true, passive: true, once: true });
     this.select(first, { initial: true });
   },
   goLive(force) {
     const h = this.host;
-    if (h.wantLive || (saveData && !force)) return;
+    if (h.wantLive || phoneMQ.matches || ((saveData || reduceMotion) && !force)) return;
     $('#playLive').hidden = true;
     h.wantLive = true; Live.update(); Tour.maybeStart(2600);
   },
@@ -1058,9 +1065,9 @@ function radioKeys(group) {
 // ─── Tour: a ghost cursor explores the hero scene until you take over ─────────
 // Starts only while the hero's screen is well in view and the live scene is up; any real touch,
 // wheel, key or mouse move in the hero (iframes included) hands control back, and it only resumes
-// after 25 s without any — even if the visitor scrolls away and back. Off in fullscreen.
+// after 25 s without any, only once opted into. Off by default and in fullscreen.
 const Tour = {
-  mode: reduceMotion ? 'off' : 'auto', running: false, run: null, i: 0, inView: false, lastUser: -1e9, IDLE: 25000,
+  mode: 'off', running: false, run: null, i: 0, inView: false, lastUser: -1e9, IDLE: 25000,
   init() {
     this.btn = $('#tourBtn'); this.cap = $('#tourCap'); this.ghost = new Ghost(PG.sec);
     const h = PG.host;
@@ -1094,7 +1101,7 @@ const Tour = {
     addEventListener('blur', () => setTimeout(() => { const a = document.activeElement; if (a && a.tagName === 'IFRAME' && area.contains(a)) this.userActivity(); }, 0));
     new IntersectionObserver((es) => { es.forEach((e) => { this.inView = e.isIntersecting && e.intersectionRatio >= 0.45; }); this.inView ? this.maybeStart(1400) : this.stop(); }, { threshold: [0, 0.45, 0.7] }).observe($('#playground'));
     document.addEventListener('visibilitychange', () => (document.hidden ? this.stop() : this.maybeStart(1500)));
-    if (reduceMotion) this.renderList();
+    // The walkthrough is opt-in, including for reduced-motion visitors.
     this.idleCaption(); this.label();
   },
   defineSteps() {
@@ -1178,7 +1185,7 @@ const Tour = {
   },
   label() {
     const touring = this.mode === 'auto' && (this.running || this.resumeT);
-    this.btn.textContent = touring ? 'Explore yourself' : 'Take the tour';
+    this.btn.textContent = touring ? 'Explore yourself' : 'Show me around';
     this.btn.setAttribute('aria-pressed', String(!!touring));
     $('#tourbar').classList.toggle('touring', !!this.running);
   },
@@ -1187,7 +1194,7 @@ const Tour = {
     if (reduceMotion) return set();
     c.parentElement.classList.add('out'); setTimeout(() => { set(); c.parentElement.classList.remove('out'); }, 220);
   },
-  idleCaption() { if (this.cap) this.cap.textContent = PG.host.scene.tips[0]; },
+  idleCaption() { if (this.cap) this.cap.textContent = phoneMQ.matches ? 'A preview of your next desktop.' : reduceMotion ? 'Still preview. Play when you’re ready.' : PG.host.scene.tips[0]; },
   renderList() {
     const l = $('#tourList'); l.hidden = false;
     l.innerHTML = this.steps.map((s, i) => `<li><button type="button" data-ts="${i}">${s.cap}</button></li>`).join('');
@@ -1267,10 +1274,165 @@ const Try = {
   },
 };
 
+// ─── Journey: one pinned viewport, one disposable live scene ────────────────
+const Journey = {
+  order: ['koi', 'cats', 'cafe', 'train', 'grass', 'cabin', 'records', 'ramen', 'rooftop', 'speakeasy', 'bowls', 'cymatics'],
+  hints: {
+    koi: ['Move your cursor through the water', 'move'],
+    cats: ['Click a cat. Make a friend.', 'down'],
+    cafe: ['Tap the record player', 'media'],
+    train: ['Click the window. Watch the world rush by.', 'down'],
+    grass: ['Brush through the meadow', 'move'],
+    cabin: ['Click the fire for a few sparks', 'down'],
+    records: ['Tap the turntable', 'media'],
+    ramen: ['Brush the hanging curtain', 'move'],
+    rooftop: ['Tap the projector for another track', 'media'],
+    speakeasy: ['Try a few piano keys', 'down'],
+    bowls: ['Click a bowl. Let it sing.', 'down'],
+    cymatics: ['Tap the sand. Find its rhythm.', 'media'],
+  },
+  index: -1, seen: new Set(), active: false,
+  init() {
+    this.el = $('#journey'); this.stage = $('#journeyStage'); this.hint = $('#journeyHint');
+    this.motion = motionMQ;
+    this.el.style.setProperty('--scene-count', this.order.length);
+    this.host = new SceneHost($('#journeyScreen'), { name: 'journey', interactive: true, scene: this.order[0] });
+    // SceneHost supplies the same app bridge as the playground; the journey has no desktop chrome.
+    [...this.host.screen.children].filter((el) => !el.classList.contains('poster')).forEach((el) => { el.hidden = true; });
+    this.host.on((type) => {
+      if (type === 'loaded') this.attach();
+      if (type === 'live') { $('#journeyMode').textContent = 'Live & interactive'; this.queueHint(); }
+    });
+    this.host.onMedia = (cmd) => {
+      this.dismissHint();
+      // Sound begins only with a deliberate in-scene media action.
+      Sound.set(true);
+      const playing = Music.playing;
+      this.host.setMusic(true);
+      if (cmd === 'playpause') {
+        Music.userPaused = playing;
+        if (playing) Music.pause(); else Music.play();
+      } else Music.next(cmd === 'previous' ? -1 : 1);
+    };
+    $('#journeyProgress').innerHTML = this.order.map(() => '<i></i>').join('');
+    $('#journeyPrev').addEventListener('click', () => this.go(this.index - 1));
+    $('#journeyNext').addEventListener('click', () => this.go(this.index + 1));
+    $('.journey-skip').addEventListener('click', (e) => { e.preventDefault(); this.go(this.order.length); });
+    $('.journey-entry').addEventListener('click', (e) => { e.preventDefault(); this.go(0); });
+    $('.journey-wordmark').addEventListener('click', (e) => { e.preventDefault(); this.go(-1); });
+    this.key = (e) => {
+      if (!this.active || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest?.('input,select,textarea,[contenteditable="true"]')) return;
+      const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      if (d && !e.repeat) { e.preventDefault(); this.go(this.index + d); }
+      if (e.key === 'Escape') { e.preventDefault(); this.go(this.order.length); }
+    };
+    document.addEventListener('keydown', this.key);
+    let pending = false;
+    this.schedule = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; this.update(); }); } };
+    addEventListener('scroll', this.schedule, { passive: true });
+    addEventListener('resize', this.schedule);
+    document.addEventListener('visibilitychange', () => this.update());
+    const modeChange = () => {
+      if (this.still()) { PG.host.wantLive = false; PG.host.drop(); Tour.setMode('off'); }
+      else PG.goLive();
+      Tour.idleCaption();
+      this.index = -1; this.update();
+    };
+    phoneMQ.addEventListener('change', modeChange); this.motion.addEventListener('change', modeChange);
+    this.update();
+  },
+  still() { return phoneMQ.matches || this.motion.matches || saveData; },
+  go(index) {
+    const top = this.el.getBoundingClientRect().top + scrollY;
+    const y = index < 0 ? 0 : index >= this.order.length ? $('#journey-end').offsetTop : top + index * this.stage.offsetHeight;
+    // A single scroll animation never runs through/loading every intermediate scene on Skip.
+    if (index < 0 || index >= this.order.length) {
+      scrollTo({ top: y, behavior: 'instant' });
+      (index < 0 ? $('#hero-title') : $('#journey-end')).focus({ preventScroll: true });
+    } else scrollTo({ top: y, behavior: this.motion.matches ? 'instant' : 'smooth' });
+  },
+  update() {
+    const r = this.el.getBoundingClientRect(), h = this.stage.offsetHeight;
+    const wasActive = this.active;
+    this.active = r.top < innerHeight * .5 && r.bottom > innerHeight * .5;
+    document.documentElement.classList.toggle('in-journey', this.active);
+    const index = clamp(Math.floor((-r.top + h * .35) / h), 0, this.order.length - 1);
+    this.host.wantLive = this.active && !this.still() && !document.hidden;
+    if (index !== this.index) this.select(index);
+    else if (this.active && !wasActive && this.still()) this.queueHint();
+    if (!this.active || document.hidden) this.clearHint();
+    if (!this.host.wantLive) this.host.drop();
+    Live.update();
+    if (this.host.active) this.host.spawn();
+  },
+  select(index) {
+    this.clearHint(); this.index = index;
+    const id = this.order[index], s = sceneById(id), h = this.host;
+    // Dispose immediately, even when the user scrolls faster than the network can load.
+    ++h.switchTok; h.drop(); h.sceneId = id; h.env = { hour: s.hour, weather: s.weather };
+    h.poster.src = `img/${id}.jpg`; h.poster.alt = `${s.name} wallpaper preview`;
+    h.music = false; h.syncChrome();
+    $('#journeyName').textContent = s.name; $('#journeyCategory').textContent = s.cat;
+    $('#journeyMode').textContent = this.still() ? 'Still preview · comes alive on your Mac' : 'Preview · opening this world';
+    const number = String(index + 1).padStart(2, '0');
+    $('#journeyCount').textContent = `${number} / ${this.order.length}`;
+    $('#journeyCount').setAttribute('aria-label', `Scene ${index + 1} of ${this.order.length}`);
+    $$('#journeyProgress i').forEach((el, i) => el.classList.toggle('visited', i <= index));
+    $('#journeyPrev').setAttribute('aria-label', index ? 'Previous scene' : 'Back to hero');
+    $('#journeyNext').setAttribute('aria-label', index === this.order.length - 1 ? 'Finish exploring' : 'Next scene');
+    // Only stills are prefetched. Never a second live rendering context.
+    for (const next of [index - 1, index + 1]) if (this.order[next]) { const im = new Image(); im.src = `img/${this.order[next]}.jpg`; }
+    this.stage.dataset.scene = id;
+    if (this.still() && this.active) this.queueHint();
+  },
+  clearHint() {
+    clearTimeout(this.hintDelay); clearTimeout(this.hintExpiry);
+    this.hint.classList.remove('visible');
+  },
+  dismissHint() { this.seen.add(this.host.sceneId); this.clearHint(); },
+  queueHint() {
+    const id = this.host.sceneId;
+    if (this.seen.has(id) || !this.active) return;
+    this.clearHint();
+    this.hint.textContent = this.still() ? 'Scroll to discover the next world' : this.hints[id][0];
+    this.hintDelay = setTimeout(() => {
+      if (!this.active || this.host.sceneId !== id || this.seen.has(id)) return;
+      this.hint.classList.add('visible');
+      this.seen.add(id);
+      this.hintExpiry = setTimeout(() => this.clearHint(), 5200);
+    }, 1400);
+  },
+  attach() {
+    const win = this.host.frame?.contentWindow;
+    if (!win) return;
+    win.addEventListener('keydown', this.key);
+    // Canvas scenes have no scrollable content. Forward their wheel to the document so
+    // the journey is never a scroll trap, including when the pointer is over an iframe.
+    win.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) return;
+      e.preventDefault();
+      scrollBy({ top: e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1), behavior: 'instant' });
+    }, { passive: false });
+    // These scenes play notes directly rather than sending a media-player message.
+    // Unlock their sound on the visitor's first click, before LW handles that click.
+    if (['bowls', 'speakeasy'].includes(this.host.sceneId)) {
+      win.addEventListener('pointerdown', () => { if (!Sound.on) Sound.set(true); }, { capture: true, once: true });
+    }
+    const kind = this.hints[this.host.sceneId][1];
+    let last = null;
+    win.addEventListener('pointermove', (e) => {
+      if (kind === 'move' && last && Math.hypot(e.clientX - last[0], e.clientY - last[1]) > 3) this.dismissHint();
+      last = [e.clientX, e.clientY];
+    }, { passive: true });
+    win.addEventListener('pointerdown', () => { if (kind === 'down') this.dismissHint(); }, { passive: true });
+  },
+};
+
 // ─── Boot ────────────────────────────────────────────────────────────────────
 PG.init();
 Tour.init();
 Try.init();
+Journey.init();
 Live.update();
 // The live scene starts after the page has loaded and the browser is idle; the poster carries the
 // first paint. (Any touch in the hero, Fullscreen or a "Try it" starts it sooner.)

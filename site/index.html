@@ -53,20 +53,20 @@
 <main id="main">
   <!-- ───────────── Hero: the headline and the live, playable scene ─────────────
        The poster shows first; main.js starts the live scene after the page has loaded (or on the
-       first click here). The controls sit beside the screen (a bottom sheet on phones) and drop
-       from the menu bar's wave in fullscreen. -->
+       first click here). Fullscreen opens the playground; its controls drop
+       from the menu bar's wave. Phones use a still preview. -->
   <section class="hero" id="scenes" aria-labelledby="hero-title">
     <div class="hero-in">
       <header class="hero-head">
-        <h1 id="hero-title">Your desktop,<br>but alive.</h1>
+        <h1 id="hero-title" tabindex="-1">A world behind<br>your work.</h1>
         <div class="hero-side">
-          <p class="lede">Swap the still picture behind your apps for a scene you can touch. Twelve scenes, all free — and this one is running live. Click it.</p>
+          <p class="lede">Live wallpapers. Made to be touched.</p>
           <div class="hero-cta">
             <a class="btn btn-dark btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">
               <svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.5-1-2.5-3.9zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>
-              Download free
+              Download for Mac
             </a>
-            <p class="meta">macOS 13+ · Apple Silicon &amp; Intel<br>Signed &amp; notarized by Apple</p>
+            <p class="meta">Free · macOS 13+<br>Apple Silicon &amp; Intel</p>
           </div>
         </div>
       </header>
@@ -85,7 +85,7 @@
           <div class="tourbar" id="tourbar">
             <p class="tb-cap"><span class="tb-dot" aria-hidden="true"></span><span id="tourCap">This is the real scene, running live. Click it.</span></p>
             <div class="tb-acts">
-              <button class="btn btn-ghost btn-small" type="button" id="tourBtn" aria-pressed="false">Take the tour</button>
+              <button class="btn btn-ghost btn-small" type="button" id="tourBtn" aria-pressed="false">Show me around</button>
               <button class="btn btn-ghost btn-small" id="fsBtn" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Fullscreen</span></button>
               <button class="btn btn-ghost btn-small sheet-btn" id="sheetBtn" type="button" aria-controls="panel" aria-expanded="false"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>Controls</button>
               <button class="btn btn-dark btn-small sound-toggle" type="button" data-sound-toggle aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"/><path class="sw-on" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg><span>Play with sound</span></button>
@@ -125,8 +125,48 @@
           <p class="fine p-foot">Pro features are unlocked in this preview.</p>
         </aside>
       </div>
+      <a class="journey-entry" href="#journey">Scroll into another world <span aria-hidden="true">↓</span></a>
       <div class="scrim" id="scrim" hidden></div>
     </div>
+  </section>
+
+  <section class="journey" id="journey" aria-label="Explore twelve living worlds">
+    <div class="journey-stage" id="journeyStage">
+      <div class="screen journey-screen" id="journeyScreen">
+        <img class="poster" src="img/koi.jpg" alt="Koi swimming beneath lily pads" width="1440" height="900" loading="lazy" decoding="async">
+      </div>
+      <div class="journey-shade" aria-hidden="true"></div>
+      <div class="journey-top">
+        <a class="journey-wordmark" href="#scenes" aria-label="wallpap — back to the hero">wallpap</a>
+        <a class="journey-download" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">Download for Mac <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="journey-hint" id="journeyHint" role="status"></p>
+      <div class="journey-bottom">
+        <div class="journey-caption" aria-live="polite" aria-atomic="true">
+          <p class="journey-category" id="journeyCategory">Nature</p>
+          <h2 id="journeyName">Koi Pond</h2>
+          <p class="journey-mode" id="journeyMode">Wallpaper preview</p>
+        </div>
+        <div class="journey-controls">
+          <div class="journey-progress" id="journeyProgress" aria-hidden="true"></div>
+          <div class="journey-navigation">
+            <button id="journeyPrev" type="button" aria-label="Previous scene">↑</button>
+            <span id="journeyCount" aria-label="Scene 1 of 12">01 / 12</span>
+            <button id="journeyNext" type="button" aria-label="Next scene">↓</button>
+            <a href="#journey-end" class="journey-skip">Skip</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="journey-end" id="journey-end" aria-labelledby="journey-end-title" tabindex="-1">
+    <p class="eyebrow">A little further from ordinary.</p>
+    <h2 id="journey-end-title">Bring a world<br>home.</h2>
+    <p>All twelve scenes. Free on your Mac.</p>
+    <a class="btn btn-dark btn-lg" data-download href="https://github.com/sameeeeeeep/wallpap/releases/latest/download/wallpap.dmg">Download for Mac</a>
+    <p class="meta">macOS 13+ · Signed &amp; notarized by Apple</p>
+    <a class="journey-onward" href="#pricing">Explore plans <span aria-hidden="true">↓</span></a>
   </section>
 
   <!-- ───────────── What it does: small tiles; "Try it" runs each one in the hero scene ───────────── -->

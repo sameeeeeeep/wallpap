@@ -868,7 +868,9 @@ class SceneHost {
 const Live = {
   owner: null, keep: null, linger: null, lingerUntil: 0,
   update() {
-    const cand = document.hidden ? null : HOSTS.filter((h) => h.wantLive && h.ratio > 0.15).sort((a, b) => b.ratio - a.ratio)[0] || null;
+    // The screen in front wins (the journey once it is pinned over the zoomed hero, where both fill the
+    // window); otherwise the most visible one.
+    const cand = document.hidden ? null : HOSTS.filter((h) => h.wantLive && h.ratio > 0.15).sort((a, b) => (b.front ? 1 : 0) - (a.front ? 1 : 0) || b.ratio - a.ratio)[0] || null;
     // Hand-over: a live scene keeps running until the next one is live too (the hero's zoom into the
     // journey never shows a still), then it is disposed. Otherwise the old context goes first.
     if (this.owner && cand && this.owner !== cand && this.owner.isLive() && !cand.isLive()) this.keep = this.owner;
@@ -1420,6 +1422,7 @@ const Journey = {
     document.documentElement.classList.toggle('in-journey', this.active);
     const index = clamp(Math.floor((-r.top + h * .35) / h), 0, this.order.length - 1);
     this.host.wantLive = this.active && !this.still() && !document.hidden;
+    this.host.front = this.active;
     if (index !== this.index) this.select(index);
     else if (this.active && !wasActive && this.still()) this.queueHint();
     if (!this.active || document.hidden) this.clearHint();

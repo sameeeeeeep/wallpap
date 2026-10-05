@@ -4,134 +4,179 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
 <title>wallpap</title>
-<!-- Menu-bar panel (host/Panel.swift). Styled after wallpap.live's control column.
-     Host → page: render(state). Page → host: webkit.messageHandlers.panel.postMessage({a, v, tag}).
-     Opened standalone in a browser it renders a mock state so it can be designed in isolation. -->
+<!-- Menu-bar panel (host/Panel.swift; the website embeds it too) — the scene on top, then cards. A collapsed card shows its quick options;
+     tap its header (or ⌄) to expand the full options in place. Same host contract as menu.html:
+     Host → page: render(state). Page → host: webkit.messageHandlers.panel.postMessage({a, v, tag}). -->
 <style>
-:root{--ink:#20382d;--ink-2:#556158;--ink-3:#6c746b;--line:#d7dcd1;--card:#e9ede3;--card-2:#dfe6d8;--accent:#335c41;--bg:rgba(246,244,236,.9);--ease:cubic-bezier(.22,.8,.24,1)}
-:root{--knob:#fff;--sel:#fff;--sel-ink:var(--ink);--solid:var(--ink);--solid-ink:#fff}
-/* Dark: same green-ink identity, inverted — follows the macOS appearance */
+:root{--ink:#1d2a23;--ink-2:#55615a;--ink-3:#89928b;--bg:rgba(244,243,236,.94);--card:rgba(29,42,35,.055);--tile:rgba(29,42,35,.07);--tile-2:rgba(29,42,35,.12);--well:rgba(255,255,255,.75);
+  --on:#2f5a40;--on-ink:#fff;--ring:#2f5a40;--line:rgba(29,42,35,.09);--ease:cubic-bezier(.22,.8,.24,1)}
 @media (prefers-color-scheme: dark){
-  :root{--ink:#e7ede4;--ink-2:#b6c1b6;--ink-3:#8d988e;--line:rgba(255,255,255,.12);--card:rgba(255,255,255,.07);--card-2:rgba(255,255,255,.12);
-        --accent:#86b896;--bg:rgba(24,30,26,.86);--knob:#f4f6f1;--sel:rgba(255,255,255,.18);--sel-ink:#fff;--solid:#e7ede4;--solid-ink:#18201b}
-  .now::after{background:linear-gradient(180deg,transparent 40%,rgba(0,0,0,.78))}
-  .tile i{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  :root{--ink:#edf2ec;--ink-2:#b9c4ba;--ink-3:#808b82;--bg:rgba(22,28,24,.9);--card:rgba(255,255,255,.055);--tile:rgba(255,255,255,.08);--tile-2:rgba(255,255,255,.14);--well:rgba(0,0,0,.22);
+    --on:#e9f1e8;--on-ink:#16201a;--ring:#9fd0ad;--line:rgba(255,255,255,.08)}
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:transparent;color:var(--ink);font:12px/1.35 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;-webkit-user-select:none;user-select:none;cursor:default}
 body{width:100%;min-width:300px;background:var(--bg)}
-#root{padding:14px 16px 0}
+#root{padding:10px 10px 0}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.logo{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:600;letter-spacing:-.01em}
-.logo svg{width:22px;height:10px}
-.pill{border-radius:99px;padding:3px 9px;font-size:11px;font-weight:600}
-.pill.pro{background:var(--card-2);color:var(--accent)}
-.pill.unlock{background:var(--solid);color:var(--solid-ink)}
-/* now showing */
-.now{position:relative;border-radius:10px;overflow:hidden;aspect-ratio:2.25/1;background:#2b3a31 center/cover no-repeat}
-.now::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,rgba(10,20,14,.72))}
-.now .t{position:absolute;left:11px;bottom:9px;z-index:1;color:#fff}
-.now .t b{display:block;font-size:15px;font-weight:600;letter-spacing:-.01em}
-.now .t span{font-size:11px;opacity:.8}
-.acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.acts button{background:var(--card);border-radius:7px;padding:5px 9px;font-size:11.5px;font-weight:500;transition:background .15s}
-.acts button:hover{background:var(--card-2)}
-.acts button:active{background:var(--solid);color:var(--solid-ink)}
-.ctl{margin-top:8px;display:flex;flex-direction:column;gap:5px}
-.ctl .row+.row{margin-top:0}
-.ctl .pick{width:212px;flex:none}
-.ctl .lbl{font-size:11px;color:var(--ink-3);margin-bottom:3px}
-/* scene picker */
-.tabs{display:flex;flex-wrap:wrap;gap:3px 4px;margin:4px 0 7px}
-.tabs::-webkit-scrollbar{display:none}
-.tabs button{flex:none;padding:3px 8px;border-radius:99px;color:var(--ink-2);font-size:11px}
-.tabs button[aria-pressed=true]{background:var(--card-2);color:var(--ink);font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.tile{text-align:left}
-.tile i{display:block;aspect-ratio:16/10;border-radius:7px;background:var(--card) center/cover no-repeat;box-shadow:inset 0 0 0 1px rgba(32,56,45,.08);transition:transform .18s var(--ease)}
-.tile:hover i{transform:translateY(-1px)}
-.tile[aria-current=true] i{box-shadow:0 0 0 2px var(--accent)}
-.tile span{display:block;margin-top:3px;font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tile[aria-current=true] span{color:var(--ink);font-weight:600}
-.tile.offer i{position:relative;opacity:.85}
-.tile.offer i b{position:absolute;right:4px;bottom:4px;background:var(--solid);color:var(--solid-ink);font-size:9.5px;font-weight:600;border-radius:5px;padding:1px 6px}
-.ico{width:11px;height:11px;vertical-align:-1px;margin-left:3px;color:var(--accent)}
-.perks{list-style:none;display:grid;gap:3px;margin:0 0 2px}
-.perks li{font-size:11.5px}
-.perks .ico{margin:0 4px 0 0}
-.pill.big{padding:6px 12px;font-size:12px}
-.by{display:block;font-size:9.5px;color:var(--ink-3);margin-top:1px}
-.count{font-style:normal;font-size:9.5px;background:var(--solid);color:var(--solid-ink);border-radius:99px;padding:0 5px;margin-left:2px}
-.mus{font-style:normal;color:var(--accent);margin-left:4px;font-size:10px}
-.lock{font-size:9px;font-weight:700;color:var(--accent);margin-left:3px}
-/* sections */
-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
-h2{font-size:11px;font-weight:600;color:var(--ink-3);margin-bottom:8px;display:flex;align-items:baseline;gap:6px}
-h2 small{font-weight:400;color:var(--ink-3);margin-left:6px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:24px}
-.row+.row,.row+.chips,.chips+.row,.chips+.chips{margin-top:6px}
-.chips{display:flex;background:var(--card);border-radius:7px;padding:2px;gap:2px}
-.chips.grid4{display:grid;grid-template-columns:repeat(4,1fr)}
-.cats{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin:6px 0 10px}
-.cats button{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px 6px;border-radius:9px;color:var(--ink-3);font-size:10px;line-height:1.1}
-.cats button:hover{background:var(--card);color:var(--ink-2)}
-.cats button[aria-pressed=true]{background:var(--card-2);color:var(--ink)}
-.cats button[aria-pressed=true] .ci{color:var(--accent)}
-.cats em{position:absolute;top:3px;right:6px;font-style:normal;font-size:8.5px;color:var(--ink-3)}
-.ci{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;flex:none}
-h2 .ci{color:var(--ink-3);margin-right:2px;align-self:center}
-.chips.wrap{display:flex;flex-wrap:wrap;background:none;padding:0;gap:4px}
-.chips.wrap button{flex:none;background:var(--card);padding:4px 10px}
-.chips.wrap button[aria-pressed=true]{background:var(--sel);color:var(--sel-ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-.chips.grid2{display:grid;grid-template-columns:repeat(2,1fr)}
-.chips.grid2 button{overflow:hidden;text-overflow:ellipsis;min-width:0}
-.look{display:flex;flex-direction:column;gap:4px}
-.chips button{flex:1;border-radius:5px;padding:3px 4px;color:var(--ink-2);font-size:11px;white-space:nowrap}
-.chips button:hover{color:var(--ink)}
-.chips button[aria-pressed=true]{background:var(--sel);color:var(--sel-ink);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-.sw{width:28px;height:16px;border-radius:99px;background:var(--line);position:relative;flex:none;transition:background .2s}
-.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--knob);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .2s var(--ease)}
-.sw[aria-checked=true]{background:var(--accent)}
-.sw[aria-checked=true]::after{transform:translateX(12px)}
-.sub{padding-left:12px;color:var(--ink-2)}
-.note{font-size:10.5px;color:var(--ink-3)}
-.warn{font-size:11px;color:#8a4b2a;text-decoration:underline}
-.tip{display:flex;gap:9px;align-items:flex-start;margin:10px 0 2px;padding:10px 11px;border-radius:11px;background:var(--card);color:var(--ink-2);font-size:11px;line-height:1.4}
-.tip svg{flex:none;margin-top:1px;color:var(--accent)}
-.tip b{color:var(--ink);font-weight:600}
-.tip span{display:flex;gap:6px;margin-top:7px}
-.tip span button{padding:4px 10px;border-radius:999px;background:var(--card-2);color:var(--ink);font-size:11px}
-.tip span button:first-child{background:var(--accent);color:#fff}
-.tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.tl{background:var(--card);border-radius:9px;padding:9px 10px;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .15s}
-.tl:hover{background:var(--card-2)}
-.tl b{font-size:12px;font-weight:600}
-.tl span{font-size:10.5px;color:var(--ink-3)}
-.tl[aria-pressed=true]{background:var(--solid);color:var(--solid-ink)}
-.tl[aria-pressed=true] span{color:var(--solid-ink);opacity:.75}
-details summary{list-style:none;cursor:pointer}
-details summary::-webkit-details-marker{display:none}
-details summary h2 small{margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
-details summary h2::after{content:"›";padding-left:8px;transition:transform .2s;display:inline-block}
-details[open] summary h2::after{transform:rotate(90deg)}
-details summary h2{margin-bottom:0}
-details[open] summary h2{margin-bottom:8px}
-.qbar{position:sticky;bottom:0;display:flex;justify-content:space-between;align-items:center;gap:2px;margin:12px -16px 0;padding:8px 12px 10px;
-  background:var(--bg);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border-top:1px solid var(--line)}
-.qbar button{width:30px;flex-shrink:0;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--ink-2);transition:background .15s,color .15s}
-.qbar button[data-a="togglePlay"]{width:49px;display:flex;gap:2px;font-size:11px}.qbar button:disabled{opacity:.45;cursor:default}
-.qbar button:hover{background:var(--card);color:var(--ink)}
-.qbar button[aria-pressed=true]{background:var(--card-2);color:var(--ink)}
-.qbar button.on-accent[aria-pressed=true]{color:var(--accent)}
-.qbar svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.qbar .sep{flex:1}
-.sel{position:relative;flex:none;max-width:60%}
-.sel select{appearance:none;-webkit-appearance:none;font:inherit;font-size:11.5px;color:var(--ink);background:var(--card);border:0;border-radius:7px;padding:4px 24px 4px 9px;max-width:100%;cursor:pointer}
-.sel::after{content:"";position:absolute;right:9px;top:50%;width:5px;height:5px;border-right:1.4px solid var(--ink-3);border-bottom:1.4px solid var(--ink-3);transform:translateY(-70%) rotate(45deg);pointer-events:none}
-.foot{display:flex;gap:2px;margin-top:12px;padding-top:9px;border-top:1px solid var(--line)}
-.foot button{flex:1;padding:5px 4px;border-radius:6px;color:var(--ink-2);font-size:11px}
-.foot button:hover{background:var(--card);color:var(--ink)}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ── the scene ── */
+.now{position:relative;height:128px;border-radius:14px;overflow:hidden;background:#2b3a31 center/cover no-repeat}
+.now::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.3),transparent 34%,transparent 50%,rgba(0,0,0,.62));pointer-events:none}
+.now>*{position:absolute;z-index:1}
+.brand{top:9px;left:11px;display:flex;align-items:center;gap:6px;color:#fff;font-weight:600;font-size:12.5px}
+.brand svg{width:20px;height:9px;fill:none;stroke:#fff;stroke-width:1.7;stroke-linecap:round}
+.tr{top:7px;right:7px;display:flex;gap:4px}
+.glass{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:28px;min-width:28px;padding:0 9px;border-radius:99px;color:#fff;background:rgba(0,0,0,.3);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);font-size:11px;transition:background .15s}
+.glass:hover{background:rgba(0,0,0,.48)}
+.glass svg.i{width:15px;height:15px}
+.glass.pro{font-size:10px;font-weight:700;letter-spacing:.06em}
+.nm{left:12px;bottom:11px;color:#fff;max-width:52%}
+.nm b{display:block;font-size:16px;font-weight:650;letter-spacing:-.015em;line-height:1.1}
+.nm span{font-size:10.5px;opacity:.8}
+.acts{right:8px;bottom:9px;display:flex;gap:4px}
+.acts .glass{flex-direction:column;height:auto;padding:6px 8px 5px;border-radius:11px;gap:2px;font-size:10px;min-width:44px}
+
+/* ── cards ── */
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.c{grid-column:1/-1;border-radius:14px;background:var(--card);padding:9px 10px 10px;min-width:0}
+.c.half{grid-column:auto}
+.ch{display:flex;align-items:center;gap:8px;width:100%;text-align:left;min-height:26px}
+.ch .ib{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:var(--ink-2);background:var(--tile);flex:none}
+.ch .ib svg.i{width:16px;height:16px}
+.ch .tt{display:flex;flex-direction:column;min-width:0;flex:1}
+.ch .tt b{font-size:12.5px;font-weight:650;letter-spacing:-.005em}
+.ch .tt small{font-size:10.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch .cv{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;color:var(--ink-3);flex:none;transition:background .15s}
+.ch:hover .cv{background:var(--tile)}
+.ch .cv svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .22s var(--ease)}
+.c.open .ch .cv svg{transform:rotate(180deg)}
+.q{margin-top:9px}
+.det{margin-top:6px;animation:dr .22s var(--ease)}
+@keyframes dr{from{opacity:0;transform:translateY(-3px)}}
+
+/* building blocks */
+.cap{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:12px 0 6px}
+.cap:first-child{margin-top:4px}
+.cap small{font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink-2)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:30px;font-size:12px}
+.row .lab{display:flex;flex-direction:column;min-width:0}
+.row .lab small{font-size:10.5px;color:var(--ink-3)}
+.note{font-size:10.5px;color:var(--ink-3);line-height:1.4;margin-top:4px}
+.link{font-size:11px;color:var(--ink-2);text-decoration:underline}
+.sw{width:30px;height:17px;border-radius:99px;background:var(--tile-2);position:relative;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .2s var(--ease)}
+.sw[aria-checked=true]{background:var(--ring)}
+.sw[aria-checked=true]::after{transform:translateX(13px)}
+.seg{display:flex;gap:2px;padding:2px;border-radius:9px;background:var(--tile)}
+.seg button{flex:1;padding:5px 2px;border-radius:7px;font-size:11px;color:var(--ink-2);white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed=true]{background:var(--well);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.14)}
+/* icon buttons: icon only (quick rows) or icon over a word (detail) */
+.ico{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+.ico button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:30px;padding:5px 1px;border-radius:9px;background:var(--tile);color:var(--ink-2);font-size:10px;position:relative}
+.ico button:hover{background:var(--tile-2);color:var(--ink)}
+.ico button[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.ico.lg button{padding:8px 1px 6px}
+.ico svg.i{width:17px;height:17px}
+.ico.lg svg.i{width:19px;height:19px}
+.ico em{font-style:normal;font-size:7.5px;font-weight:700;letter-spacing:.05em;position:absolute;bottom:1px}
+.ico.tiny button{padding:5px 1px 4px;gap:2px;font-size:9px}
+.ico.tiny svg.i{width:16px;height:16px}
+.grid4{grid-auto-flow:row;grid-template-columns:repeat(4,1fr)}
+/* pills: a quick toggle with a word */
+.pills{display:flex;gap:5px}
+.pill{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:5px;height:32px;padding:0 7px;border-radius:10px;background:var(--tile);color:var(--ink);font-size:11.5px;white-space:nowrap;min-width:0}
+.pill span{white-space:nowrap}
+.pill:hover{background:var(--tile-2)}
+.pill[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.pill svg.i{width:16px;height:16px}
+.pill.ghost{background:none;box-shadow:inset 0 0 0 1px var(--line)}
+/* labelled quick rows */
+.lbl{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 5px}
+.lbl~.lbl{margin-top:9px}
+.lbl small{font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%;text-align:right}
+.timerow{display:flex;gap:5px}
+.nowb{flex:none;width:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:10px;background:var(--tile);color:var(--ink-2);font-size:9.5px;font-weight:600}
+.nowb:hover{background:var(--tile-2)}
+.nowb[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.nowb svg.i{width:17px;height:17px}
+.timerow .day{flex:1;height:44px}
+/* Control-Centre toggles: icon, name, state */
+.tgs{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.tg{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 4px 8px;border-radius:12px;background:var(--tile);text-align:center;min-width:0}
+.tg:hover{background:var(--tile-2)}
+.tg span{display:flex;flex-direction:column;align-items:center;min-width:0;max-width:100%}
+.tg b{font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg small{font-size:10px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.tg[aria-pressed=true] small{color:var(--on-ink);opacity:.72}
+.tg svg.i{width:20px;height:20px}
+.swrow{display:flex;align-items:center;justify-content:space-between;width:100%;height:34px;padding:0 10px;border-radius:10px;background:var(--tile);font-size:12px;font-weight:500}
+.swrow:hover{background:var(--tile-2)}
+.look{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:var(--ink-3)}
+.look .seg{flex:1}
+/* the day: a sky gradient with five moments */
+.day{display:grid;grid-template-columns:repeat(5,1fr);height:50px;border-radius:11px;overflow:hidden;background:linear-gradient(90deg,#f6c7b2 0%,#c4e0f3 28%,#b9d9f2 46%,#f7c58e 64%,#c3b6e2 81%,#9eabd6 100%)}
+.day button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#1d2a23;font-size:9.5px;font-weight:600}
+.day button svg.i{width:17px;height:17px}
+.day button:hover{background:rgba(255,255,255,.3)}
+.day button[aria-pressed=true]{background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 2px #1d2a23;color:#1d2a23}
+/* worlds */
+.w2{flex:none;width:68px;text-align:left;font-size:9.5px;color:var(--ink-2)}
+.w2 i{display:block;width:68px;height:42px;border-radius:8px;background:var(--tile) center/cover no-repeat;margin-bottom:3px}
+.w2 span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.2}
+.w2[aria-current=true] i{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ring)}
+.w2[aria-current=true]{color:var(--ink);font-weight:600}
+.strip{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:3px 2px;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent);mask-image:linear-gradient(90deg,#000 85%,transparent)}
+.strip::-webkit-scrollbar{display:none}
+.w{flex:none;width:50px;height:34px;border-radius:8px;background:var(--tile) center/cover no-repeat;position:relative}
+.w[aria-current=true]{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ring)}
+.cats{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:2px 0 8px}
+.cats button{flex:none;padding:4px 10px;border-radius:99px;font-size:11px;color:var(--ink-2);background:var(--tile)}
+.cats button[aria-pressed=true]{background:var(--on);color:var(--on-ink)}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 6px}
+.th{text-align:left;font-size:10.5px;color:var(--ink-2);min-width:0}
+.th i{display:block;aspect-ratio:16/10;border-radius:9px;background:var(--tile) center/cover no-repeat;margin-bottom:4px;position:relative}
+.th span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th[aria-current=true] i{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--ring)}
+.th[aria-current=true]{color:var(--ink);font-weight:600}
+.th.add i{display:grid;place-items:center;color:var(--ink-3)}
+.th b{position:absolute;right:4px;bottom:4px;font-size:8.5px;font-weight:700;color:var(--on-ink);background:var(--on);border-radius:5px;padding:1px 5px}
+/* sound rows */
+.srow{display:flex;align-items:center;gap:9px;min-height:40px}
+.srow+.srow{border-top:1px solid var(--line)}
+.srow svg.i{color:var(--ink-2)}
+.srow .lab{flex:1;display:flex;flex-direction:column;min-width:0}
+.srow .lab small{font-size:10.5px;color:var(--ink-3)}
+.vb{display:inline-flex;align-items:flex-end;gap:3px;height:14px;padding:4px 6px;margin-right:2px;border-radius:7px}
+.vb:hover{background:var(--tile)}
+.vb i{width:5px;border-radius:1.5px;background:var(--ink-2);opacity:.25;cursor:pointer}
+.vb i:nth-child(1){height:5px}.vb i:nth-child(2){height:9px}.vb i:nth-child(3){height:14px}
+.vb i.on{opacity:1}
+.place{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.place button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 4px 4px;border-radius:9px;font-size:10.5px;color:var(--ink-2)}
+.place button[aria-pressed=true]{box-shadow:0 0 0 1.5px var(--ring);color:var(--ink);font-weight:600}
+.place svg{width:100%;display:block}
+.place .scr{fill:var(--well);stroke:var(--ink-3)}
+.place .wg{fill:var(--ink-3);opacity:.5}
+.place .wg.ghost{fill:none;stroke:var(--ink-3);stroke-dasharray:2 1.5;opacity:.8}
+.place .act{fill:var(--ring)}
+.place .zone{fill:var(--ring);opacity:.15}
+.big{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:34px;border-radius:10px;background:var(--on);color:var(--on-ink);font-size:12px;font-weight:600}
+.big.off{background:var(--tile);color:var(--ink)}
+.big svg.i{width:16px;height:16px}
+.tip{display:flex;gap:8px;margin-top:8px;padding:9px 10px;border-radius:12px;background:var(--card);color:var(--ink-2);font-size:11px;line-height:1.4}
+.tip b{color:var(--ink)}
+.tip span{display:flex;gap:6px;margin-top:6px}
+.tip span button{padding:3px 9px;border-radius:99px;background:var(--tile-2);color:var(--ink);font-size:10.5px}
+.tip span button:first-child{background:var(--on);color:var(--on-ink)}
+.foot{display:flex;align-items:center;gap:2px;margin:9px -10px 0;padding:5px 8px 7px;border-top:1px solid var(--line)}
+.foot button{height:30px;min-width:30px;padding:0 8px;border-radius:9px;display:flex;align-items:center;gap:5px;color:var(--ink-2);font-size:11px}
+.foot button:hover{background:var(--tile);color:var(--ink)}
+.foot svg.i{width:17px;height:17px}
+.foot .sp{flex:1}
 </style>
 </head>
 <body>
@@ -141,227 +186,233 @@ details[open] summary h2{margin-bottom:8px}
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const host = window.webkit && webkit.messageHandlers && webkit.messageHandlers.panel;
-const send = (a, v, tag) => host ? host.postMessage({ a, v: v === undefined ? null : v, tag: tag == null ? null : tag }) : console.log('[panel]', a, v, tag);
-let S = null, tab = null;
-
-const WEATHER = [['', 'Live'], ['clear', 'Clear'], ['cloudy', 'Cloudy'], ['rain', 'Rain'], ['storm', 'Storm'], ['snow', 'Snow'], ['fog', 'Fog']];
-const CLOCKS = [['auto', 'Live'], ['slow', 'Slow cycle'], ['fast', 'Fast cycle']];
-const VIEWS = [['sunrise', 'Sunrise'], ['day', 'Day'], ['sunset', 'Sunset'], ['evening', 'Evening'], ['night', 'Night']];
-const SCAPES = [['off', 'Off'], ['white', 'White'], ['pink', 'Pink'], ['brown', 'Brown'], ['rain', 'Rain'], ['ocean', 'Ocean'], ['fire', 'Fire'], ['stream', 'Stream']];
-const BREATHS = [['box', 'Box 4-4-4-4'], ['calm', 'Calm 4·6'], ['478', 'Relax 4-7-8']];
-const WATER = [[0, 'Off'], [30, '30m'], [45, '45m'], [60, '1h'], [90, '90m']];
-const FPS = [[20, '20 fps'], [30, '30 fps'], [60, '60 fps']];
-const ENERGY = [['always', 'Always on'], ['away', 'Pause when away'], ['battery', 'Pause on battery']];
-const ENERGY_NOTE = {
-  always: 'Animates all the time. Uses the most battery.',
-  away: 'Pauses when you\u2019re away from the desktop. The scene stays as it is \u2014 click it to resume.',
-  battery: 'Always on when plugged in; on battery it pauses after a minute away. Click to resume.',
-};
-const COMP = [['off', 'Off'], ['native', 'On in Koi Pond']];
-const LEVELS = [['fx', 'Interactions'], ['ambience', 'Ambience'], ['weather', 'Weather']];
-const VOLS = [[0.4, 'Quiet'], [0.7, 'Medium'], [1, 'Full']];
-
+const send = (a, v, tag) => host ? host.postMessage({ a, v: v === undefined ? null : v, tag: tag == null ? null : tag }) : (window.__mock && window.__mock(a, v, tag));
 const key = (x) => (x !== null && typeof x === 'object' ? JSON.stringify(x) : String(x));
-const chips = (list, cur, act, opt = {}) => `<div class="chips${opt.wrap ? ' wrap' : opt.grid2 ? ' grid2' : list.length > 7 ? ' grid4' : ''}">${list.map(([v, l]) =>
-  `<button aria-pressed="${key(v) === key(cur)}" data-a="${act}" data-v='${esc(JSON.stringify(v))}'${opt.tag ? ' data-tag' : ''}>${esc(l)}</button>`).join('')}</div>`;
-const sw = (on, act, v) => `<button class="sw" role="switch" aria-checked="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${esc(JSON.stringify(v))}'` : ''}></button>`;
-const pro = (locked) => (locked ? '<span class="lock">PRO</span>' : '');
-// Bundled scenes ship a thumbnail in art/thumbs; add-ons and catalog offers carry their own.
+const J = (v) => esc(JSON.stringify(v));
+let S = null, cat = 'All';
+const OPEN_KEY = 'panel3.open';
+const open = (() => { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}'); } catch (e) { return {}; } })();
+const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify(open)); } catch (e) {} };
+
+const SUN = '<circle cx="12" cy="12" r="4"/><path d="M12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1 1M17.4 17.4l1 1M5.6 18.4l1-1M17.4 6.6l1-1"/>';
+const CLOUD = (y = 0) => `<path d="M7 ${18 - y}h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.3 1.5A3.3 3.3 0 0 0 7 ${18 - y}z"/>`;
+const RAIN = CLOUD(4) + '<path d="M9 17l-1 3M13 17l-1 3M17 17l-1 3"/>';
+const I = {
+  live: '<circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/>',
+  cycle: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4v4h-4"/>',
+  sunrise: '<path d="M3 18h18M7 18a5 5 0 0 1 10 0"/><path d="M12 4v6M9.5 6.5L12 4l2.5 2.5"/>',
+  day: SUN,
+  sunset: '<path d="M3 18h18M7 18a5 5 0 0 1 10 0"/><path d="M12 4v6M9.5 7.5L12 10l2.5-2.5"/>',
+  evening: '<path d="M3 18h18"/><path d="M16 14.5a5 5 0 0 1-6.5-6.5 5.5 5.5 0 1 0 6.5 6.5z"/><path d="M18 5v2M17 6h2"/>',
+  night: '<path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5z"/><path d="M17 3.5v2M16 4.5h2"/>',
+  pin: '<circle cx="12" cy="10" r="2.2"/><path d="M12 21s6.5-5.6 6.5-11a6.5 6.5 0 0 0-13 0c0 5.4 6.5 11 6.5 11z"/>',
+  clear: SUN, cloudy: CLOUD(), rain: RAIN, storm: CLOUD(4) + '<path d="M12.5 15l-2 3.5h3l-2 3.5"/>',
+  snow: '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>', fog: '<path d="M4 9h16M3 13h18M5 17h14"/>',
+  sound: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute: '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+  scape: '<path d="M3 10c2.5-2 4-2 6 0s4 2 6 0 3.5-2 6 0M3 15c2.5-2 4-2 6 0s4 2 6 0 3.5-2 6 0"/>',
+  music: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  beat: '<path d="M3 12h4l2-5 3 10 2-7 1.5 2H21"/>',
+  breathe: '<circle cx="12" cy="12" r="3.5"/><circle cx="12" cy="12" r="8" opacity=".55"/>',
+  water: '<path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/>',
+  pause: '<path d="M8.5 5v14M15.5 5v14"/>', play: '<path d="M8 5l11 7-11 7z"/>',
+  bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  away: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/><path d="M17.5 3.5l3 3M20.5 3.5l-3 3"/>',
+  battery: '<rect x="3" y="7.5" width="16" height="9" rx="2"/><path d="M21.5 11v2M6 10.5v3"/>',
+  layout: '<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M15 8.5h3M15 12h3M15 15.5h3"/><circle cx="8" cy="13.5" r="1.6"/>',
+  next: '<path d="M6 5l9 7-9 7zM18 5v14"/>', reload: '<path d="M19 9A7.5 7.5 0 1 0 19.5 14"/><path d="M19.5 4.5V9H15"/>',
+  gear: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/>',
+  dots: '<circle cx="5.5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18.5" cy="12" r="1.2"/>',
+  puzzle: '<path d="M10 4h4v3a1.5 1.5 0 1 0 3 0V4h3v6h-3a1.5 1.5 0 1 0 0 3h3v7h-6v-3a1.5 1.5 0 1 0-3 0v3H4v-6h3a1.5 1.5 0 1 0 0-3H4V4z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/>',
+  shuffle: '<path d="M4 7h3c4 0 6 10 10 10h3M4 17h3c1.6 0 2.8-1.6 3.9-3.6M14 9.6C15 8.2 16 7 17 7h3"/><path d="M18 4.5L20.5 7 18 9.5M18 14.5l2.5 2.5-2.5 2.5"/>',
+  share: '<path d="M12 3.5v11M8 7l4-3.5L16 7M5 12.5v7h14v-7"/>',
+  // scene actions
+  feed: '<path d="M4 11h16a8 8 0 0 1-16 0z"/><path d="M8 8.5c.8-1.2 2.2-1.2 3 0M13 7.5c.8-1.2 2.2-1.2 3 0"/>',
+  toy: '<circle cx="12" cy="12" r="7.5"/><path d="M5.5 9c4 0 9 2 12.5 6.5M7 16c2.5-3 6-5.5 11-5"/>',
+  pet: '<path d="M12 20s-7-4.4-7-9.5A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.5c0 5.1-7 9.5-7 9.5z"/>',
+  bamboo: '<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19l7-7"/>',
+  fx: '<path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V10l4.2.9a2 2 0 0 1 1.6 2.2l-.6 4.4A3 3 0 0 1 14.2 20H11a3 3 0 0 1-2.4-1.2L5.4 14.5a1.5 1.5 0 0 1 2.3-1.9L9 14"/>',
+  ambience: '<path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19l7-7"/>',
+  wxsnd: RAIN,
+  white: '<path d="M3 12h2l1.5-5 2 10 2-12 2 14 2-11 2 8 1.5-4H21"/>',
+  pink: '<path d="M3 12c2-4 3-4 4.5 0s2.5 4 4.5 0 2.5-4 4.5 0 2.5 4 4.5 0"/>',
+  brown: '<path d="M3 12c3-6 6-6 9 0s6 6 9 0"/>',
+  ocean: '<path d="M3 10c2.5-2 4-2 6 0s4 2 6 0 3.5-2 6 0M3 15c2.5-2 4-2 6 0s4 2 6 0 3.5-2 6 0"/>',
+  fire: '<path d="M12 21c-3.5 0-6-2.4-6-5.6 0-3.4 3-5.4 3.6-8.9 2.3 1.4 3.4 3.6 3.4 5.5.9-.7 1.5-1.8 1.6-3 1.8 1.5 3.4 3.9 3.4 6.4 0 3.2-2.5 5.6-6 5.6z"/>',
+  stream: '<path d="M7 3c3 3-3 6 0 9s-3 6 0 9M13 3c3 3-3 6 0 9s-3 6 0 9"/>',
+  box: '<rect x="5.5" y="5.5" width="13" height="13" rx="1.5"/>', calm: '<circle cx="12" cy="12" r="7"/>', b478: '<path d="M12 4.5l8 14H4z"/>',
+  bot: '<rect x="5" y="8" width="14" height="10" rx="3"/><path d="M12 4.5V8M9.5 12.5v1M14.5 12.5v1"/>',
+};
+const ic = (k, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[k] || I.spark}</svg>`;
+
+I.globe = '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 15l4.5-4 3.5 3 3-2.5 6 4.5"/>';
+const ACT_WORD = { feed: 'Feed', water: 'Water', toy: 'Toy', pet: 'Pet', bamboo: 'Bamboo' };
+const actIcon = (v, t) => I[v] && ACT_WORD[v] ? v : /feed|food|treat|fish/i.test(v + t) ? 'feed' : /water/i.test(v + t) ? 'water' : /toy|yarn|ball/i.test(v + t) ? 'toy' : /pet|pat|boop/i.test(v + t) ? 'pet' : /bamboo|leaf/i.test(v + t) ? 'bamboo' : 'spark';
 const thumb = (id, src) => `url('${src || `art/thumbs/${id}.jpg`}')`;
 
+const VIEWS = [['sunrise', 'Dawn'], ['day', 'Day'], ['sunset', 'Dusk'], ['evening', 'Evening'], ['night', 'Night']];
+const WEATHER = [['', 'Live', 'pin'], ['clear', 'Clear', 'clear'], ['cloudy', 'Cloudy', 'cloudy'], ['rain', 'Rain', 'rain'], ['storm', 'Storm', 'storm'], ['snow', 'Snow', 'snow'], ['fog', 'Fog', 'fog']];
+const SCAPES = [['white', 'White noise'], ['pink', 'Pink noise'], ['brown', 'Brown noise'], ['rain', 'Rain'], ['ocean', 'Ocean'], ['fire', 'Fireplace'], ['stream', 'Stream']];
+const SCAPE_SHORT = { white: 'White', pink: 'Pink', brown: 'Brown', rain: 'Rain', ocean: 'Ocean', fire: 'Fire', stream: 'Stream' };
+// What each scene-sound channel actually is, in plain words.
+const LEVELS = [['fx', 'Interactions', 'Your clicks — splashes, purrs, notes', 'fx'], ['ambience', 'Ambience', 'The world — birds, water, the room', 'ambience'], ['weather', 'Weather', 'Rain, wind and thunder', 'wxsnd']];
+const BREATHS = [['box', 'Box', 'box', 'In 4 · hold 4 · out 4 · hold 4'], ['calm', 'Calm', 'calm', 'In 4 · out 6'], ['478', '4-7-8', 'b478', 'In 4 · hold 7 · out 8']];
+const EVERY = (list) => list.map((m) => [m, m ? (m >= 60 ? `${m / 60}h` : `${m}m`) : 'Off']);
+const WATER_EVERY = EVERY([0, 15, 30, 45, 60, 90]);
+const BREATH_EVERY = EVERY([0, 15, 30, 60, 120]);
+const CYCLE = EVERY([0, 15, 30, 60, 120]);
+const mins = (m) => (m >= 60 ? (m % 60 ? `${(m / 60).toFixed(1)} h` : `${m / 60} h`) : `${m} min`);
+const ENERGY = [['always', 'Always on', 'bolt'], ['away', 'Pause when away', 'away'], ['battery', 'Pause on battery', 'battery']];
+const ENERGY_NOTE = { always: 'Always animating. Uses the most battery.', away: 'Pauses when you’re away from the desktop. Click the scene to resume.', battery: 'On when plugged in; on battery it pauses after a minute away.' };
+const PLACE = [['auto', 'Auto'], ['right', 'Right'], ['left', 'Left'], ['off', 'Off']];
+const PLACE_NOTE = { auto: 'Finds your widgets and keeps the scene’s life on the open side.', right: 'Your widgets are on the right, so the life stays left.', left: 'Your widgets are on the left, so the life stays right.', off: 'The whole screen; life can pass under your widgets.' };
+const COL = { worlds: '#3f7a5a', mood: '#d58a3e', sound: '#4f74b8', breathe: '#8b6bb5', water: '#3b8fb0', settings: '#7a817c' };
 
-// One scene tile (installed). Locked tiles open the Pro page.
-const tile = (s) => `<button class="tile" aria-current="${s.id === S.scene}" data-a="${s.pro && !S.pro ? 'openPro' : 'pickScene'}" data-v='${esc(JSON.stringify(s.id))}'><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}${s.music ? ICON.note : ''}${pro(s.pro && !S.pro)}</span></button>`;
-// Discover: catalog scenes not installed yet — featured first, with author credit.
-function discover(offers, locked) {
-  if (!offers.length) return `<p class="note" style="margin:4px 0 2px">You have every scene. New ones arrive here without updating the app.</p>`;
-  return `<div class="grid">${offers.map((o) => `<button class="tile offer" data-a="${o.busy ? '' : 'installScene:'}" data-v='${esc(JSON.stringify(o.id))}' title="${esc(o.blurb || '')}"><i style="background-image:${thumb(o.id, o.thumb)}"><b>${o.busy ? 'Adding…' : o.featured ? 'Featured' : o.new ? 'New' : 'Add'}</b></i><span>${esc(o.title)}${pro(o.pro && locked)}</span><small class="by">by ${esc(o.author || 'wallpap')}</small></button>`).join('')}</div>`;
+const seg = (list, cur, act, tag) => `<div class="seg">${list.map(([v, l]) => `<button aria-pressed="${key(v) === key(cur)}" data-a="${act}" data-v='${J(v)}'${tag ? ' data-tag' : ''}>${esc(l)}</button>`).join('')}</div>`;
+const sw = (on, act, v) => `<button class="sw" role="switch" aria-checked="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${J(v)}'` : ''}></button>`;
+const vbar = (levels, cur, act, mk) => `<span class="vb" title="Volume">${levels.map((v, i) => `<i class="${levels.indexOf(cur) >= i ? 'on' : ''}" data-a="${act}" data-v='${J(mk(v))}' title="${['Quiet', 'Medium', 'Full'][i]}"></i>`).join('')}</span>`;
+function placeSvg(mode, side) {
+  const wg = (x, g) => [5.1, 11.1, 17.1].map((y) => `<rect class="wg${g ? ' ghost' : ''}" x="${x}" y="${y}" width="9" height="4.6" rx="1.2"/>`).join('');
+  const act = (cx) => `<circle class="act" cx="${cx}" cy="19" r="2"/><circle class="act" cx="${cx + 4.5}" cy="20.5" r="1.4" opacity=".7"/><circle class="act" cx="${cx - 3.8}" cy="21" r="1.2" opacity=".5"/>`;
+  const zone = (x, w) => `<rect class="zone" x="${x}" y="3.5" width="${w}" height="22" rx="1.5"/>`;
+  const body = mode === 'right' ? zone(1.5, 29) + wg(31.5) + act(13) : mode === 'left' ? zone(13.5, 29) + wg(3.5) + act(29) : mode === 'off' ? zone(1.5, 41) + wg(31.5) + act(33)
+    : side === 'left' ? zone(13.5, 29) + wg(3.5, true) + act(29) : zone(1.5, 29) + wg(31.5, true) + act(13);
+  return `<svg viewBox="0 0 44 28" aria-hidden="true"><rect class="scr" x=".5" y=".5" width="43" height="27" rx="3"/>${body}</svg>`;
 }
-// Custom: the user's own scene folders (Pro).
-function customTab(locked) {
-  const mine = S.scenes.filter((s) => s.custom);
-  if (locked) return `<p class="note" style="margin:4px 0 6px">Run your own scenes — or ones friends made — with Pro.</p><button class="pill unlock" data-a="openPro">Get Pro — $5</button>`;
-  return `${mine.length ? `<div class="grid">${mine.map(tile).join('')}</div>` : '<p class="note" style="margin:4px 0">No custom scenes yet.</p>'}
-    <div class="row" style="margin-top:6px"><button class="note" data-a="openSubmitScene" style="text-decoration:underline">How to make a scene</button><span style="display:flex;gap:10px"><button class="note" data-a="openScenesFolder" style="text-decoration:underline">Open folder</button><button class="note" data-a="addSceneFolder" style="text-decoration:underline">Add a scene folder…</button></span></div>`;
+// A card: header (icon, title, one-line state, ⌄), its quick controls (always shown), and — when
+// open — the rest of its options underneath. Nothing appears twice.
+function card(id, title, icon, state, quick, more, half) {
+  const o = !!open[id];
+  return `<section class="c${o ? ' open' : ''}${half && !open.breathe && !open.water ? ' half' : ''}">
+    <button class="ch" data-card="${id}" aria-expanded="${o}"><span class="ib">${ic(icon)}</span><span class="tt"><b>${esc(title)}</b>${state ? `<small>${state}</small>` : ''}</span><span class="cv"><svg viewBox="0 0 10 10"><path d="M2.5 4l2.5 2.5L7.5 4"/></svg></span></button>
+    ${quick ? `<div class="q">${quick()}</div>` : ''}
+    ${o ? `<div class="det">${more()}</div>` : ''}
+  </section>`;
 }
-const CYCLE = [[0, 'Off'], [15, '15m'], [30, '30m'], [60, '1h'], [120, '2h']];
-// Custom icons (no emoji): small strokes in currentColor.
-const ICON = {
-  note: '<svg class="ico" viewBox="0 0 12 12" aria-label="Plays your music"><path d="M4.5 9.2V2.6l5-1v6.1" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.3" cy="9.3" r="1.3" fill="currentColor"/><circle cx="8.3" cy="7.8" r="1.3" fill="currentColor"/></svg>',
-  check: '<svg class="ico" viewBox="0 0 12 12"><path d="M2.5 6.4l2.2 2.1 4.8-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  share: '<svg class="ico" viewBox="0 0 12 12"><path d="M6 1.5v6.2M3.6 3.8L6 1.5l2.4 2.3M2.5 6.5v3.2h7V6.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-};
-// Category + section icons (stroke, currentColor) — the panel is browsed by shape first, words second.
-const CI = {
-  Nature: '<path d="M5 15c0-6 4-10 11-10 0 7-4 11-10 11"/><path d="M5 15l6-6"/>',
-  Places: '<path d="M10 17s5-4.5 5-8.5a5 5 0 0 0-10 0c0 4 5 8.5 5 8.5z"/><circle cx="10" cy="8.5" r="1.8"/>',
-  'Cozy Rooms': '<path d="M7 4h6l2 5H5z"/><path d="M10 9v6M7 15h6"/>',
-  'City Nights': '<path d="M3 17V9h4v8M7 17V5h5v12M12 17v-6h5v6"/><path d="M15 4a2 2 0 0 0 2 2"/>',
-  Journeys: '<rect x="5" y="3.5" width="10" height="10" rx="2"/><path d="M5 9h10M7.5 16.5l-1 1.5M12.5 16.5l1 1.5"/><circle cx="7.5" cy="11.5" r=".6"/><circle cx="12.5" cy="11.5" r=".6"/>',
-  Mindful: '<path d="M10 16c-3 0-6-2-7-5 2 0 4 .6 5 2-1-3 0-6 2-8 2 2 3 5 2 8 1-1.4 3-2 5-2-1 3-4 5-7 5z"/>',
-  Music: '<path d="M8 15V5l8-1.5v10"/><circle cx="6" cy="15" r="2"/><circle cx="14" cy="13.5" r="2"/>',
-  More: '<rect x="4" y="4" width="5" height="5" rx="1"/><rect x="11" y="4" width="5" height="5" rx="1"/><rect x="4" y="11" width="5" height="5" rx="1"/><rect x="11" y="11" width="5" height="5" rx="1"/>',
-  Discover: '<path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z"/>',
-  Custom: '<path d="M3.5 6.5h5l1.5 1.5h6.5v7.5h-13z"/>',
-  scenes: '<rect x="3.5" y="4.5" width="13" height="11" rx="2"/><path d="M3.5 12l3.5-3 3 2.5 2.5-2 4 3"/>',
-  env: '<circle cx="8" cy="8" r="3"/><path d="M8 2.5v1M2.5 8h1M4.1 4.1l.7.7M13 12.5a3 3 0 0 0-5.6-1.2A2.5 2.5 0 0 0 8 16h5a2 2 0 0 0 0-4z"/>',
-  sound: '<path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5"/>',
-  well: '<path d="M10 16s-6-3.6-6-8a3.4 3.4 0 0 1 6-2.2A3.4 3.4 0 0 1 16 8c0 4.4-6 8-6 8z"/>',
-  perf: '<rect x="3" y="6.5" width="12.5" height="7" rx="1.5"/><path d="M17 9v2M5.5 9h4"/>',
-  acct: '<path d="M10 3l2 4 4.5.6-3.3 3.1.8 4.4L10 13l-4 2.1.8-4.4L3.5 7.6 8 7z"/>',
-};
-const icon = (k, sz = 15) => CI[k] ? `<svg class="ci" width="${sz}" height="${sz}" viewBox="0 0 20 20">${CI[k]}</svg>` : '';
-// Quick-bar icons (stroke, currentColor)
-const QI = {
-  pause: '<svg viewBox="0 0 20 20"><path d="M7 5v10M13 5v10"/></svg>',
-  play: '<svg viewBox="0 0 20 20"><path d="M7 5l8 5-8 5z"/></svg>',
-  sound: '<svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 7.5a3.5 3.5 0 0 1 0 5M16 5.5a6.5 6.5 0 0 1 0 9"/></svg>',
-  mute: '<svg viewBox="0 0 20 20"><path d="M4 8h3l4-3v10l-4-3H4z"/><path d="M14 8l4 4M18 8l-4 4"/></svg>',
-  music: '<svg viewBox="0 0 20 20"><path d="M8 15V5l8-1.5v10"/><circle cx="6" cy="15" r="2"/><circle cx="14" cy="13.5" r="2"/></svg>',
-  breathe: '<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="3"/><circle cx="10" cy="10" r="6.5" opacity=".55"/></svg>',
-  next: '<svg viewBox="0 0 20 20"><path d="M5 5l7 5-7 5zM15 5v10"/></svg>',
-  reload: '<svg viewBox="0 0 20 20"><path d="M15.5 8A6 6 0 1 0 16 12"/><path d="M16 4v4h-4"/></svg>',
-  more: '<svg viewBox="0 0 20 20"><circle cx="5" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="15" cy="10" r="1.2"/></svg>',
-};
-const PERKS = ['Every look of every scene', 'Music Mode — your songs in the scene', 'Breathing inside the scene', 'Water & breathe reminders', 'Live weather, real sun and moon', 'Soundscapes · your own scenes'];
+// A Control-Centre style toggle: icon, name, and what it's doing right now.
+const tog = (on, act, v, icon, name, stateTxt, title) => `<button class="tg" aria-pressed="${!!on}" data-a="${act}"${v !== undefined ? ` data-v='${J(v)}'` : ''} title="${esc(title || name)}">${ic(icon)}<span><b>${esc(name)}</b><small>${esc(stateTxt)}</small></span></button>`;
 
 function render(state) {
   S = state;
   const cur = S.scenes.find((s) => s.id === S.scene) || S.scenes[0] || { id: '', title: '', cat: '' };
-  if (!tab || !(S.categories.includes(tab) || tab === 'Discover' || tab === 'Custom')) tab = cur.cat;
-  const offers = S.offers || [];
-  const cats = S.categories.filter((c) => c !== 'Custom' && S.scenes.some((s) => s.cat === c));
   const locked = !S.pro;
-  const sceneCtl = S.sceneCtl.map((c) => {
-    if (c.type !== 'choice') return '';
-    const cur = (c.options.find((o) => o.on) || {}).v, opts = c.options.map((o) => [o.v, o.label]);
-    const chars = c.options.reduce((n, o) => n + String(o.label).length, 0);
-    // fits beside its label → one inline segmented row; otherwise its own line of wrapping pills
-    if (c.title !== 'Look' && c.options.length <= 4 && chars <= 22) return `<div class="row"><span class="note">${esc(c.title)}</span><div class="pick">${chips(opts, cur, 'pickSetting')}</div></div>`;
-    return `<div class="look"><span class="note">${esc(c.title)}</span>${chips(opts, cur, 'pickSetting', { wrap: true })}</div>`;
-  }).join('');
-  // Every action the current scene offers (feed, pet, toy, fireworks, play/pause…), as one row.
-  const sceneActs = S.sceneCtl.filter((c) => c.type === 'action')
-    .map((c) => `<button data-a="runAction" data-v='${esc(JSON.stringify(c.v))}'>${esc(c.title)}</button>`).join('');
+  const acts = S.sceneCtl.filter((c) => c.type === 'action').slice(0, 3);
+  const looks = S.sceneCtl.filter((c) => c.type === 'choice');
+  const live = S.timeView === 'auto', cycling = S.timeView === 'slow' || S.timeView === 'fast';
+  const scapeOn = S.soundscape && S.soundscape !== 'off';
+  const liveWx = (S.liveWeather || '').replace(/^Live — /, '');
+  const wxNow = S.weather ? `${(WEATHER.find((w) => w[0] === S.weather) || [])[1]} (chosen)` : `${liveWx || 'Local weather'}`;
+  const timeNow = live ? 'Following your clock' : cycling ? `${S.timeView === 'slow' ? 'Slow' : 'Fast'} day cycle` : `Holding ${((VIEWS.find((v) => v[0] === S.timeView) || [, ''])[1]).toLowerCase()}`;
+  const cats = ['All'].concat(S.categories.filter((c) => S.scenes.some((s) => s.cat === c)));
+  if (!cats.includes(cat)) cat = 'All';
+  const offers = S.offers || [];
+  const energy = ENERGY.find((x) => x[0] === S.energy) || ENERGY[1];
+  const scene = (s) => `data-a="${s.pro && locked ? 'openPro' : 'pickScene'}" data-v='${J(s.id)}'`;
+
+  // Worlds: closed → a named strip; open → the strip becomes a filterable grid (never both).
+  const worlds = card('worlds', 'Worlds', 'globe', S.cycle ? `Changes every ${mins(S.cycle)}` : `${S.scenes.length} worlds`,
+    open.worlds ? null : () => `<div class="strip">${S.scenes.map((s) => `<button class="w2" aria-current="${s.id === S.scene}" ${scene(s)} title="${esc(s.title)}"><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}</span></button>`).join('')}</div>`,
+    () => `<div class="cats">${cats.map((k) => `<button aria-pressed="${cat === k}" data-cat="${esc(k)}">${esc(k === 'Cozy Rooms' ? 'Rooms' : k === 'City Nights' ? 'City' : k)}</button>`).join('')}</div>
+      <div class="thumbs">${S.scenes.filter((s) => cat === 'All' || s.cat === cat).map((s) => `<button class="th" aria-current="${s.id === S.scene}" ${scene(s)}><i style="background-image:${thumb(s.id, s.thumb)}"></i><span>${esc(s.title)}${s.music ? ' ♪' : ''}</span></button>`).join('')}</div>
+      ${offers.length ? `<div class="cap">New worlds<small>no app update needed</small></div><div class="thumbs">${offers.map((o) => `<button class="th" data-a="${o.busy ? '' : 'installScene:'}" data-v='${J(o.id)}'><i style="background-image:${thumb(o.id, o.thumb)}"><b>${o.busy ? 'Adding…' : 'Add'}</b></i><span>${esc(o.title)}</span></button>`).join('')}</div>` : ''}
+      <div class="cap">Change world automatically</div>${seg(CYCLE, S.cycle, 'pickSceneCycle', true)}
+      ${S.cycle ? `<div class="row" style="margin-top:4px"><span style="width:170px">${seg([['all', 'All worlds'], ['category', 'Same kind']], S.cycleScope, 'pickSceneCycleScope')}</span><span style="display:flex;gap:6px;align-items:center">Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}
+      <div class="row" style="margin-top:4px"><button class="link" data-a="addSceneFolder">Add my own scene…</button><button class="link" data-a="openSubmitScene">Make a scene</button></div>`);
+
+  // Time & weather: one way to set each. Time = Now (your clock) or a moment on the sky bar; a day
+  // cycle is the extra. Weather = Local (where you are) or one you pick.
+  const mood = card('mood', 'Time & weather', 'sunset', '',
+    () => `<div class="lbl">Time<small>${esc(timeNow)}</small></div>
+      <div class="timerow"><button class="nowb" aria-pressed="${live}" data-a="pickTimeView" data-v='"auto"' title="Follow my clock">${ic('live')}<span>Now</span></button>
+        <div class="day">${VIEWS.map(([v, l]) => `<button aria-pressed="${S.timeView === v}" data-a="pickTimeView" data-v='${J(v)}' title="Hold ${esc(l.toLowerCase())}">${ic(v)}${v === 'evening' ? 'Eve' : l}</button>`).join('')}</div></div>
+      <div class="lbl">Weather<small>${esc(wxNow)}</small></div>
+      <div class="ico tiny">${WEATHER.map(([v, l, k]) => `<button aria-pressed="${key(v) === key(S.weather)}" data-a="pickWeather" data-v='${J(v)}' title="${esc(v === '' ? 'The weather where you are' + (locked ? ' (Pro)' : '') : l)}">${ic(k)}<span>${esc(v === '' ? 'Local' : l)}</span></button>`).join('')}</div>`,
+    () => `<div class="row"><span class="lab">Day cycle<small>A whole day passes on screen</small></span><span style="width:132px">${seg([['auto', 'Off'], ['slow', 'Slow'], ['fast', 'Fast']], cycling ? S.timeView : 'auto', 'pickTimeView')}</span></div>
+      <div class="row"><span class="lab">Use my precise location<small>Sharper local weather and sun</small></span>${sw(S.precise, 'togglePreciseLocation')}</div>`);
+
+  // Sound: three toggles that say what they're doing; open adds the scene's channels, the
+  // background-sound picker and Beat Sync.
+  const scName = scapeOn ? SCAPE_SHORT[S.soundscape] : 'Off';
+  const sound = card('sound', 'Sound', S.muted ? 'mute' : 'sound', '',
+    () => `<div class="tgs">
+        ${tog(!S.muted, 'toggleMute', undefined, S.muted ? 'mute' : 'sound', 'Sound', S.muted ? 'Muted' : 'On', 'Mute or unmute everything')}
+        ${scapeOn ? tog(true, locked ? 'openPro' : 'pickSoundscape', 'off', S.soundscape, 'Background', scName, 'Tap to stop the background sound')
+          : `<button class="tg" aria-pressed="false" data-card-open="sound" title="Pick a background sound — rain, ocean, fire…">${ic('scape')}<span><b>Background</b><small>Off</small></span></button>`}
+        ${tog(S.music, locked ? 'openPro' : 'toggleMusicMode', undefined, 'music', 'Music', S.music ? 'In the scene' : 'Off', 'Your Music or Spotify, playing inside the scene')}</div>`,
+    () => `<div class="cap">Background sound${locked ? ' · Pro' : ''}<small>${scapeOn ? 'tap it again to stop' : 'plays under everything'}</small></div>
+      <div class="ico tiny">${SCAPES.map(([v, l]) => { const on = S.soundscape === v; return `<button aria-pressed="${on}" data-a="${locked ? 'openPro' : 'pickSoundscape'}" data-v='${J(on ? 'off' : v)}' title="${esc(l)}">${ic(v)}<span>${esc(SCAPE_SHORT[v])}</span></button>`; }).join('')}</div>
+      ${scapeOn ? `<div style="margin-top:5px">${seg([[0.18, 'Quiet'], [0.35, 'Medium'], [0.6, 'Loud']], S.ssVol, 'pickSoundscapeVolume')}</div>` : ''}
+      <div class="cap">The scene’s own sounds<small>switch any off</small></div>
+      ${LEVELS.map(([c, l, d, k]) => { const p = S.audio.find((x) => x.c === c) || { on: true, vol: 1 };
+        return `<div class="srow">${ic(k)}<span class="lab">${l}<small>${d}</small></span>${p.on ? vbar([0.4, 0.7, 1], p.vol, 'pickAudioVol', (v) => JSON.stringify([c, v])) : ''}${sw(p.on, 'toggleAudioCat', c)}</div>`; }).join('')}
+      ${S.music ? `<div class="cap">Music</div><div class="row"><span class="lab">Beat Sync<small>The scene moves to the beat</small></span>${sw(S.beat, 'toggleBeatSync')}</div>` : ''}
+      ${S.music && !cur.music ? `<p class="note">${esc(cur.title)} has no music player — try ${esc(S.scenes.filter((x) => x.music).map((x) => x.title).slice(0, 3).join(', '))}.</p>` : ''}
+      ${S.music && S.musicDenied ? '<button class="link" data-a="openAutomationSettings">Allow wallpap to control Music / Spotify…</button>' : ''}`);
+
+  // Breathe and Water: their own small cards. Quick = the thing you do; open = how and how often.
+  const bp = BREATHS.find((b) => b[0] === S.breath) || BREATHS[0];
+  const breathe = card('breathe', 'Breathe', 'breathe', S.breathEvery ? `Every ${mins(S.breathEvery)}` : 'No reminder',
+    () => `<button class="big${S.calm ? '' : ' off'}" data-a="toggleCalm">${ic(S.calm ? 'pause' : 'play')}${S.calm ? 'Stop' : 'Breathe now'}</button>`,
+    () => `<div class="cap">Pattern<small>${esc(bp[3])}</small></div>
+      <div class="ico lg">${BREATHS.map(([v, l, k]) => `<button aria-pressed="${S.breath === v}" data-a="pickBreath" data-v='${J(v)}'>${ic(k)}<span>${esc(l)}</span></button>`).join('')}</div>
+      <div class="cap">Remind me to breathe${locked ? ' · Pro' : ''}</div>${seg(BREATH_EVERY, S.breathEvery || 0, locked ? 'openPro' : 'pickBreathReminder', true)}`, true);
+
+  const water = card('water', 'Water', 'water', S.water ? `Every ${mins(S.water)}` : 'No reminder',
+    () => `<button class="swrow" data-a="${locked ? 'openPro' : 'pickReminder'}" data-v='${J(S.water ? 0 : 45)}' data-tag><span>Remind me</span><span class="sw" role="switch" aria-checked="${S.water > 0}"></span></button>`,
+    () => `<div class="cap">Remind me to drink${locked ? ' · Pro' : ''}</div>${seg(WATER_EVERY, S.water || 0, locked ? 'openPro' : 'pickReminder', true)}
+      <div class="row" style="margin-top:4px"><span class="lab">Show over my apps<small>A small card under the menu bar</small></span>${sw(S.overApps, locked ? 'openPro' : 'toggleRemindersOverApps')}</div>
+      <div class="row"><button class="link" data-a="remindNow">Remind me now</button>${S.overApps ? '<button class="link" data-a="previewReminderCard">Preview the card</button>' : ''}</div>`, true);
+
+  const settings = card('settings', 'Settings', 'gear', `${esc(energy[1])} · ${esc((PLACE.find((p) => p[0] === (S.layoutMode || 'auto')) || PLACE[0])[1].toLowerCase())} placement`,
+    null,
+    () => `<div class="cap">Desktop placement<small>${esc(S.layoutSummary || '')}</small></div>
+      <div class="place">${PLACE.map(([v, l]) => `<button aria-pressed="${v === (S.layoutMode || 'auto')}" data-a="pickLayoutMode" data-v='${J(v)}'>${placeSvg(v, /left/i.test(S.layoutSummary || '') ? 'left' : 'right')}${l}</button>`).join('')}</div>
+      <p class="note">${PLACE_NOTE[S.layoutMode || 'auto']}</p>
+      <div class="row"><span>Also keep clear of desktop icons</span>${sw(S.avoidIcons, 'toggleAvoidIcons')}</div>
+      <div class="cap">Energy</div>
+      <div class="ico lg">${ENERGY.map(([v, l, k]) => `<button aria-pressed="${S.energy === v}" data-a="pickEnergy" data-v='${J(v)}'>${ic(k)}<span>${esc(l)}</span></button>`).join('')}</div>
+      <p class="note">${ENERGY_NOTE[S.energy] || ''}</p>
+      ${S.energy === 'away' ? `<div class="cap">Pause after</div>${seg(S.awayChoices.map(([v, l]) => [v, l.replace(' sec', 's').replace(' min', 'm')]), S.away, 'pickAway', true)}` : ''}
+      <div class="row" style="margin-top:6px"><span>Smoothness</span><span style="width:150px">${seg([[20, '20'], [30, '30'], [60, '60 fps']], S.fps, 'pickFps', true)}</span></div>
+      <div class="cap">General</div>
+      <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>
+      <div class="row"><span class="lab">AI companions<small>Koi glow while Claude or Codex works</small></span>${sw(S.companions !== 'off', locked ? 'openPro' : 'pickCompanions', S.companions !== 'off' ? 'off' : 'native')}</div>
+      <div class="row"><span class="lab">Share anonymous counts<small>Daily totals only</small></span>${sw(S.sharePlayCounts !== false, 'togglePlayCounts')}</div>
+      <div class="row">${S.pro ? `<span class="note" style="margin:0">Pro is active${S.licensed ? ' · <button class="link" data-a="deactivateLicense">move to another Mac</button>' : ''}</span>` : '<button class="link" data-a="enterLicense">Have a key?</button>'}<button class="link" data-a="shareApp">Share wallpap</button></div>`);
 
   $('#root').innerHTML = `
-  <div class="head">
-    <div class="logo"><svg viewBox="0 0 22 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 4c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1"/><path d="M1 8.5c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1" opacity=".45"/></svg>wallpap</div>
-    ${S.pro ? '<span class="pill pro">Pro</span>' : '<span style="display:flex;gap:8px;align-items:center"><button class="note" data-a="enterLicense" style="text-decoration:underline">Have a key?</button><button class="pill unlock" data-a="openPro">Unlock Pro · $5</button></span>'}
-  </div>
-
   <div class="now" style="background-image:${thumb(cur.id, cur.thumb)}">
-    <div class="t"><b>${esc(cur.title)}</b><span>${esc(cur.cat)}${cur.author && cur.author !== 'wallpap' ? ' · by ' + esc(cur.author) : ''}${S.paused ? ' · paused' : ''}</span></div>
+    <div class="brand"><svg viewBox="0 0 22 10"><path d="M1 4c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1"/><path d="M1 8.5c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2 5-1" opacity=".45"/></svg>wallpap</div>
+    <div class="tr">${S.web ? '<button class="glass" data-a="addToDesktop" title="Open this world in the wallpap app">Add to desktop</button>' : ''}${S.pro ? '' : '<button class="glass pro" data-a="openPro">PRO</button>'}<button class="glass" data-a="togglePause" title="${S.paused ? 'Resume' : 'Pause'} the scene">${ic(S.paused ? 'play' : 'pause')}</button><button class="glass" data-a="nextSceneNow" title="Next world">${ic('next')}</button></div>
+    <div class="nm"><b>${esc(cur.title)}</b>${S.paused ? '<span>Paused · click the scene to resume</span>' : ''}</div>
+    ${acts.length ? `<div class="acts">${acts.map((c) => { const k = actIcon(String(c.v), c.title); return `<button class="glass" data-a="runAction" data-v='${J(c.v)}' title="${esc(c.title)}">${ic(k)}<span>${esc(ACT_WORD[k] || c.title.split(' ')[0])}</span></button>`; }).join('')}</div>` : ''}
   </div>
-  ${S.clickTip ? `<div class="tip"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l9 6.5-4.2.8 2.5 4.6-1.8 1-2.5-4.6L6 14.5z"/></svg><p>Clicking a scene also slides your windows away. That's the macOS setting <b>Click wallpaper to reveal desktop</b> — set it to <b>Only in Stage Manager</b> to play with scenes freely.<span><button data-a="openDesktopSettings">Open setting</button><button data-a="dismissClickTip">Keep as is</button></span></p></div>` : ''}
-  ${sceneActs ? `<div class="acts">${sceneActs}</div>` : ''}
-  ${sceneCtl ? `<div class="ctl">${sceneCtl}</div>` : ''}
-
-  ${sec('scenes', 'Scenes', esc(cur.title) + (S.cycle ? ` · changes every ${esc(label(CYCLE, S.cycle))}` : ''), `
-    <div class="cats">${cats.concat(['Discover', 'Custom']).map((c) => {
-      const n = c === 'Discover' ? offers.length : c === 'Custom' ? S.scenes.filter((x) => x.custom).length : S.scenes.filter((x) => x.cat === c).length;
-      return `<button aria-pressed="${c === tab}" data-tab="${esc(c)}" title="${esc(c)}">${icon(c, 18)}<span>${esc(c === 'Cozy Rooms' ? 'Rooms' : c === 'City Nights' ? 'City' : c)}</span>${n ? `<em>${n}</em>` : ''}</button>`;
-    }).join('')}</div>
-    ${tab === 'Discover' ? discover(offers, locked) : tab === 'Custom' ? customTab(locked) : `<div class="grid">${S.scenes.filter((s) => s.cat === tab).map(tile).join('')}</div>`}
-    <div class="look" style="margin-top:9px"><span class="note">Change scene automatically</span>${chips(CYCLE, S.cycle, 'pickSceneCycle', { wrap: true, tag: true })}</div>
-    ${S.cycle ? `<div class="row"><div style="width:190px">${chips([['all', 'All scenes'], ['category', 'This category']], S.cycleScope, 'pickSceneCycleScope')}</div><span>Shuffle ${sw(S.cycleShuffle, 'toggleSceneCycleShuffle')}</span></div>` : ''}`)}
-
-  ${sec('env', 'Environment', `${esc(label(CLOCKS.concat(VIEWS), S.timeView).toLowerCase())} time · ${S.weather ? esc(label(WEATHER, S.weather).toLowerCase()) : 'live weather'}`, `
-    <div class="lbl note" style="margin-bottom:4px">Time</div>
-    ${chips(CLOCKS, S.timeView, 'pickTimeView')}
-    <div class="lbl note" style="margin:6px 0 4px">or hold a moment</div>
-    ${chips(VIEWS, S.timeView, 'pickTimeView')}
-    <div class="row" style="margin-top:9px"><span class="note">Weather</span><span class="note">${esc(S.liveWeather || '')}</span></div>
-    ${chips(WEATHER.map(([v, l]) => [v, v === '' && locked ? 'Live ·Pro' : l]), S.weather, 'pickWeather')}
-    <div class="row"><span>Use my precise location</span>${sw(S.precise, 'togglePreciseLocation')}</div>
-    <div class="row" style="margin-top:9px"><span class="note">Keep clear for widgets</span><span class="note">${esc(S.layoutSummary || '')}</span></div>
-    ${chips([['auto', 'Auto'], ['right', 'Right'], ['left', 'Left'], ['off', 'Off']], S.layoutMode || 'auto', 'pickLayoutMode')}
-    <div class="row"><span>Also avoid my desktop icons</span>${sw(S.avoidIcons, 'toggleAvoidIcons')}</div>`)}
-
-  ${sec('sound', 'Sound &amp; Music', [S.muted ? 'muted' : 'sound on', S.music && 'music mode', S.soundscape !== 'off' && label(SCAPES, S.soundscape).toLowerCase()].filter(Boolean).join(' · '), `
-    <div class="row"><span>Music Mode${pro(locked)} <span class="note">Music · Spotify</span></span>${sw(S.music, locked ? 'openPro' : 'toggleMusicMode')}</div>
-    ${S.music && !cur.music ? `<p class="note">This scene has no music player. Music Mode shows in scenes marked with a note (${esc(S.scenes.filter((x) => x.music).map((x) => x.title).slice(0, 4).join(', '))}…).</p>` : ''}
-    ${S.music && S.musicDenied ? '<button class="warn" data-a="openAutomationSettings">Allow wallpap to control Music/Spotify…</button>' : ''}
-    ${S.music ? `<div class="row sub"><span>Beat Sync <span class="note">moves with the beat</span></span>${sw(S.beat, 'toggleBeatSync')}</div>` : ''}
-    <div class="row" style="margin-top:9px"><span class="note">Soundscape${pro(locked)}</span></div>
-    ${chips(SCAPES, S.soundscape, locked ? 'openPro' : 'pickSoundscape')}
-    ${S.soundscape !== 'off' ? chips([[0.18, 'Quiet'], [0.35, 'Medium'], [0.6, 'Loud']], S.ssVol, 'pickSoundscapeVolume', { seg: true }) : ''}
-    <div class="row" style="margin-top:9px"><span class="note">Levels</span></div>
-    ${LEVELS.map(([c, l]) => { const p = S.audio.find((x) => x.c === c) || { on: true, vol: 1 };
-      return `<div class="row"><span>${l}</span><span style="display:flex;gap:6px;align-items:center">${p.on ? chips(VOLS.map(([v, n]) => [JSON.stringify([c, v]), n]), JSON.stringify([c, p.vol]), 'pickAudioVol', { seg: true }) : ''}${sw(p.on, 'toggleAudioCat', c)}</span></div>`; }).join('')}`)}
-
-  ${sec('well', `Wellbeing${locked ? ' <small>Pro</small>' : ''}`, [S.calm && 'breathing', S.water ? `water ${S.water}m` : 'water off'].filter(Boolean).join(' · '), `
-    <div class="tiles">
-      <button class="tl" aria-pressed="${S.calm}" data-a="toggleCalm"><b>Breathe</b><span>${esc(label(BREATHS, S.breath))}</span></button>
-      <button class="tl" aria-pressed="${S.water > 0}" data-a="${locked ? 'openPro' : 'cycleWater'}"><b>Water</b><span>${S.water ? `every ${S.water} min` : 'reminder off'}</span></button>
-    </div>
-    ${S.calm ? `<div style="margin-top:6px">${chips(BREATHS, S.breath, 'pickBreath', { seg: true })}</div>` : ''}
-    ${S.water ? `<div class="row"><span class="note">Remind every</span>${chips(WATER, S.water, 'pickReminder', { seg: true, tag: true })}</div><div class="row"><span></span><button class="note" data-a="remindNow" style="text-decoration:underline">Remind me now</button></div>` : ''}
-    <div class="row" style="margin-top:8px"><span class="note">Breathe reminder</span></div>
-    ${chips([[0, 'Off'], [60, '1h'], [90, '90m'], [120, '2h']], S.breathEvery || 0, locked ? 'openPro' : 'pickBreathReminder', { tag: true })}
-    <div class="row"><span>Show reminders over my apps <span class="note">small card under the menu bar</span></span>${sw(S.overApps, locked ? 'openPro' : 'toggleRemindersOverApps')}</div>
-    ${S.overApps ? '<div class="row"><span></span><button class="note" data-a="previewReminderCard" style="text-decoration:underline">Preview the card</button></div>' : ''}
-    <div class="row" style="margin-top:8px"><span class="note">AI companions${pro(locked)}</span></div>
-    ${chips(COMP, S.companions, locked ? 'openPro' : 'pickCompanions', { seg: true })}`)}
-
-  ${sec('perf', 'Energy', `${S.paused ? 'paused · ' : ''}${label(ENERGY, S.energy).toLowerCase()}${S.energy === 'away' ? ' ' + label(S.awayChoices, S.away) : ''} · ${S.fps} fps`, `
-    ${chips(ENERGY, S.energy, 'pickEnergy')}
-    <p class="note" style="margin:5px 0 2px">${ENERGY_NOTE[S.energy] || ''}</p>
-    ${S.energy === 'away' ? `<div class="row"><span class="note">Pause after</span></div>${chips(S.awayChoices, S.away, 'pickAway', { tag: true })}<p class="note" style="margin-top:3px">${S.away === S.awayRec ? 'Recommended — a good balance of battery and life on screen.' : `Recommended: ${esc(label(S.awayChoices, S.awayRec))}.`}</p>` : ''}
-    <div class="row" style="margin-top:8px"><span>Frame rate</span><div style="width:190px">${chips(FPS, S.fps, 'pickFps', { tag: true })}</div></div>
-    <div class="row"><span>Share anonymous usage counts</span>${sw(S.sharePlayCounts !== false, 'togglePlayCounts')}</div><p class="note">Daily totals only. No identifiers, answers or article links.</p>
-    <div class="row"><span>Open at login</span>${sw(S.login, 'toggleLogin')}</div>`)}
-
-  ${sec('acct', S.pro ? 'wallpap Pro' : 'Free plan', S.pro ? 'all looks and features' : 'every scene, default looks', S.pro ? `
-    <div class="row"><span>${ICON.check} Pro is active on this Mac</span>${S.licensed ? '<button class="note" data-a="deactivateLicense" style="text-decoration:underline">Move to another Mac</button>' : ''}</div>
-    <div class="row"><button class="note" data-a="shareApp" style="text-decoration:underline">${ICON.share} Share wallpap</button><button class="note" data-a="openSubmitScene" style="text-decoration:underline">Make a scene</button></div>` : `
-    <p class="note" style="margin-bottom:6px">You have every scene in its default look. Pro adds:</p>
-    <ul class="perks">${PERKS.map((p) => `<li>${ICON.check} ${esc(p)}</li>`).join('')}</ul>
-    <div class="row" style="margin-top:8px"><button class="pill unlock big" data-a="openPro">Get Pro — $5 once</button><button class="note" data-a="enterLicense" style="text-decoration:underline">Have a key?</button></div>
-    <p class="note" style="margin-top:6px">One purchase, up to 3 Macs. No subscription.</p>
-    <div class="row"><button class="note" data-a="shareApp" style="text-decoration:underline">${ICON.share} Share wallpap</button><button class="note" data-a="openSubmitScene" style="text-decoration:underline">Make a scene</button></div>`)}
-
-  <nav class="qbar" aria-label="Quick controls">
-    <button data-a="togglePlay" ${S.playAvailable === false ? 'disabled' : ''} title="${esc(S.playReason || 'Daily puzzles and headlines')}"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m7 4 9 6-9 6z"/></svg><span>${S.playOpen ? 'Close Play' : 'Play'}</span></button>
-    <button data-a="togglePause" aria-pressed="${!!S.paused}" title="${S.paused ? 'Resume animation' : 'Pause animation'}">${S.paused ? QI.play : QI.pause}</button>
-    <button data-a="toggleMute" aria-pressed="${!S.muted}" title="${S.muted ? 'Sound off' : 'Sound on'}">${S.muted ? QI.mute : QI.sound}</button>
-    <button class="on-accent" data-a="${S.pro ? 'toggleMusicMode' : 'openPro'}" aria-pressed="${!!S.music}" title="Music Mode${S.pro ? '' : ' (Pro)'}">${QI.music}</button>
-    <button class="on-accent" data-a="toggleCalm" aria-pressed="${!!S.calm}" title="Breathe${S.pro ? '' : ' (Pro)'}">${QI.breathe}</button>
-    <button data-a="nextSceneNow" title="Next scene">${QI.next}</button>
-    <span class="sep"></span>
-    <button data-a="reloadScene" title="Reload scene">${QI.reload}</button>
-    <button data-a="showNativeMenu" title="All settings, Quit">${QI.more}</button>
+  ${looks.map((c) => `<div class="look"><span>${esc(c.title)}</span>${seg(c.options.map((o) => [o.v, o.label]), (c.options.find((o) => o.on) || {}).v, 'pickSetting')}</div>`).join('')}
+  ${S.clickTip ? `<div class="tip"><p>Clicking a scene also slides your windows away (macOS <b>Click wallpaper to reveal desktop</b>). Set it to <b>Only in Stage Manager</b>.<span><button data-a="openDesktopSettings">Open setting</button><button data-a="dismissClickTip">Keep</button></span></p></div>` : ''}
+  <div class="cards">${worlds}${mood}${sound}${breathe}${water}${settings}</div>
+  <nav class="foot">
+    <button data-a="togglePlay" ${S.playAvailable === false ? 'disabled' : ''} title="${esc(S.playReason || 'Daily puzzles')}">${ic('puzzle')}<span>${S.playOpen ? 'Close puzzles' : 'Puzzles'}</span></button>
+    <span class="sp"></span>
+    <button data-a="reloadScene" title="Reload the scene">${ic('reload')}</button>
+    <button data-a="showNativeMenu" title="More · Quit">${ic('dots')}</button>
   </nav>`;
   reportHeight();
 }
 
-// Collapsible sections: each remembers open/closed (per viewer); the summary line shows
-// the current settings while collapsed, so a closed panel still reads at a glance.
-const SEC_DEFAULT = { scenes: true, env: false, sound: false, well: false, perf: false, acct: true };
-const secOpen = (() => { try { return JSON.parse(localStorage.getItem('panel.sec') || '{}'); } catch (e) { return {}; } })();
-const isOpen = (k) => (k in secOpen ? secOpen[k] : SEC_DEFAULT[k]);
-const label = (list, v) => ((list.find((x) => String(x[0]) === String(v)) || list[0])[1]);
-const sec = (k, title, hint, body) => `<section><details ${isOpen(k) ? 'open' : ''}><summary data-open="${k}"><h2>${icon(k)}<span>${title}</span><small>${isOpen(k) ? '' : hint}</small></h2></summary>${body}</details></section>`;
-
-document.addEventListener('change', (e) => {
-  const sel = e.target.closest('select[data-act]'); if (!sel) return;
-  const v = JSON.parse(sel.value);
-  send(sel.dataset.act, v, sel.hasAttribute('data-tag') ? Number(v) : null);
-});
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab],[data-a],summary');
+  const co = e.target.closest('[data-card-open]');
+  if (co) { open[co.dataset.cardOpen] = true; saveOpen(); render(S); return; }
+  const cd = e.target.closest('[data-card]');
+  if (cd) { const k = cd.dataset.card; open[k] = !open[k]; saveOpen(); render(S); return; }
+  const ct = e.target.closest('[data-cat]');
+  if (ct) { cat = ct.dataset.cat; render(S); return; }
+  const t = e.target.closest('[data-a]');
   if (!t) return;
-  if (t.matches('summary')) {
-    const k = t.dataset.open; const d = t.parentElement;
-    setTimeout(() => { secOpen[k] = d.open; try { localStorage.setItem('panel.sec', JSON.stringify(secOpen)); } catch (err) {} render(S); });
-    return;
-  }
-  if (t.dataset.tab) { tab = t.dataset.tab; render(S); return; }
-  const a = t.dataset.a;
-  if (!a) return;
+  const a = t.dataset.a; if (!a) return;
   let v = t.dataset.v !== undefined ? JSON.parse(t.dataset.v) : null;
   if (a === 'pickAudioVol' && typeof v === 'string') v = JSON.parse(v);
-  if (a === 'cycleWater') { send('pickReminder', null, S.water ? 0 : 60); return; }
+  if (a === 'pickSoundscape' && v !== 'off') S.lastScape = v;
   send(a, v, t.hasAttribute('data-tag') ? Number(v) : null);
 });
 
@@ -374,15 +425,33 @@ function reportHeight() {
 }
 
 if (host) send('ready');
-else render({ // standalone design preview
-  pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
-  scenes: [['koi', 'Koi Pond', 'Nature', 1], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Corner Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Train Journey', 'Journeys', 1], ['drive', 'Night Drive', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful'], ['cymatics', 'Cymatics', 'Music', 1], ['kinetic', 'Kinetic', 'Music', 1], ['fluids', 'Fluids', 'Music', 1], ['skies', 'Skies', 'Music', 1]].map(([id, title, cat, m]) => ({ id, title, cat, pro: false, music: !!m, author: 'wallpap' })),
-  sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }],
-  timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24° (Bengaluru)', precise: false, muted: false,
-  audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
-  soundscape: 'off', ssVol: 0.35, music: true, musicDenied: false, beat: true, companions: 'native',
-  calm: false, breath: 'box', water: 45, paused: false, userPaused: false, fps: 30, breathEvery: 0, overApps: true, cycle: 0, cycleScope: 'all', cycleShuffle: true, licensed: false, offers: [{ id: 'butterfly-garden', title: 'Butterfly Garden', cat: 'Nature', pro: true, author: 'wallpap', featured: true, thumb: 'art/thumbs/grass.jpg' }, { id: 'beach', title: 'Beach', cat: 'Nature', pro: true, author: 'Mira K.', new: true, thumb: 'art/thumbs/koi.jpg' }], layoutMode: 'auto', layoutSummary: '4 widgets on the right', avoidIcons: false, login: true, energy: 'away', away: 120, awayRec: 120, onBattery: false, awayChoices: [[30, '30 sec'], [60, '1 min'], [120, '2 min'], [300, '5 min'], [600, '10 min'], [1800, '30 min']],
-});
+else { // standalone design preview: clicks change this mock state
+  const M = {
+    pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
+    scenes: [['koi', 'Koi Pond', 'Nature'], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Corner Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Train Journey', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful'], ['cymatics', 'Cymatics', 'Music', 1]].map(([id, title, cat, m]) => ({ id, title, cat, pro: false, music: !!m })),
+    sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }],
+    timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24°', precise: false, muted: false,
+    audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
+    soundscape: 'off', ssVol: 0.35, music: false, musicDenied: false, beat: true, companions: 'native',
+    calm: false, breath: 'box', water: 45, paused: false, fps: 30, breathEvery: 60, overApps: true, cycle: 0, cycleScope: 'all', cycleShuffle: true, licensed: false,
+    offers: [{ id: 'butterfly-garden', title: 'Butterfly Garden', thumb: 'art/thumbs/grass.jpg' }, { id: 'beach', title: 'Beach', thumb: 'art/thumbs/koi.jpg' }],
+    layoutMode: 'auto', layoutSummary: '4 widgets on the right', avoidIcons: false, login: true, energy: 'away', away: 120, awayRec: 120,
+    awayChoices: [[30, '30 sec'], [60, '1 min'], [120, '2 min'], [300, '5 min'], [600, '10 min']],
+  };
+  const tog = { toggleMute: 'muted', toggleMusicMode: 'music', toggleCalm: 'calm', togglePause: 'paused', toggleBeatSync: 'beat', toggleLogin: 'login', togglePreciseLocation: 'precise', toggleAvoidIcons: 'avoidIcons', toggleRemindersOverApps: 'overApps', toggleSceneCycleShuffle: 'cycleShuffle' };
+  const pick = { pickScene: 'scene', pickTimeView: 'timeView', pickWeather: 'weather', pickSoundscape: 'soundscape', pickSoundscapeVolume: 'ssVol', pickBreath: 'breath', pickEnergy: 'energy', pickLayoutMode: 'layoutMode', pickAway: 'away', pickFps: 'fps', pickSceneCycle: 'cycle', pickSceneCycleScope: 'cycleScope', pickBreathReminder: 'breathEvery', pickReminder: 'water', pickCompanions: 'companions' };
+  window.__mock = (a, v, tag) => {
+    if (a === 'height') return;
+    if (tog[a]) M[tog[a]] = !M[tog[a]];
+    else if (pick[a]) M[pick[a]] = tag != null ? tag : v;
+    else if (a === 'toggleAudioCat') { const p = M.audio.find((x) => x.c === v); p.on = !p.on; }
+    else if (a === 'pickAudioVol') { const p = M.audio.find((x) => x.c === v[0]); p.vol = v[1]; }
+    else if (a === 'nextSceneNow') { const i = M.scenes.findIndex((s) => s.id === M.scene); M.scene = M.scenes[(i + 1) % M.scenes.length].id; }
+    M.lastScape = S && S.lastScape;
+    render(M);
+  };
+  render(M);
+}
 </script>
 </body>
 </html>

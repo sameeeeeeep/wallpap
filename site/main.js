@@ -547,7 +547,7 @@ async function getPanelSrc() {
   if (!panelSrc) {
     const r = await fetch('scenes/menu.html');
     if (!r.ok) throw new Error('menu.html missing');
-    panelSrc = (await r.text()).replace('<div class="now"', '<div class="row" style="padding:8px 0"><button class="pill" data-a="addToDesktop">Add to desktop</button></div><div class="now"').replace('<head>', '<head><base href="scenes/"><script>window.webkit={messageHandlers:{panel:{postMessage:function(m){try{parent.__wpPanel(window.frameElement,m)}catch(e){}}}}};<\/script>');
+    panelSrc = (await r.text()).replace('<head>', '<head><base href="scenes/"><script>window.webkit={messageHandlers:{panel:{postMessage:function(m){try{parent.__wpPanel(window.frameElement,m)}catch(e){}}}}};<\/script>');
   }
   return panelSrc;
 }
@@ -836,7 +836,7 @@ class SceneHost {
   panelState() {
     const s = this.scene, P = this.pst;
     return {
-      pro: true, scene: s.id, categories: CATS,
+      pro: true, web: true, scene: s.id, categories: CATS,
       scenes: SCENES.map((x) => ({ id: x.id, title: x.name, cat: x.cat, pro: false, music: !!x.music })),
       sceneCtl: (s.actions || []).map(([v, title]) => ({ type: 'action', title, v })),
       timeView: this.timeView || 'auto', weather: this.env.weather, liveWeather: 'Live weather in the app', precise: P.precise,
@@ -1389,9 +1389,9 @@ const GUIDES = {
 };
 const ORDERED = ['move', 'down', 'hold', 'wait'];
 const PANEL_COACH_CSS = `@keyframes wpPulse{0%,100%{box-shadow:0 0 0 2px #d9a441}50%{box-shadow:0 0 0 6px rgba(217,164,65,.28)}}
-body[data-coach=scenes] :is(.cats,.grid){border-radius:10px;animation:wpPulse 1.6s ease-in-out infinite}
-body[data-coach=time] :is(.chips,.it):has(>[data-a=pickTimeView]){border-radius:9px;animation:wpPulse 1.6s ease-in-out infinite}
-body[data-coach=weather] :is(.chips,.it):has(>[data-a=pickWeather]){border-radius:9px;animation:wpPulse 1.6s ease-in-out infinite}`;
+body[data-coach=scenes] section.c:has(:is(.strip,.thumbs)){animation:wpPulse 1.6s ease-in-out infinite}
+body[data-coach=time] .timerow{border-radius:11px;animation:wpPulse 1.6s ease-in-out infinite}
+body[data-coach=weather] .ico:has(>[data-a=pickWeather]){border-radius:9px;animation:wpPulse 1.6s ease-in-out infinite}`;
 const Journey = {
   order: CHAPTERS,
   index: -1, entered: -1, active: false, prog: {}, picked: null,
@@ -1556,9 +1556,8 @@ const Journey = {
     if (!d.getElementById('wpCoach')) { const st = d.createElement('style'); st.id = 'wpCoach'; st.textContent = PANEL_COACH_CSS; d.head.appendChild(st); }
     if (!k) { delete d.body.dataset.coach; return; }
     d.body.dataset.coach = k;
-    try { w.eval(`if (typeof secOpen === 'object') { secOpen.scenes = ${k === 'scenes'}; secOpen.env = ${k !== 'scenes'}; }`); } catch (e) {}
     this.host.renderPanel();
-    const sel = k === 'scenes' ? '.cats, .grid' : `[data-a=${k === 'time' ? 'pickTimeView' : 'pickWeather'}]`;
+    const sel = k === 'scenes' ? '.strip, .thumbs' : k === 'time' ? '.timerow' : '[data-a=pickWeather]';
     requestAnimationFrame(() => { const t = d.querySelector(sel); if (t) t.scrollIntoView({ block: 'center', behavior: 'smooth' }); });
   },
   coachText() {

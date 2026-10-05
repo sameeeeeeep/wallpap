@@ -1113,6 +1113,12 @@ final class App: NSObject, NSApplicationDelegate, WKScriptMessageHandler, WKNavi
             mediaCommand(cmd)
             return
         }
+        // The breathing overlay's Done button (lw.js) turns Breathe off everywhere.
+        if let d = message.body as? [String: Any], d["type"] as? String == "calm" {
+            let on = d["on"] as? Bool ?? false
+            if calm != on { calm = on; windows.forEach { $0.js("__lw('calm',\(calm))") }; rebuildMenu() }
+            return
+        }
         if let d = message.body as? [String: Any], d["type"] as? String == "set", let key = d["key"] as? String {
             var cur = sceneSettings
             cur[key] = d["value"]

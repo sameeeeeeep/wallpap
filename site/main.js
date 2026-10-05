@@ -669,7 +669,7 @@ class SceneHost {
       const doc = f.contentDocument, win = f.contentWindow;
       const st = doc.createElement('style'); st.textContent = '#hud{display:none!important}'; doc.head.appendChild(st);
       // Act as the host: in-scene media buttons (record player, jukebox…) drive our player.
-      if (win.LW) { win.LW.isHost = true; win.LW.post = (m) => { if (m && m.type === 'media') this.onMedia(m.cmd); }; }
+      if (win.LW) { win.LW.isHost = true; win.LW.post = (m) => { if (m && m.type === 'media') this.onMedia(m.cmd); else if (m && m.type === 'calm' && !!m.on !== this.calm) this.setCalm(!!m.on); }; }
       if (this.interactive) {
         const act = () => { this.emit('user'); this.emit('down'); if (this.paused) this.setPaused(false); this.hideCard(); if (this.panelOpen) this.closePanel(); };
         win.addEventListener('pointerdown', act, { passive: true });
@@ -1221,7 +1221,7 @@ const Tour = {
         run: async (r) => { await ensure('cats', r); await sceneTap(0.42, 0.84, r); await r.sleep(1500); await press($('[data-action="toy"]'), r, () => h.action('toy')); await r.sleep(3000); } },
       { cap: 'Music Mode: what’s playing on your Mac, in the scene', now: () => PG.select(mus),
         run: async (r) => { await ensure(mus, r); await r.sleep(3800); await press(h.el.next, r, () => Music.next(1)); await r.sleep(4200); } },
-      { cap: 'Breathe with the scene', now: () => h.setCalm(true), run: async (r) => { await press($('#qBreathe'), r, () => h.setCalm(true)); await r.sleep(9000); h.setCalm(false); await r.sleep(600); } },
+      { cap: 'Take a breath — Done when you’re ready', now: () => h.setCalm(true), run: async (r) => { await press($('#qBreathe'), r, () => h.setCalm(true)); await r.sleep(9000); h.setCalm(false); await r.sleep(600); } },
       { cap: 'A gentle reminder to drink some water', now: () => { h.remind('water'); h.showCard(); },
         run: async (r) => { await press($('#qWater'), r, () => { h.remind('water'); h.showCard(5200); }); await r.sleep(5000); } },
       { cap: 'Everything lives in one menu-bar panel', now: () => h.openPanel(),

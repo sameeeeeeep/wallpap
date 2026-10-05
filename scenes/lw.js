@@ -19,9 +19,9 @@
 //   LW.on('env', env => ...)          fires on load and whenever it changes
 //   LW.on('reminder', r => ...)       r = {kind:'water'|'stretch'|'breathe', text}
 //                                     scenes show it IN-WORLD, gently, then let it fade
-//   LW.on('calm', on => ...)          calm/breathing mode toggled (slow everything down,
-//                                     show a 4s-in / 6s-out breathing rhythm)
-//   LW.calm       bool
+//   Breathing: one standard overlay drawn by this runtime over every scene (orb + phase ring +
+//   countdown + Done). Scenes are NOT told (LW.calm stays false, 'calm' is never emitted);
+//   LW.breathing / LW.setBreathing(on) / LW.on('breathing', on). Done posts {type:'calm', on:false}.
 // Music mode (host reads Apple Music / Spotify "now playing"):
 //   LW.nowPlaying  {title, artist, album, artwork (data/https URL or ''), playing, app} | null
 //   LW.on('nowplaying', np => ...)    fires on track/play-state change
@@ -150,6 +150,7 @@
   LW._idle = () => idle;
 
   function input(type, x, y) {
+    if (type === 'down' && LW._breathHit && LW._breathHit(x, y)) { LW.setBreathing(false); return; }
     const p = LW.pointer;
     p.x = x; p.y = y; p.t = performance.now(); p.inside = true;
     if (type === 'down') { p.down = true; LW.audio(); if (LW.soundscape.kind !== 'off' && !SS.gain) startSoundscape(); }
@@ -177,7 +178,10 @@
     hour: viewMode==='custom'?pinnedHour:viewMode==='auto'?localHour():viewHours[viewMode], isDay:true,
   };
   LW.env.isDay = LW.env.hour > 6.5 && LW.env.hour < 19.5;
-  LW.calm = qs.get('calm') === '1';
+  // Breathing is one standard overlay drawn here for every scene (scenes no longer stage their own):
+  // LW.calm stays false for scenes, LW.breathing is the overlay.
+  LW.calm = false;
+  LW.breathing = qs.get('calm') === '1';
   LW.setEnv = function (patch) {
     if(LW.isHost&&(validView(patch.view)||patch.view==='cycle')&&patch.view!==LW.view){   // 'cycle' = host's accelerated day: use its hour, not the real sky
     LW.view=patch.view;viewTransitionUntil=performance.now()+6000;}
@@ -327,96 +331,100 @@
     }
     return { phase: 'in', k: 0, level: 0, label: 'breathe in', dur: 4, cycle: total };
   };
-  const BG = { cv: null, on: false, a: 0, t0: 0, last: 0 };
-  LW.breathDiegetic = false;
+  const BG = { cv: null, on: false, a: 0, t0: 0, last: 0, btn: null, breaths: 0, lastCycle: -1 };
+  LW.breathDiegetic = false;   // kept for old scenes; ignored
   LW.breathLabelAt = null;
-  LW.breathFade = 0;
-  LW.breathTime = function () { return BG.on ? performance.now() / 1000 - BG.t0 : 0; };
-  // Diegetic mode: the scene's world carries the breath; this is only a quiet caption.
-  function breathLabel(c, W, H, st, a) {
-    const at = LW.breathLabelAt || [0.36, 0.84], cx = W * at[0], cy = H * at[1], m = Math.min(W, H);
-    const P = PATTERNS[LW.breathPattern()], total = st.cycle;
-    // label: fades up at the start of each phase so the change is noticed, then settles
-    const fresh = Math.min(1, st.k * st.dur / 0.6);
-    const bw = m * 0.085, gap = Math.max(4, m * 0.005), y = cy + m * 0.024, h = Math.max(1.5, m * 0.0016);
-    // a faint smoked chip behind it: invisible on dark scenes, keeps it legible on bright ones (daylight terrace)
-    const pw = bw + m * 0.05, ph = m * 0.062;
-    c.globalAlpha = a; c.fillStyle = 'rgba(14,18,24,0.26)'; c.shadowColor = 'rgba(14,18,24,0.35)'; c.shadowBlur = m * 0.02;
-    c.beginPath(); c.roundRect(cx - pw / 2, cy - ph * 0.42, pw, ph, ph / 2); c.fill();
-    c.globalAlpha = a * (0.5 + 0.22 * fresh);
-    c.font = '300 ' + Math.round(m * 0.021) + 'px ui-serif, "New York", Georgia, serif';
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.shadowColor = 'rgba(0,0,0,0.45)'; c.shadowBlur = 8;
-    c.fillStyle = '#fbf3e6'; c.fillText(st.label, cx, cy);
-    // thin segmented cue: one dash per phase (length ∝ duration), current one fills
-    let x = cx - bw / 2, idx = 0;
-    const cur = P.findIndex((p) => p[0] === st.phase);
-    const usable = bw - gap * (P.length - 1);
-    c.shadowBlur = 6;
-    for (const [phase, dur] of P) {
-      const w = usable * dur / total;
-      c.globalAlpha = a * 0.22; c.fillStyle = '#fbf3e6';
-      c.beginPath(); c.roundRect(x, y - h / 2, w, h, h / 2); c.fill();
-      const fill = idx < cur ? 1 : idx === cur ? st.k : 0;
-      if (fill > 0) { c.globalAlpha = a * 0.62; c.beginPath(); c.roundRect(x, y - h / 2, Math.max(h, w * fill), h, h / 2); c.fill(); }
-      x += w + gap; idx++;
-    }
-    c.shadowBlur = 0; c.globalAlpha = 1;
+  LW.breathFade = 0;           // scenes no longer react to breathing
+  LW.breathTime = function () { return 0; };
+  // Where the guide sits (the open part of the screen, clear of widgets) and its Done button.
+  function breathGeom() {
+    const W = innerWidth, H = innerHeight, m = Math.min(W, H), cl = (LW.layout && LW.layout.clear) || [0, 1];
+    const cx = W * (cl[0] + cl[1]) / 2, cy = H * 0.47, R = m * 0.13, RR = R * 1.18;
+    const bw = m * 0.11, bh = m * 0.042;
+    return { W, H, m, cx, cy, R, RR, bw, bh, bx: cx - bw / 2, by: cy + RR + m * 0.075 };
   }
+  // The standard breathing overlay: the scene dims a little, an orb fills and empties with the
+  // breath inside a ring that shows the phase, a big countdown, and a Done button to dismiss.
   function breathGuide(ts) {
-    const want = LW.calm;
-    if (!want && BG.a < 0.01) { BG.on = false; LW.breathFade = 0; if (BG.cv) BG.cv.getContext('2d').clearRect(0, 0, BG.cv.width, BG.cv.height); return; }
+    const want = LW.breathing;
+    if (!want && BG.a < 0.01) { BG.on = false; BG.btn = null; if (BG.cv) BG.cv.getContext('2d').clearRect(0, 0, BG.cv.width, BG.cv.height); return; }
     requestAnimationFrame(breathGuide);
     const t = ts / 1000, dt = Math.min(0.1, BG.last ? t - BG.last : 0.016); BG.last = t;
-    BG.a += ((want ? 1 : 0) - BG.a) * Math.min(1, dt * 1.5);
-    LW.breathFade = BG.a;
+    BG.a += ((want ? 1 : 0) - BG.a) * Math.min(1, dt * 2.2);
     if (!BG.cv) {
       BG.cv = document.createElement('canvas');
       BG.cv.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none;z-index:40';
       document.documentElement.appendChild(BG.cv);
     }
     const dpr = Math.min(2, devicePixelRatio || 1), W = innerWidth, H = innerHeight, cv = BG.cv;
-    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     const c = cv.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
-    const st = LW.breathState(t - BG.t0), a = BG.a;
-    if (LW.breathDiegetic) { breathLabel(c, W, H, st, a); return; }
-    // Centre of the calm zone: left/middle of the screen (the right side is for widgets).
-    const cx = W * 0.36, cy = H * 0.46, R = Math.min(W, H) * 0.11;
+    const el = t - BG.t0, st = LW.breathState(el), a = BG.a, G = breathGeom(), m = G.m;
+    const cyc = Math.floor(el / st.cycle);
+    if (cyc !== BG.lastCycle) { if (BG.lastCycle >= 0) BG.breaths++; BG.lastCycle = cyc; }
+    // Keep clear of widgets: centre in the open part of the screen.
+    const { cx, cy, R } = G;
+    // dim the scene so the guide reads on any picture
+    const v = c.createRadialGradient(cx, cy, R * 0.5, cx, cy, Math.max(W, H) * 0.75);
+    v.addColorStop(0, `rgba(6,10,14,${0.34 * a})`); v.addColorStop(1, `rgba(6,10,14,${0.55 * a})`);
+    c.fillStyle = v; c.fillRect(0, 0, W, H);
+    // a soft dark pool behind the guide so it reads over busy scenes
+    const pool = c.createRadialGradient(cx, cy + R * 0.4, R * 0.3, cx, cy + R * 0.4, R * 2.6);
+    pool.addColorStop(0, `rgba(6,10,14,${0.42 * a})`); pool.addColorStop(1, 'rgba(6,10,14,0)');
+    c.fillStyle = pool; c.fillRect(0, 0, W, H);
+    // the orb: fills on the in-breath, holds, empties on the out-breath
+    const r = R * (0.5 + 0.5 * st.level);
     c.globalAlpha = a;
-    // soft glow that fills with the breath
-    const g = c.createRadialGradient(cx, cy, 0, cx, cy, R * 2.2);
-    g.addColorStop(0, `rgba(255,244,228,${0.10 + 0.14 * st.level})`); g.addColorStop(1, 'rgba(255,244,228,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, R * 2.2, 0, Math.PI * 2); c.fill();
-    c.strokeStyle = 'rgba(255,248,236,0.35)'; c.lineWidth = 1.5;
-    let dot;
-    if (LW.breathPattern() === 'box') {
-      const s = R * 1.5, x0 = cx - s / 2, y0 = cy - s / 2;
-      c.beginPath(); c.roundRect(x0, y0, s, s, s * 0.08); c.stroke();
-      // dot travels the square: up the left (in), across the top (hold), down the right (out), along the bottom (hold)
-      const k = st.k, side = { in: 0, hold: 1, out: 2, rest: 3 }[st.phase];
-      dot = [[x0, y0 + s * (1 - k)], [x0 + s * k, y0], [x0 + s, y0 + s * k], [x0 + s * (1 - k), y0 + s]][side];
-    } else {
-      const r = R * (0.55 + 0.45 * st.level);
-      c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
-      const ang = -Math.PI / 2 + (st.phase === 'in' ? st.k : st.phase === 'out' ? 1 - st.k : 1) * Math.PI * 2 * 0.999;
-      dot = [cx + Math.cos(ang) * r, cy + Math.sin(ang) * r];
-    }
-    c.fillStyle = 'rgba(255,250,240,0.95)'; c.shadowColor = 'rgba(255,240,220,0.9)'; c.shadowBlur = 14;
-    c.beginPath(); c.arc(dot[0], dot[1], 5, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
-    const txtA = Math.sin(Math.PI * Math.min(1, st.k * 1.4 + 0.15));
-    c.globalAlpha = a * (0.55 + 0.4 * txtA);
-    c.fillStyle = '#fbf3e6'; c.font = '300 ' + Math.round(Math.min(W, H) * 0.024) + 'px ui-serif, "New York", Georgia, serif';
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText(st.label, cx, cy);
-    c.font = '400 ' + Math.round(Math.min(W, H) * 0.012) + 'px -apple-system, system-ui, sans-serif';
-    c.globalAlpha = a * 0.45;
-    c.fillText(Math.max(1, Math.ceil(st.dur * (1 - st.k))) + '', cx, cy + Math.min(W, H) * 0.035);
+    const g = c.createRadialGradient(cx, cy - r * 0.3, r * 0.1, cx, cy, r * 1.25);
+    g.addColorStop(0, 'rgba(255,250,240,0.55)'); g.addColorStop(0.6, 'rgba(232,240,236,0.26)'); g.addColorStop(1, 'rgba(232,240,236,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(cx, cy, r * 1.25, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(255,250,240,0.7)'; c.lineWidth = 1.5; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();
+    // the ring: one arc per phase (length ∝ its seconds), the current one fills
+    const P = { box: [['in', 4], ['hold', 4], ['out', 4], ['rest', 4]], calm: [['in', 4], ['out', 6]], '478': [['in', 4], ['hold', 7], ['out', 8]] }[LW.breathPattern()];
+    const RR = G.RR, gap = 0.06, tot = st.cycle; let ang = -Math.PI / 2;
+    const curI = P.findIndex((p) => p[0] === st.phase);
+    c.lineCap = 'round'; c.lineWidth = Math.max(2.5, m * 0.004);
+    P.forEach(([ph, d], i) => {
+      const span = (Math.PI * 2) * d / tot - gap;
+      c.strokeStyle = 'rgba(255,250,240,0.18)'; c.beginPath(); c.arc(cx, cy, RR, ang, ang + span); c.stroke();
+      const f = i < curI ? 1 : i === curI ? st.k : 0;
+      if (f > 0) { c.strokeStyle = 'rgba(255,250,240,0.92)'; c.beginPath(); c.arc(cx, cy, RR, ang, ang + span * f); c.stroke(); }
+      ang += span + gap;
+    });
+    // words + countdown
+    const fresh = Math.min(1, st.k * st.dur / 0.5);
+    c.textAlign = 'center'; c.textBaseline = 'middle'; c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 10;
+    c.fillStyle = '#fbf6ec';
+    c.globalAlpha = a * (0.6 + 0.4 * fresh);
+    c.font = '300 ' + Math.round(m * 0.03) + 'px ui-serif, "New York", Georgia, serif';
+    c.fillText(st.label.replace(/^./, (x) => x.toUpperCase()), cx, cy - m * 0.028);
+    c.globalAlpha = a;
+    c.font = '200 ' + Math.round(m * 0.06) + 'px -apple-system, system-ui, sans-serif';
+    c.fillText(String(Math.max(1, Math.ceil(st.dur * (1 - st.k)))), cx, cy + m * 0.032);
+    c.shadowBlur = 0;
+    // under the orb: pattern + breaths taken, then Done
+    const name = { box: 'Box breathing · 4-4-4-4', calm: 'Calm · in 4, out 6', '478': 'Relax · 4-7-8' }[LW.breathPattern()];
+    c.globalAlpha = a * 0.7; c.font = '500 ' + Math.round(m * 0.0135) + 'px -apple-system, system-ui, sans-serif';
+    c.fillText(name + (BG.breaths ? `  ·  ${BG.breaths} breath${BG.breaths > 1 ? 's' : ''}` : ''), cx, cy + RR + m * 0.045);
+    const { bw, bh, bx, by } = G;
+    c.globalAlpha = a; c.fillStyle = 'rgba(255,250,240,0.16)'; c.strokeStyle = 'rgba(255,250,240,0.45)'; c.lineWidth = 1;
+    c.beginPath(); c.roundRect(bx, by, bw, bh, bh / 2); c.fill(); c.stroke();
+    c.fillStyle = '#fbf6ec'; c.font = '500 ' + Math.round(m * 0.016) + 'px -apple-system, system-ui, sans-serif';
+    c.fillText('Done', cx, by + bh / 2 + 0.5);
     c.globalAlpha = 1;
   }
-  function startBreathGuide() { if (!BG.on) { BG.on = true; BG.t0 = performance.now() / 1000; requestAnimationFrame(breathGuide); } }
-  LW.on('calm', (on) => { if (on) startBreathGuide(); });
-  addEventListener('load', () => { if (LW.calm) startBreathGuide(); });
+  function startBreathGuide() { if (!BG.on) { BG.on = true; BG.t0 = performance.now() / 1000; BG.breaths = 0; BG.lastCycle = -1; requestAnimationFrame(breathGuide); } }
+  LW.setBreathing = function (on, fromHost) {
+    on = !!on;
+    if (on === LW.breathing && (!on || BG.on)) return;
+    LW.breathing = on;
+    if (on) startBreathGuide();
+    if (!fromHost) LW.post({ type: 'calm', on });   // keep the menu's Breathe switch in step
+    LW.emit('breathing', on);
+  };
+  LW._breathHit = (x, y) => { if (!LW.breathing || BG.a < 0.3) return false; const g = breathGeom(); return x >= g.bx - 10 && x <= g.bx + g.bw + 10 && y >= g.by - 10 && y <= g.by + g.bh + 10; };
+  addEventListener('load', () => { if (LW.breathing) startBreathGuide(); });
 
   // ─── Music levels + beats ─────────────────────────────────────────────────
   LW.music = { level: 0, bass: 0, mid: 0, high: 0, live: false, lastLive: 0 };
@@ -717,7 +725,7 @@
     if (type === 'nowplaying') { setNowPlaying(x); return; }
     if (type === 'ambient') { LW.setSoundscape(x); return; }
     if (type === 'settings') { Object.assign(LW.settings, x || {}); LW.emit('settings', LW.settings); return; }
-    if (type === 'action') { LW.emit('action', x); return; }
+    if (type === 'action') { if (x === 'calm' || x === 'breathe') { LW.setBreathing(x === 'breathe' ? true : !LW.breathing); return; } LW.emit('action', x); return; }
     if (type === 'pauseReason') { LW.pauseReason = x || ''; return; }
     if (type === 'layout') {
       // Identical pushes (the host re-sends on display notifications) must not rebuild the scene.
@@ -726,8 +734,8 @@
       LW.layout = next; LW.emit('layout', LW.layout); return;
     }
     if (type === 'env') { LW.setEnv(x); return; }
-    if (type === 'reminder') { LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }
-    if (type === 'calm') { LW.calm = !!x; LW.emit('calm', LW.calm); return; }
+    if (type === 'reminder') { if (x === 'breathe') { LW.setBreathing(true); return; } LW.emit('reminder', { kind: x, text: y || REMINDER_TEXT[x] || '' }); return; }
+    if (type === 'calm') { LW.setBreathing(!!x, true); return; }
     if (type === 'mute') { LW.muted = !!flag; syncAudio(); if (!LW.muted && LW.soundscape.kind !== 'off') startSoundscape(); LW.emit('mute', LW.muted); return; }
     if (type === 'leave') { LW.pointer.inside = false; LW.emit('leave'); return; }
     input(type, x, y);
@@ -746,7 +754,8 @@
       if (e.key === 'w') LW.setEnv({ weather: W[(W.indexOf(LW.env.weather) + 1) % W.length] });
       if (e.key === 't') LW.setView('custom', (LW.env.hour + 3) % 24);
       if (e.key === 'r') window.__lw('reminder', 'water');
-      if (e.key === 'b') window.__lw('calm', !LW.calm);
+      if (e.key === 'b') window.__lw('calm', !LW.breathing);
+      if (e.key === 'Escape' && LW.breathing) LW.setBreathing(false);
       if (e.key === 'a') {   // cycle: working + idle → one waiting for you → none
         const n = LW.agents.list, waiting = n.some((x) => x.state === 'attention');
         window.__lw('agents', { style: LW.agents.style, list: !n.length ? [{ id: 'c1', kind: 'claude', project: 'visuals', state: 'working' }, { id: 'x1', kind: 'codex', project: 'nia', state: 'idle' }]

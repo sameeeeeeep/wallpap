@@ -456,9 +456,9 @@ function reportHeight() {
 if (host) send('ready');
 else { // standalone design preview: clicks change this mock state
   const M = {
-    pro: true, scene: 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
+    pro: true, scene: new URLSearchParams(location.search).get('scene') || 'cats', categories: ['Nature', 'Cozy Rooms', 'City Nights', 'Journeys', 'Mindful', 'Music'],
     scenes: [['koi', 'Koi Pond', 'Nature'], ['grass', 'Touch Grass', 'Nature'], ['cats', 'Santorini Cats', 'Nature'], ['cafe', 'Corner Café', 'Cozy Rooms', 1], ['cabin', 'Snowy Cabin', 'Cozy Rooms', 1], ['records', 'Record Store', 'Cozy Rooms', 1], ['speakeasy', 'Speakeasy', 'City Nights', 1], ['rooftop', 'Rooftop', 'City Nights', 1], ['ramen', 'Ramen Alley', 'City Nights', 1], ['train', 'Train Journey', 'Journeys', 1], ['bowls', 'Singing Bowls', 'Mindful'], ['cymatics', 'Cymatics', 'Music', 1]].map(([id, title, cat, m]) => ({ id, title, cat, pro: false, music: !!m })),
-    sceneCtl: [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }],
+    sceneCtl: (new URLSearchParams(location.search).get('scene') || 'cats') === 'cats' ? [{ type: 'action', title: 'Feed the Cats', v: 'feed' }, { type: 'action', title: 'Fill the Water Bowl', v: 'water' }, { type: 'action', title: 'Toss a Toy', v: 'toy' }] : [{ type: 'action', title: 'Pet the pup', v: 'pet' }],
     timeView: 'auto', weather: '', liveWeather: 'Live — rain · 24°', precise: false, muted: false,
     audio: [{ c: 'fx', on: true, vol: 1 }, { c: 'ambience', on: true, vol: 0.7 }, { c: 'weather', on: false, vol: 1 }],
     soundscape: 'off', ssVol: 0.35, music: false, musicDenied: false, beat: true, companions: 'native',

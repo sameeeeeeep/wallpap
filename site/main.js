@@ -1083,7 +1083,8 @@ const PG = {
       } else if (focus) wave.focus({ preventScroll: true });
       this.sync();
     };
-    h.onWave = (e) => { if (!inFs()) return false; this.setDrop(!this.dropOpen, e.detail === 0); return true; };
+    // The wave opens the real wallpap menu (scenes/menu.html) in fullscreen too; the old dropdown stays for no one.
+    h.onWave = () => false;
     document.addEventListener('pointerdown', (e) => { if (this.dropOpen && !e.target.closest('#panel, .wave-btn')) this.setDrop(false); }, true);
     h.on((type) => { if (type === 'down' && this.dropOpen) this.setDrop(false); });   // a click inside the scene
     new ResizeObserver(() => { if (this.dropOpen) placeDrop(); }).observe(screenEl);
@@ -1096,7 +1097,7 @@ const PG = {
         setSheet(false); Tour.stop();
         if (panel.parentNode !== screenEl) { panel.classList.add('as-drop'); screenEl.appendChild(panel); }
         wave.setAttribute('aria-controls', 'panel'); wave.setAttribute('aria-label', 'Show the controls');
-        h.note('Click the wave in the menu bar for the controls · Esc to exit', 4200);
+        h.note('Click the wave in the menu bar for wallpap’s menu · Esc to exit', 4200);
       } else {
         this.setDrop(false);
         if (panel.parentNode === screenEl) { panel.classList.remove('as-drop'); panel.style.left = ''; home.after(panel); }
